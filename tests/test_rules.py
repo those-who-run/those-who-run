@@ -2,14 +2,14 @@ from gt7_race_engineer.rules import build_rules
 from gt7_race_engineer.rules.final_lap import FinalLapRule
 from gt7_race_engineer.rules.fuel import FuelRule
 from gt7_race_engineer.rules.lap_time import LapTimeRule
-from gt7_race_engineer.state import Phase
+from gt7_race_engineer.state import Phase, racing_frame
 
 
 def run_rule(rule, frames):
     out = []
     prev = None
     for s in frames:
-        if s.phase is Phase.IN_RACE:
+        if s.phase is Phase.IN_RACE or racing_frame(prev, s):
             out.extend(rule.evaluate(prev, s))
         prev = s
     return [c.text for c in out]
@@ -93,5 +93,23 @@ def test_final_lap_not_for_timed_races(sim):
 def test_build_rules_respects_enabled():
     rules = build_rules({"fuel": {"enabled": False}, "lap_time": {"priority": 7}})
     names = [r.name for r in rules]
-    assert names == ["lap_time", "final_lap"]
+    assert names == ["lap_time", "final_lap", "position"]
     assert rules[0].priority == 7
+
+
+def test_lap_time_uses_own_best_when_gt7_has_none(sim):
+    # GT7 leaves best_lap_ms at -1 after lap 1 of a race. Lap 2 should still get a delta.
+    s = sim(total_laps=2)
+    s.race([51000, 53100])
+    frames = [f for f in s.frames]
+    # emulate GT7: best stays -1 until lap 2 completes
+    from dataclasses import replace
+
+    frames = [
+        replace(f, best_lap_ms=-1) if f.current_lap <= 2 and f.phase.value != "menu" else f
+        for f in frames
+    ]
+    assert run_rule(LapTimeRule(), frames) == [
+        "Lap one. fifty-one point zero.",
+        "Lap two. fifty-three point one. two point one over best.",
+    ]

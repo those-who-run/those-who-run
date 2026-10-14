@@ -20,15 +20,19 @@ class Phase(StrEnum):
     AT_TRACK = "at_track"
     IN_RACE = "in_race"
     PAUSED = "paused"
+    FINISHED = "finished"
 
 
-def derive_phase(current_lap: int, cars_on_track: bool, is_paused: bool, is_loading: bool) -> Phase:
-    """Map GT7's flag bits and lap counter onto a phase.
+def derive_phase(current_lap: int, total_laps: int, is_paused: bool, is_loading: bool) -> Phase:
+    """Map GT7's lap counter and flag bits onto a phase.
 
-    GT7 reports ``current_lap == -1`` in menus, ``0`` at a track before the
-    race starts, and ``>= 1`` once the race is under way (including the
-    countdown). The order of checks matters: a loading screen or a menu wins
-    over a stale pause flag.
+    Observed from a real session (2026-10-14): ``current_lap`` is ``-1`` in
+    menus, ``0`` at a track before the start, ``>= 1`` while driving, and
+    ``total_laps + 1`` once the chequered flag falls. Time trials and practice
+    report ``total_laps == 0`` and GT7's "cars on track" flag false, so the
+    flag is not used to decide whether laps are being driven. After the
+    results screen GT7 replays the final frames of the race for a moment;
+    those frames are ``FINISHED`` because the lap counter is past the total.
     """
     if is_loading:
         return Phase.LOADING
@@ -36,7 +40,9 @@ def derive_phase(current_lap: int, cars_on_track: bool, is_paused: bool, is_load
         return Phase.MENU
     if is_paused:
         return Phase.PAUSED
-    if cars_on_track and current_lap >= 1:
+    if total_laps > 0 and current_lap > total_laps:
+        return Phase.FINISHED
+    if current_lap >= 1:
         return Phase.IN_RACE
     return Phase.AT_TRACK
 
@@ -60,10 +66,22 @@ class RaceState:
     track_id: int | None
     race_start_pos: int
     total_cars: int
+    cars_on_track: bool = False
 
     @property
     def in_race(self) -> bool:
         return self.phase is Phase.IN_RACE
+
+    @property
+    def position(self) -> int | None:
+        """Live race position. GT7 (and gt-telem) label this the start position, but
+        it updates every time a place changes. -1 outside a race."""
+        return self.race_start_pos if self.race_start_pos > 0 else None
+
+    @property
+    def is_race(self) -> bool:
+        """True for a race against other cars; False for time trial, practice, licences."""
+        return self.cars_on_track
 
     @property
     def has_lap_count(self) -> bool:
@@ -86,7 +104,7 @@ class RaceState:
             packet_id=int(tel.packet_id),
             phase=derive_phase(
                 int(tel.current_lap),
-                bool(tel.cars_on_track),
+                int(tel.total_laps),
                 bool(tel.is_paused),
                 bool(tel.is_loading),
             ),
@@ -104,6 +122,7 @@ class RaceState:
             track_id=_optional_int(getattr(tel, "track_id", None)),
             race_start_pos=int(tel.race_start_pos),
             total_cars=int(tel.total_cars),
+            cars_on_track=bool(tel.cars_on_track),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -119,8 +138,14 @@ class RaceState:
         version = d.pop("v", STATE_FORMAT_VERSION)
         if version != STATE_FORMAT_VERSION:
             raise ValueError(f"unsupported state format version {version}")
-        d["phase"] = Phase(d["phase"])
+        phase = Phase(d["phase"])
+        if phase in (Phase.AT_TRACK, Phase.IN_RACE, Phase.FINISHED):
+            # Recordings made before the lap-count based phase rules carry the
+            # older labels; the lap counters are authoritative, so re-derive.
+            phase = derive_phase(int(d["current_lap"]), int(d["total_laps"]), False, False)
+        d["phase"] = phase
         d["tire_temp"] = tuple(float(x) for x in d["tire_temp"])
+        d.setdefault("cars_on_track", False)
         return cls(**d)
 
 
@@ -137,11 +162,17 @@ def _optional_int(value: Any) -> int | None:
 # agrees on what "a lap was completed" means.
 
 
+def racing_frame(prev: RaceState | None, state: RaceState) -> bool:
+    """``state`` continues a race from ``prev``, including the finish-line frame
+    where the phase flips to FINISHED on the same packet as the final lap time."""
+    return prev is not None and prev.in_race and state.phase in (Phase.IN_RACE, Phase.FINISHED)
+
+
 def lap_completed(prev: RaceState | None, state: RaceState) -> bool:
-    """The lap counter advanced by one while racing."""
+    """The lap counter advanced by one while driving."""
     return (
-        prev is not None
-        and state.in_race
+        racing_frame(prev, state)
+        and prev is not None
         and prev.current_lap >= 1
         and state.current_lap == prev.current_lap + 1
     )
@@ -150,37 +181,30 @@ def lap_completed(prev: RaceState | None, state: RaceState) -> bool:
 def lap_time_posted(prev: RaceState | None, state: RaceState) -> bool:
     """A lap time is available for a lap that just finished.
 
-    Fires when GT7 publishes a new last-lap time or when the lap counter
-    advances with a valid time already present (two identical lap times in a
-    row would otherwise be missed). Whether the time lands in the same frame as
-    the counter bump or one frame later is to be confirmed from a recording;
-    the lap-time rule dedupes per lap number either way.
+    GT7 publishes the last-lap time in the same frame as the counter bump
+    (confirmed from a recording). Both conditions are kept so two identical
+    lap times in a row are still announced; the lap-time rule dedupes per lap.
     """
-    if prev is None or not state.in_race or state.last_lap_ms <= 0:
+    if not racing_frame(prev, state) or state.last_lap_ms <= 0:
         return False
+    assert prev is not None
     return state.last_lap_ms != prev.last_lap_ms or lap_completed(prev, state)
 
 
 def race_started(prev: RaceState | None, state: RaceState) -> bool:
-    """First frame of a race. Resuming from pause is not a start."""
-    if not state.in_race or state.current_lap < 1:
+    """First driving frame of a session. Loading screens and pauses are not starts,
+    and neither are the replayed frames GT7 shows after the results screen."""
+    if not state.in_race:
         return False
     if prev is None:
         return True
-    if prev.phase is Phase.PAUSED:
-        return False
-    return not prev.in_race or prev.current_lap < 1
+    return prev.phase in (Phase.MENU, Phase.AT_TRACK) and prev.current_lap < 1
 
 
 def race_ended(prev: RaceState | None, state: RaceState) -> bool:
-    """Race is over: the game left the race phase, or the counter passed the last lap."""
-    if prev is None or not prev.in_race:
-        return False
-    if state.phase in (Phase.MENU, Phase.AT_TRACK):
-        return True
+    """The session is over: chequered flag, or back to a menu or the track screen."""
     return (
-        state.in_race
-        and state.has_lap_count
-        and state.current_lap > state.total_laps
-        and prev.current_lap <= prev.total_laps
+        prev is not None
+        and prev.in_race
+        and state.phase in (Phase.MENU, Phase.AT_TRACK, Phase.FINISHED)
     )

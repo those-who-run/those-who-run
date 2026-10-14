@@ -74,3 +74,19 @@ def delta_words(ms: int) -> str:
 
 def laps_words(n: int) -> str:
     return "one lap" if n == 1 else f"{number_words(n)} laps"
+
+
+_ORDINALS = {
+    1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth", 6: "sixth",
+    7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth", 11: "eleventh",
+    12: "twelfth", 13: "thirteenth", 14: "fourteenth", 15: "fifteenth",
+    16: "sixteenth", 17: "seventeenth", 18: "eighteenth", 19: "nineteenth",
+    20: "twentieth",
+}  # fmt: skip
+
+
+def ordinal_words(n: int) -> str:
+    """``6`` -> "sixth"; beyond twenty falls back to "P twenty-three"."""
+    if n in _ORDINALS:
+        return _ORDINALS[n]
+    return f"P {number_words(n)}"

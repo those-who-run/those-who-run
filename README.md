@@ -15,6 +15,7 @@ your LAN.
 | `lap_time` | every completed lap | "Lap three. One forty-one point zero. One point five over best." |
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
+| `position` | a place is gained or lost (races only), after a short settle | "Up to sixth." |
 
 Fuel is estimated from the last three laps' consumption and only announced
 when it is shorter than the laps left in the race. A pit stop resets the
@@ -128,12 +129,22 @@ make release VERSION=0.1.0   # build and push muldoon/gt7-race-engineer:0.1.0
 Tags matching `v*` are built and pushed to Docker Hub by GitHub Actions. The
 workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
 
+## What GT7 actually reports
+
+Learned from recordings, and encoded in `state.py`:
+
+- `current_lap` is -1 in menus, 0 at the track before the start, 1 and up while
+  driving, and `total_laps + 1` once you take the flag. The results screen
+  briefly replays the final frames afterwards; those are ignored.
+- The position field (`race_start_pos` in gt-telem) updates live during a race.
+- GT7 does not count lap 1 of a race towards its best lap, so the engineer
+  tracks its own best as a fallback and lap 2 still gets a delta.
+- Time trials and practice report zero total laps and no cars on track. Lap
+  times are still announced; final-lap and position rules stay quiet.
+
 ## Known limits
 
-- GT7 only exposes your own car. There are no gaps to other cars, and the
-  position field is not confirmed to update during a race, so there are no
-  position callouts yet.
-- Timed races report zero total laps, so there is no final-lap call for them.
+- GT7 only exposes your own car. There are no gaps to the cars around you.
 - Only the Discord send path is implemented. Spoken questions are a later phase.
 
 ## Licence

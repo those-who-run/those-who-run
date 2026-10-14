@@ -35,6 +35,14 @@ DEFAULT_RULES: dict[str, Any] = {
             "template_critical": "Fuel critical. Less than one lap.",
         },
         "final_lap": {"enabled": True, "priority": 10, "template": "Final lap."},
+        "position": {
+            "enabled": True,
+            "priority": 12,
+            "settle_secs": 2.0,
+            "min_interval_secs": 5.0,
+            "template_gained": "Up to {position}.",
+            "template_lost": "Down to {position}.",
+        },
     },
 }
 

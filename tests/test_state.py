@@ -26,13 +26,15 @@ def make_telemetry(**over) -> Telemetry:
 
 
 def test_derive_phase():
-    assert derive_phase(-1, False, False, False) is Phase.MENU
-    assert derive_phase(-1, False, True, False) is Phase.MENU
-    assert derive_phase(0, False, False, True) is Phase.LOADING
-    assert derive_phase(0, False, False, False) is Phase.AT_TRACK
-    assert derive_phase(0, True, False, False) is Phase.AT_TRACK
-    assert derive_phase(1, True, False, False) is Phase.IN_RACE
-    assert derive_phase(3, True, True, False) is Phase.PAUSED
+    # (current_lap, total_laps, is_paused, is_loading)
+    assert derive_phase(-1, -1, False, False) is Phase.MENU
+    assert derive_phase(-1, -1, True, False) is Phase.MENU
+    assert derive_phase(0, 0, False, True) is Phase.LOADING
+    assert derive_phase(0, 2, False, False) is Phase.AT_TRACK
+    assert derive_phase(1, 2, False, False) is Phase.IN_RACE
+    assert derive_phase(7, 0, False, False) is Phase.IN_RACE, "time trial laps count"
+    assert derive_phase(3, 2, True, False) is Phase.PAUSED
+    assert derive_phase(3, 2, False, False) is Phase.FINISHED
 
 
 def test_from_telemetry_uses_flag_bits():
@@ -58,6 +60,7 @@ def test_from_telemetry_uses_flag_bits():
     )
     s = RaceState.from_telemetry(tel, t=12.5)
     assert s.phase is Phase.IN_RACE
+    assert s.is_race and s.position == 4
     assert s.t == 12.5
     assert s.packet_id == 42
     assert s.current_lap == 2 and s.total_laps == 5
@@ -72,6 +75,9 @@ def test_from_telemetry_uses_flag_bits():
     assert RaceState.from_telemetry(paused, 0).phase is Phase.PAUSED
     loading = make_telemetry(current_lap=2, flags=0b0101)
     assert RaceState.from_telemetry(loading, 0).phase is Phase.LOADING
+    practice = make_telemetry(current_lap=7, total_laps=0, race_start_pos=-1, flags=0)
+    ps = RaceState.from_telemetry(practice, 0)
+    assert ps.phase is Phase.IN_RACE and not ps.is_race and ps.position is None
 
 
 def test_dict_roundtrip():
@@ -88,20 +94,32 @@ def test_laps_left():
 
 
 def test_transitions():
-    menu = make_state(phase=Phase.MENU, current_lap=-1)
+    menu = make_state(phase=Phase.MENU, current_lap=-1, total_laps=-1)
+    at_track = make_state(current_lap=0)
     grid = make_state(current_lap=1)
     lap2 = make_state(current_lap=2, last_lap_ms=100000, best_lap_ms=100000)
     paused = make_state(phase=Phase.PAUSED, current_lap=2, last_lap_ms=100000)
+    loading = make_state(phase=Phase.LOADING, current_lap=1)
     assert race_started(None, grid)
     assert race_started(menu, grid)
+    assert race_started(at_track, grid)
     assert not race_started(grid, lap2)
     assert not race_started(paused, lap2), "resuming from pause is not a start"
+    assert not race_started(loading, grid), "a loading blip mid-race is not a start"
     assert lap_completed(grid, lap2)
     assert not lap_completed(lap2, lap2)
     assert lap_time_posted(grid, lap2)
     assert not lap_time_posted(lap2, lap2)
     assert race_ended(lap2, menu)
+    assert race_ended(lap2, at_track)
+    assert not race_ended(lap2, loading), "loading or pause suspends, it does not end"
     assert not race_ended(menu, grid)
-    past_finish = make_state(current_lap=6, total_laps=5)
-    assert race_ended(make_state(current_lap=5, total_laps=5), past_finish)
-    assert not race_ended(past_finish, past_finish)
+    last = make_state(current_lap=5, total_laps=5, last_lap_ms=100000)
+    finished = make_state(current_lap=6, total_laps=5, last_lap_ms=99000)
+    assert finished.phase is Phase.FINISHED
+    assert lap_completed(last, finished), "the finish-line frame still completes a lap"
+    assert lap_time_posted(last, finished)
+    assert race_ended(last, finished)
+    assert not race_ended(finished, finished)
+    # GT7 replays the end of the race after the results screen: not a new start
+    assert not race_started(at_track, finished)

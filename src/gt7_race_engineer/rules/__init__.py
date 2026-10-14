@@ -8,11 +8,13 @@ from gt7_race_engineer.rules.base import Rule
 from gt7_race_engineer.rules.final_lap import FinalLapRule
 from gt7_race_engineer.rules.fuel import FuelRule
 from gt7_race_engineer.rules.lap_time import LapTimeRule
+from gt7_race_engineer.rules.position import PositionRule
 
 REGISTRY: dict[str, type[Rule]] = {
     LapTimeRule.name: LapTimeRule,
     FuelRule.name: FuelRule,
     FinalLapRule.name: FinalLapRule,
+    PositionRule.name: PositionRule,
 }
 
 
@@ -27,4 +29,12 @@ def build_rules(rules_cfg: dict[str, Any]) -> list[Rule]:
     return rules
 
 
-__all__ = ["REGISTRY", "FinalLapRule", "FuelRule", "LapTimeRule", "Rule", "build_rules"]
+__all__ = [
+    "REGISTRY",
+    "FinalLapRule",
+    "FuelRule",
+    "LapTimeRule",
+    "PositionRule",
+    "Rule",
+    "build_rules",
+]

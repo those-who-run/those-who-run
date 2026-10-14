@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from gt7_race_engineer.state import Phase, RaceState
+from gt7_race_engineer.state import Phase, RaceState, derive_phase
 
 
 def make_state(**over) -> RaceState:
@@ -30,6 +30,10 @@ def make_state(**over) -> RaceState:
         total_cars=16,
     )
     base.update(over)
+    if "phase" not in over:
+        base["phase"] = derive_phase(base["current_lap"], base["total_laps"], False, False)
+    if "cars_on_track" not in over:
+        base["cars_on_track"] = base["total_laps"] > 0 and base["current_lap"] >= 1
     return RaceState(**base)
 
 

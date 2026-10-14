@@ -14,6 +14,7 @@ class LapTimeRule(Rule):
 
     def reset(self) -> None:
         self.last_announced_lap = 0
+        self.own_best_ms = 0
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if not lap_time_posted(prev, state):
@@ -29,7 +30,12 @@ class LapTimeRule(Rule):
         self.last_announced_lap = lap_no
 
         time_words = lap_time_words(state.last_lap_ms)
-        prev_best = prev.best_lap_ms
+        # GT7 does not count lap 1 of a race towards its best lap, so its best
+        # is empty until lap 2 is done. Track our own best as a fallback so
+        # the second lap still gets a delta against the first.
+        prev_best = prev.best_lap_ms if prev.best_lap_ms > 0 else self.own_best_ms
+        if self.own_best_ms <= 0 or state.last_lap_ms < self.own_best_ms:
+            self.own_best_ms = state.last_lap_ms
         if prev_best <= 0:
             delta = self.template("delta_first", "")
         else:

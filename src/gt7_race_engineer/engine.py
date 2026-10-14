@@ -9,7 +9,7 @@ from gt7_race_engineer.metrics import Metrics
 from gt7_race_engineer.recorder import LapRecorder
 from gt7_race_engineer.rules.base import Rule
 from gt7_race_engineer.rules.fuel import FuelRule
-from gt7_race_engineer.state import RaceState, race_ended, race_started
+from gt7_race_engineer.state import RaceState, race_ended, race_started, racing_frame
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class Engine:
                 self.recorder.start_session(state)
 
         callouts: list[Callout] = []
-        if state.in_race:
+        if state.in_race or racing_frame(prev, state):
             for rule in self.rules:
                 try:
                     callouts.extend(rule.evaluate(prev, state))

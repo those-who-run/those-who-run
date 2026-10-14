@@ -26,3 +26,10 @@ rules:
     enabled: true
     priority: 10
     template: "Final lap."
+  position:
+    enabled: true          # races only; GT7 updates the position field live
+    priority: 12
+    settle_secs: 2         # wait for a burst of place changes to settle
+    min_interval_secs: 5
+    template_gained: "Up to {position}."
+    template_lost: "Down to {position}."

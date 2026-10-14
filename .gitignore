@@ -12,3 +12,4 @@ data/
 *.wav
 *.jsonl
 .env
+!tests/fixtures/*.jsonl

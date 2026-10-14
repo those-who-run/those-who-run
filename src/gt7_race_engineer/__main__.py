@@ -15,9 +15,9 @@ from gt7_race_engineer.callouts import CalloutQueue
 from gt7_race_engineer.config import ConfigError, Settings, load_rules_config
 from gt7_race_engineer.engine import Engine
 from gt7_race_engineer.metrics import HealthServer, Metrics
-from gt7_race_engineer.recorder import LapRecorder
 from gt7_race_engineer.rules import build_rules
 from gt7_race_engineer.state import Phase, RaceState
+from gt7_race_engineer.store import SessionStore
 
 log = logging.getLogger("gt7_race_engineer")
 
@@ -82,7 +82,7 @@ async def run_replay(
 
     rules_cfg = load_rules_config(settings.rules_file)
     queue = CalloutQueue(max_age=None)
-    engine = Engine(build_rules(rules_cfg["rules"]), queue, LapRecorder(settings.data_dir))
+    engine = Engine(build_rules(rules_cfg["rules"]), queue, SessionStore(settings.data_dir))
     if wav_out is not None:
         from gt7_race_engineer.speech import PiperSpeech
 
@@ -162,7 +162,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     rules = build_rules(rules_cfg["rules"])
     metrics = Metrics()
     queue = CalloutQueue(max_age=float(rules_cfg["queue"]["max_age_seconds"]))
-    recorder = LapRecorder(settings.data_dir)
+    recorder = SessionStore(settings.data_dir)
     engine = Engine(rules, queue, recorder, metrics)
     speech = PiperSpeech(
         settings.voice_model,

@@ -1,0 +1,339 @@
+"""Session store: every frame of every lap as Parquet, plus a SQLite index.
+
+Layout under the data directory::
+
+    index.sqlite                       sessions and laps tables
+    sessions/<id>/lap-NN.parquet       60 Hz frames for lap NN (ZSTD)
+    sessions/<id>/summary.json         human-readable session summary
+
+Frames are buffered in memory and written when the lap completes, so a crash
+costs at most the lap in progress. Parquet is written through DuckDB, which
+the pit wall also uses to read it back; no pandas or pyarrow in the engineer.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import sqlite3
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from gt7_race_engineer.state import RaceState, lap_completed, racing_frame
+
+log = logging.getLogger(__name__)
+
+FRAME_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("t", "DOUBLE"),
+    ("packet_id", "BIGINT"),
+    ("lap", "INTEGER"),
+    ("phase", "VARCHAR"),
+    ("pos_x", "DOUBLE"),
+    ("pos_y", "DOUBLE"),
+    ("pos_z", "DOUBLE"),
+    ("vel_x", "DOUBLE"),
+    ("vel_y", "DOUBLE"),
+    ("vel_z", "DOUBLE"),
+    ("speed_kph", "DOUBLE"),
+    ("engine_rpm", "DOUBLE"),
+    ("gear", "INTEGER"),
+    ("suggested_gear", "INTEGER"),
+    ("throttle", "INTEGER"),
+    ("brake", "INTEGER"),
+    ("fuel_level", "DOUBLE"),
+    ("tire_fl_temp", "DOUBLE"),
+    ("tire_fr_temp", "DOUBLE"),
+    ("tire_rl_temp", "DOUBLE"),
+    ("tire_rr_temp", "DOUBLE"),
+    ("tire_fl_radius", "DOUBLE"),
+    ("tire_fr_radius", "DOUBLE"),
+    ("tire_rl_radius", "DOUBLE"),
+    ("tire_rr_radius", "DOUBLE"),
+    ("sus_fl", "DOUBLE"),
+    ("sus_fr", "DOUBLE"),
+    ("sus_rl", "DOUBLE"),
+    ("sus_rr", "DOUBLE"),
+    ("wheel_fl_rps", "DOUBLE"),
+    ("wheel_fr_rps", "DOUBLE"),
+    ("wheel_rl_rps", "DOUBLE"),
+    ("wheel_rr_rps", "DOUBLE"),
+    ("water_temp", "DOUBLE"),
+    ("oil_temp", "DOUBLE"),
+    ("oil_pressure", "DOUBLE"),
+    ("boost_pressure", "DOUBLE"),
+    ("body_height", "DOUBLE"),
+    ("position", "INTEGER"),
+    ("time_of_day_ms", "BIGINT"),
+    ("car_code", "INTEGER"),
+    ("track_id", "INTEGER"),
+)
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    started_at REAL NOT NULL,
+    ended_at REAL,
+    type TEXT NOT NULL,
+    track_id INTEGER,
+    car_code INTEGER,
+    total_laps INTEGER NOT NULL,
+    laps_completed INTEGER NOT NULL DEFAULT 0,
+    best_lap_ms INTEGER,
+    fuel_used REAL,
+    final_position INTEGER
+);
+CREATE TABLE IF NOT EXISTS laps (
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    lap INTEGER NOT NULL,
+    lap_time_ms INTEGER,
+    complete INTEGER NOT NULL,
+    fuel_start REAL,
+    fuel_end REAL,
+    fuel_used REAL,
+    position INTEGER,
+    frames INTEGER NOT NULL,
+    file TEXT NOT NULL,
+    recorded_at REAL NOT NULL,
+    PRIMARY KEY (session_id, lap)
+);
+"""
+
+
+def frame_row(state: RaceState) -> tuple[Any, ...]:
+    tt, tr, sh, wr = state.tire_temp, state.tire_radius, state.suspension_height, state.wheel_rps
+    return (
+        state.t,
+        state.packet_id,
+        state.current_lap,
+        state.phase.value,
+        state.pos_x,
+        state.pos_y,
+        state.pos_z,
+        state.vel_x,
+        state.vel_y,
+        state.vel_z,
+        state.speed_kph,
+        state.engine_rpm,
+        state.current_gear,
+        state.suggested_gear,
+        state.throttle,
+        state.brake,
+        state.fuel_level,
+        *tt,
+        *tr,
+        *sh,
+        *wr,
+        state.water_temp,
+        state.oil_temp,
+        state.oil_pressure,
+        state.boost_pressure,
+        state.body_height,
+        state.position,
+        state.time_of_day_ms,
+        state.car_code,
+        state.track_id,
+    )
+
+
+def write_parquet(path: Path, rows: list[tuple[Any, ...]]) -> None:
+    import duckdb
+
+    cols = ", ".join(f"{name} {typ}" for name, typ in FRAME_COLUMNS)
+    placeholders = ", ".join("?" for _ in FRAME_COLUMNS)
+    con = duckdb.connect()
+    try:
+        con.execute(f"CREATE TABLE frames ({cols})")
+        con.executemany(f"INSERT INTO frames VALUES ({placeholders})", rows)
+        tmp = path.with_suffix(".tmp.parquet")
+        con.execute(f"COPY frames TO '{tmp}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+        tmp.replace(path)
+    finally:
+        con.close()
+
+
+def session_type(state: RaceState) -> str:
+    if state.is_race:
+        return "race"
+    return "time_trial" if state.total_laps == 0 else "practice"
+
+
+@dataclass
+class Session:
+    session_id: str
+    dir: Path
+    started_at: float
+    type: str
+    track_id: int | None
+    car_code: int
+    total_laps: int
+    fuel_at_start: float
+    lap_start_fuel: float
+    buffer: list[tuple[Any, ...]] = field(default_factory=list)
+    laps: list[dict[str, Any]] = field(default_factory=list)
+
+
+class SessionStore:
+    def __init__(self, data_dir: Path, clock: Any = time.time) -> None:
+        self.data_dir = Path(data_dir)
+        self.clock = clock
+        self.session: Session | None = None
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self._db = sqlite3.connect(self.data_dir / "index.sqlite", check_same_thread=False)
+        self._db.executescript(_SCHEMA)
+        self._db.commit()
+
+    def close(self) -> None:
+        self._db.close()
+
+    # session lifecycle
+
+    def start_session(self, state: RaceState) -> Session:
+        base = time.strftime("%Y%m%d-%H%M%S", time.gmtime(self.clock()))
+        session_id, n = base, 1
+        while (self.data_dir / "sessions" / session_id).exists():
+            n += 1
+            session_id = f"{base}-{n}"
+        sdir = self.data_dir / "sessions" / session_id
+        sdir.mkdir(parents=True)
+        self.session = Session(
+            session_id=session_id,
+            dir=sdir,
+            started_at=self.clock(),
+            type=session_type(state),
+            track_id=state.track_id,
+            car_code=state.car_code,
+            total_laps=state.total_laps,
+            fuel_at_start=state.fuel_level,
+            lap_start_fuel=state.fuel_level,
+        )
+        self._db.execute(
+            "INSERT INTO sessions (id, started_at, type, track_id, car_code, total_laps)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                self.session.started_at,
+                self.session.type,
+                state.track_id,
+                state.car_code,
+                state.total_laps,
+            ),
+        )
+        self._db.commit()
+        log.info(
+            "session %s started (%s, track %s, car %s, %s laps)",
+            session_id,
+            self.session.type,
+            state.track_id,
+            state.car_code,
+            state.total_laps,
+        )
+        return self.session
+
+    def observe(self, prev: RaceState | None, state: RaceState) -> None:
+        s = self.session
+        if s is None:
+            return
+        if state.in_race or racing_frame(prev, state):
+            s.buffer.append(frame_row(state))
+        if s.track_id is None and state.track_id is not None:
+            s.track_id = state.track_id  # detected a lap in
+        if lap_completed(prev, state):
+            assert prev is not None
+            self._flush_lap(prev.current_lap, state, complete=True)
+
+    def _flush_lap(self, lap_no: int, state: RaceState, complete: bool) -> None:
+        s = self.session
+        if s is None or not s.buffer:
+            return
+        rows, s.buffer = s.buffer, []
+        # The frame that closed the lap belongs to the next lap's buffer, unless
+        # it was the chequered flag and there is no next lap.
+        if complete and state.in_race and rows[-1][2] == state.current_lap and len(rows) > 1:
+            s.buffer = [rows[-1]]
+            rows = rows[:-1]
+        path = s.dir / f"lap-{lap_no:02d}.parquet"
+        write_parquet(path, rows)
+        lap = {
+            "lap": lap_no,
+            "lap_time_ms": state.last_lap_ms if complete and state.last_lap_ms > 0 else None,
+            "complete": complete,
+            "fuel_start": s.lap_start_fuel,
+            "fuel_end": state.fuel_level,
+            "fuel_used": round(s.lap_start_fuel - state.fuel_level, 3),
+            "position": state.position,
+            "frames": len(rows),
+            "file": path.name,
+            "recorded_at": self.clock(),
+        }
+        s.lap_start_fuel = state.fuel_level
+        s.laps.append(lap)
+        self._db.execute(
+            "INSERT OR REPLACE INTO laps (session_id, lap, lap_time_ms, complete, fuel_start,"
+            " fuel_end, fuel_used, position, frames, file, recorded_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                s.session_id,
+                lap_no,
+                lap["lap_time_ms"],
+                int(complete),
+                lap["fuel_start"],
+                lap["fuel_end"],
+                lap["fuel_used"],
+                lap["position"],
+                lap["frames"],
+                lap["file"],
+                lap["recorded_at"],
+            ),
+        )
+        self._db.execute(
+            "UPDATE sessions SET laps_completed = ?, track_id = COALESCE(track_id, ?) WHERE id = ?",
+            (sum(1 for x in s.laps if x["complete"]), s.track_id, s.session_id),
+        )
+        self._db.commit()
+        log.debug("lap %d: %d frames -> %s", lap_no, len(rows), path.name)
+
+    def end_session(self, state: RaceState) -> Path | None:
+        s = self.session
+        if s is None:
+            return None
+        if s.buffer:
+            # Partial lap at the end of a session (quit, or the lap in progress).
+            self._flush_lap(s.buffer[-1][2], state, complete=False)
+        completed = [x for x in s.laps if x["complete"]]
+        times = [x["lap_time_ms"] for x in completed if x["lap_time_ms"]]
+        summary = {
+            "session_id": s.session_id,
+            "type": s.type,
+            "started_at": s.started_at,
+            "ended_at": self.clock(),
+            "track_id": s.track_id,
+            "car_code": s.car_code,
+            "total_laps": s.total_laps,
+            "laps_completed": len(completed),
+            "best_lap_ms": min(times) if times else None,
+            "final_position": state.position,
+            "fuel_at_start": s.fuel_at_start,
+            "fuel_at_end": state.fuel_level,
+            "fuel_used": round(sum(x["fuel_used"] for x in s.laps), 3),
+            "laps": s.laps,
+        }
+        (s.dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        self._db.execute(
+            "UPDATE sessions SET ended_at = ?, laps_completed = ?, best_lap_ms = ?, fuel_used = ?,"
+            " final_position = ?, track_id = COALESCE(track_id, ?) WHERE id = ?",
+            (
+                summary["ended_at"],
+                len(completed),
+                summary["best_lap_ms"],
+                summary["fuel_used"],
+                summary["final_position"],
+                s.track_id,
+                s.session_id,
+            ),
+        )
+        self._db.commit()
+        log.info("session %s ended after %d laps", s.session_id, len(completed))
+        self.session = None
+        return s.dir / "summary.json"

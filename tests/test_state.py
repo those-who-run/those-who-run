@@ -4,6 +4,7 @@ from gt_telem.models.telemetry import Telemetry
 from gt_telem.models.telemetry_packet import TelemetryPacket
 
 from gt7_race_engineer.state import (
+    STATE_FORMAT_VERSION,
     Phase,
     RaceState,
     derive_phase,
@@ -20,7 +21,7 @@ def make_telemetry(**over) -> Telemetry:
     for f in fields(TelemetryPacket):
         if f.default is not None and f.default is not f.default_factory:  # optional tail fields
             continue
-        values[f.name] = 0 if f.type == "int" else 0.0
+        values[f.name] = 0 if f.type in (int, "int") else 0.0
     values.update(over)
     return Telemetry(**values)
 
@@ -83,7 +84,7 @@ def test_from_telemetry_uses_flag_bits():
 def test_dict_roundtrip():
     s = make_state(t=3.25, track_id=None)
     d = s.to_dict()
-    assert d["phase"] == "in_race" and d["v"] == 1
+    assert d["phase"] == "in_race" and d["v"] == STATE_FORMAT_VERSION
     assert RaceState.from_dict(d) == s
 
 

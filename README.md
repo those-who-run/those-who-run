@@ -108,6 +108,22 @@ gt7-race-engineer replay session.jsonl --wav-out ./out
 Recordings are one `RaceState` JSON object per line, version-tagged, and do not
 depend on gt-telem's packet layout.
 
+## Data
+
+Every frame of every lap is kept, so the pit wall (milestone 2.0) can show
+racing lines, traces and growth over time. Under `GT7_DATA_DIR`:
+
+```
+index.sqlite                      sessions and laps tables, for listing and filtering
+sessions/<id>/lap-NN.parquet      60 Hz frames for that lap, ZSTD compressed
+sessions/<id>/summary.json        human-readable summary
+```
+
+Frames are buffered in memory and written when the lap completes, so a crash
+loses at most the lap in progress. A partial lap at the end of a session is
+written with `complete = 0`. Budget roughly 10 MB per hour of driving. Parquet
+is written and read with DuckDB; any Parquet-aware tool can read the files.
+
 ## Metrics
 
 `gt7_telemetry_packets_total`, `gt7_telemetry_connected`, `gt7_voice_connected`,

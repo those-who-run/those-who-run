@@ -1,0 +1,28 @@
+# gt7-race-engineer rules. Every value here overrides a built-in default, so a
+# file with only the keys you want to change is fine.
+voice:
+  length_scale: 0.9     # < 1 speaks faster
+queue:
+  max_age_seconds: 8    # callouts older than this are dropped instead of spoken late
+rules:
+  lap_time:
+    enabled: true
+    priority: 20
+    template: "Lap {lap}. {time}. {delta}"
+    delta_faster: "{delta} under best"
+    delta_slower: "{delta} over best"
+    delta_equal: "equal to best"
+    delta_first: ""
+  fuel:
+    enabled: true
+    priority: 15
+    critical_priority: 5
+    thresholds_laps: [10, 5, 3, 2, 1]
+    rolling_laps: 3
+    refuel_epsilon: 0.5
+    template: "Fuel. {laps} remaining."
+    template_critical: "Fuel critical. Less than one lap."
+  final_lap:
+    enabled: true
+    priority: 10
+    template: "Final lap."

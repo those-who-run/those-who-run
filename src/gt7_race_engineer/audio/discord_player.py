@@ -34,6 +34,7 @@ class DiscordPlayer:
         idle_disconnect_secs: float = 600.0,
         reconnect_backoff_secs: float = 15.0,
         on_voice_state: Any | None = None,
+        client: discord.Client | None = None,
     ) -> None:
         self._token = token
         self._channel_id = channel_id
@@ -41,10 +42,12 @@ class DiscordPlayer:
         self._idle_secs = idle_disconnect_secs
         self._backoff = reconnect_backoff_secs
         self._on_voice_state = on_voice_state
-        intents = discord.Intents.none()
-        intents.guilds = True
-        intents.voice_states = True
-        self._client = discord.Client(intents=intents)
+        if client is None:
+            intents = discord.Intents.none()
+            intents.guilds = True
+            intents.voice_states = True
+            client = discord.Client(intents=intents)
+        self._client = client
         self._client_task: asyncio.Task[None] | None = None
         self._vc: discord.VoiceClient | None = None
         self._connect_lock = asyncio.Lock()
@@ -55,7 +58,13 @@ class DiscordPlayer:
     # lifecycle
 
     async def start(self) -> None:
-        self._client_task = asyncio.create_task(self._client.start(self._token), name="discord")
+        # login() must complete before wait_until_ready() can be awaited; it
+        # initialises the client's internal state. connect() then runs the
+        # gateway loop in the background for the life of the process.
+        await self._client.login(self._token)
+        self._client_task = asyncio.create_task(
+            self._client.connect(reconnect=True), name="discord"
+        )
         await self._client.wait_until_ready()
         log.info("discord ready as %s", self._client.user)
 

@@ -8,7 +8,13 @@ from gt7_race_engineer.callouts import Callout, CalloutQueue
 from gt7_race_engineer.metrics import Metrics
 from gt7_race_engineer.rules.base import Rule
 from gt7_race_engineer.rules.fuel import FuelRule
-from gt7_race_engineer.state import RaceState, race_ended, race_started, racing_frame
+from gt7_race_engineer.state import (
+    RaceState,
+    race_ended,
+    race_restarted,
+    race_started,
+    racing_frame,
+)
 from gt7_race_engineer.store import SessionStore
 
 log = logging.getLogger(__name__)
@@ -31,7 +37,11 @@ class Engine:
 
     def process(self, state: RaceState) -> list[Callout]:
         prev = self.prev
-        if race_started(prev, state):
+        restarted = race_restarted(prev, state)
+        if race_started(prev, state) or restarted:
+            if self.recorder is not None and self.recorder.session is not None and prev is not None:
+                log.info("closing open session on race %s", "restart" if restarted else "start")
+                self.recorder.end_session(prev)
             self.races_started += 1
             log.info(
                 "race start: track %s, %s laps, fuel %.1f/%.0f",

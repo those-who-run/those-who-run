@@ -2,7 +2,9 @@ from gt7_race_engineer.rules import build_rules
 from gt7_race_engineer.rules.final_lap import FinalLapRule
 from gt7_race_engineer.rules.fuel import FuelRule
 from gt7_race_engineer.rules.lap_time import LapTimeRule
+from gt7_race_engineer.rules.position import PositionRule
 from gt7_race_engineer.state import Phase, racing_frame
+from tests.conftest import make_state
 
 
 def run_rule(rule, frames):
@@ -113,3 +115,16 @@ def test_lap_time_uses_own_best_when_gt7_has_none(sim):
         "Lap one. fifty-one point zero.",
         "Lap two. fifty-three point one. two point one over best.",
     ]
+
+
+def test_position_ignores_the_grid_settling_then_announces():
+    rule = PositionRule({"settle_secs": 2.0, "min_interval_secs": 5.0})
+    rule.reset()
+
+    def frame(t, pos):
+        return make_state(t=t, current_lap=1, race_start_pos=pos, cars_on_track=True)
+
+    frames = [frame(0.0, 20), frame(0.1, 1), frame(1.0, 1), frame(3.0, 1), frame(4.0, 1)]
+    assert run_rule(rule, frames) == [], "P20 -> P1 inside the first two seconds is the grid"
+    frames += [frame(5.0, 2), frame(6.0, 2), frame(7.5, 2)]
+    assert run_rule(rule, frames[5:]) == ["Down to second."]

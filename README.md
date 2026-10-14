@@ -119,10 +119,13 @@ sessions/<id>/lap-NN.parquet      60 Hz frames for that lap, ZSTD compressed
 sessions/<id>/summary.json        human-readable summary
 ```
 
-Frames are buffered in memory and written when the lap completes, so a crash
-loses at most the lap in progress. A partial lap at the end of a session is
-written with `complete = 0`. Budget roughly 10 MB per hour of driving. Parquet
-is written and read with DuckDB; any Parquet-aware tool can read the files.
+Frames are buffered in memory and written on a background thread when the lap
+completes, so a crash loses at most the lap in progress and callouts are never
+held up by disk. A partial lap at the end of a session is written with
+`complete = 0`. Restarting from the pause menu closes the session and opens a
+new one; quitting closes it; Ctrl-C closes whatever is open. Budget roughly
+10 MB per hour of driving. Parquet is written and read with DuckDB; any
+Parquet-aware tool can read the files.
 
 ## Metrics
 

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 from gt7_race_engineer.audio.player import ConsolePlayer
 from gt7_race_engineer.callouts import CalloutQueue
@@ -62,6 +63,47 @@ async def test_second_race_resets_rules(tmp_path, sim):
     assert [c.text for c in spoken].count("Final lap.") == 2
     assert engine.races_started == 2
     assert len(list((tmp_path / "sessions").iterdir())) == 2
+
+
+async def test_restart_closes_session_and_starts_another(tmp_path, sim):
+    s = sim(total_laps=3)
+    s.race([100000], finish=False)  # one lap done, restart during lap 2
+    s.race([99000, 98000, 97000])
+    engine, _ = make_engine(tmp_path)
+    spoken = await replay(s.frames, engine, ConsolePlayer())
+    assert [c.text for c in spoken] == [
+        "Lap one. one forty point zero.",
+        "Lap one. one thirty-nine point zero.",  # best is reset by the restart
+        "Final lap.",
+        "Lap two. one thirty-eight point zero. one point zero under best.",
+        "Lap three. one thirty-seven point zero. one point zero under best.",
+    ]
+    assert engine.races_started == 2
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    sessions = db.execute(
+        "SELECT laps_completed, ended_at IS NOT NULL FROM sessions ORDER BY started_at, id"
+    ).fetchall()
+    assert sessions == [(1, 1), (3, 1)]
+    first_laps = db.execute(
+        "SELECT lap, complete FROM laps WHERE session_id = (SELECT min(id) FROM sessions)"
+        " ORDER BY lap"
+    ).fetchall()
+    assert first_laps == [(1, 1), (2, 0)], "the lap in progress at the restart is kept partial"
+
+
+async def test_quit_from_pause_menu_ends_session(tmp_path, sim):
+    s = sim(total_laps=5)
+    s.race([100000], finish=False)
+    s.paused().loading().at_track().menu()
+    engine, _ = make_engine(tmp_path)
+    await replay(s.frames, engine, ConsolePlayer())
+    assert engine.recorder is not None and engine.recorder.session is None
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    assert db.execute("SELECT laps_completed, ended_at IS NOT NULL FROM sessions").fetchall() == [
+        (1, 1)
+    ]
+    (session_dir,) = (tmp_path / "sessions").iterdir()
+    assert (session_dir / "summary.json").exists()
 
 
 async def test_stale_callouts_dropped_in_live_queue(tmp_path, sim):

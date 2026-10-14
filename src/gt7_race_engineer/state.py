@@ -249,9 +249,25 @@ def race_started(prev: RaceState | None, state: RaceState) -> bool:
 
 
 def race_ended(prev: RaceState | None, state: RaceState) -> bool:
-    """The session is over: chequered flag, or back to a menu or the track screen."""
+    """The session is over: chequered flag, back to a menu or the track screen, or a
+    loading screen with the lap counter reset (quitting from the pause menu goes
+    IN_RACE -> PAUSED -> LOADING(lap 0) -> AT_TRACK, seen 2026-10-14). A loading
+    blip that keeps the lap counter only suspends the race."""
+    if prev is None or prev.phase not in (Phase.IN_RACE, Phase.PAUSED, Phase.LOADING):
+        return False
+    if prev.current_lap < 1:
+        return False
+    if state.phase in (Phase.MENU, Phase.AT_TRACK, Phase.FINISHED):
+        return True
+    return state.phase is Phase.LOADING and state.current_lap < 1
+
+
+def race_restarted(prev: RaceState | None, state: RaceState) -> bool:
+    """GT7 jumped straight back to lap 1 while driving: the restart option in the
+    pause menu (seen in qualifying 2026-10-14, with the fuel refilled too)."""
     return (
         prev is not None
-        and prev.in_race
-        and state.phase in (Phase.MENU, Phase.AT_TRACK, Phase.FINISHED)
+        and prev.phase in (Phase.IN_RACE, Phase.PAUSED)
+        and state.in_race
+        and 1 <= state.current_lap < prev.current_lap
     )

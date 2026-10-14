@@ -249,6 +249,10 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
         await player.close()
         await telem.stop()
         http.stop()
+        if recorder.session is not None and engine.prev is not None:
+            log.info("closing session %s", recorder.session.session_id)
+            recorder.end_session(engine.prev)
+        recorder.close()
         if writer is not None:
             writer.close()
             log.info("recorded %d frames to %s", writer.count, record)

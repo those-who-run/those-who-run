@@ -11,6 +11,7 @@ from gt7_race_engineer.state import (
     lap_completed,
     lap_time_posted,
     race_ended,
+    race_restarted,
     race_started,
 )
 from tests.conftest import make_state
@@ -124,3 +125,29 @@ def test_transitions():
     assert not race_ended(finished, finished)
     # GT7 replays the end of the race after the results screen: not a new start
     assert not race_started(at_track, finished)
+
+
+def test_quit_and_restart_transitions():
+    """Observed 2026-10-14 in qualifying: quit goes PAUSED -> LOADING(lap 0) -> AT_TRACK,
+    and the restart option jumps straight from lap 2 back to lap 1."""
+    lap2 = make_state(current_lap=2, last_lap_ms=100000, best_lap_ms=100000)
+    paused = make_state(phase=Phase.PAUSED, current_lap=2, last_lap_ms=100000)
+    loading_quit = make_state(phase=Phase.LOADING, current_lap=0)
+    loading_blip = make_state(phase=Phase.LOADING, current_lap=2)
+    at_track = make_state(current_lap=0)
+    menu = make_state(phase=Phase.MENU, current_lap=-1, total_laps=-1)
+    assert race_ended(paused, menu), "quit from the pause menu"
+    assert race_ended(lap2, loading_quit), "loading with the lap counter reset is a quit"
+    assert race_ended(paused, loading_quit)
+    assert not race_ended(lap2, loading_blip), "a loading blip keeps the lap counter"
+    assert race_ended(loading_blip, at_track), "unless the track screen follows it"
+    assert not race_ended(loading_quit, at_track), "ended on the loading frame already"
+    assert not race_ended(at_track, menu)
+
+    lap1 = make_state(current_lap=1)
+    assert race_restarted(lap2, lap1)
+    assert race_restarted(paused, lap1)
+    assert not race_restarted(lap1, lap2)
+    assert not race_restarted(lap2, lap2)
+    assert not race_restarted(at_track, lap1), "that is a normal start"
+    assert not race_started(lap2, lap1), "and a restart is not a plain start"

@@ -6,6 +6,7 @@ no cars on track), a two-lap race from P10 to P6, the chequered flag at
 "lap 3 of 2", the results screen, and the replay blip GT7 emits afterwards.
 """
 
+import sqlite3
 from pathlib import Path
 
 from gt7_race_engineer.audio.player import ConsolePlayer
@@ -18,6 +19,7 @@ from gt7_race_engineer.state import Phase
 from gt7_race_engineer.store import SessionStore
 
 FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
+QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl"
 
 
 def test_fixture_phases_cover_the_whole_session():
@@ -52,3 +54,28 @@ async def test_real_session_callouts_and_sessions(tmp_path):
         "lap-02.parquet",
     ]
     assert (race / "summary.json").exists()
+
+
+async def test_real_qualifying_restart_and_quit(tmp_path):
+    """Nordschleife qualifying, thinned to one frame per two seconds plus every
+    transition: a lap, a restart from the pause menu (fuel refilled, counter back
+    to 1), two more laps, then quit (PAUSED -> LOADING -> AT_TRACK)."""
+    store = SessionStore(tmp_path)
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
+    spoken = await replay(read_recording(QUALI), engine, ConsolePlayer())
+    assert [c.text for c in spoken] == [
+        "Fuel. three laps remaining.",
+        "Lap one. eight twenty-six point four.",
+        "Lap one. eight twenty point four.",
+        "Lap two. eight twenty point two. zero point two under best.",
+    ]
+    assert engine.races_started == 2
+    assert store.session is None, "the quit closed the second session"
+    store.close()
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    sessions = db.execute(
+        "SELECT laps_completed, best_lap_ms, ended_at IS NOT NULL FROM sessions ORDER BY id"
+    ).fetchall()
+    assert sessions == [(1, 506429, 1), (2, 500204, 1)]
+    laps = db.execute("SELECT lap, complete FROM laps ORDER BY session_id, lap").fetchall()
+    assert laps == [(1, 1), (2, 0), (1, 1), (2, 1), (3, 0)]

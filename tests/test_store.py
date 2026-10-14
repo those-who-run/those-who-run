@@ -8,7 +8,7 @@ from gt7_race_engineer.callouts import CalloutQueue
 from gt7_race_engineer.engine import Engine
 from gt7_race_engineer.replay import replay
 from gt7_race_engineer.state import RaceState
-from gt7_race_engineer.store import FRAME_COLUMNS, SessionStore, frame_row
+from gt7_race_engineer.store import FRAME_COLUMNS, SessionStore, frame_row, write_parquet
 from tests.conftest import make_state
 
 
@@ -106,3 +106,42 @@ def test_v1_recording_still_loads():
     assert s.pos_x == 0.0 and s.tire_radius == (0.0, 0.0, 0.0, 0.0) and s.car_code == 0
     d = s.to_dict()
     assert d["v"] == 2 and RaceState.from_dict(d) == s
+
+
+def test_write_parquet_keeps_nulls_and_types(tmp_path):
+    rows = [
+        frame_row(
+            make_state(t=float(i), packet_id=i, current_lap=1, track_id=None, race_start_pos=-1)
+        )
+        for i in range(3)
+    ]
+    rows.append(frame_row(make_state(t=3.0, packet_id=3, current_lap=1, race_start_pos=4)))
+    path = tmp_path / "lap-01.parquet"
+    secs = write_parquet(path, rows)
+    assert secs >= 0 and path.exists()
+    assert not list(tmp_path.glob("*.tmp.*")), "temporary files are cleaned up"
+    con = duckdb.connect()
+    got = con.execute(
+        f"SELECT t, packet_id, position, track_id, phase FROM '{path}' ORDER BY t"
+    ).fetchall()
+    assert got[0] == (0.0, 0, None, None, "in_race")
+    assert got[3] == (3.0, 3, 4, 7, "in_race")
+    types = {r[0]: r[1] for r in con.execute(f"DESCRIBE SELECT * FROM '{path}'").fetchall()}
+    assert types["t"] == "DOUBLE" and types["packet_id"] == "BIGINT" and types["gear"] == "INTEGER"
+
+
+async def test_lap_files_are_written_off_the_caller_thread(tmp_path, sim):
+    frames = sim(total_laps=2).race([100000, 100000], finish=False).frames
+    store = SessionStore(tmp_path)
+    engine = Engine([], CalloutQueue(max_age=None), store)
+    for f in frames:
+        engine.process(f)
+    # Nothing is awaited here; the files appear once the writer thread catches up.
+    store.wait()
+    assert store.writes_pending == 0
+    (session_dir,) = (tmp_path / "sessions").iterdir()
+    assert sorted(p.name for p in session_dir.glob("*.parquet")) == [
+        "lap-01.parquet",
+        "lap-02.parquet",
+    ]
+    store.close()

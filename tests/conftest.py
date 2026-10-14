@@ -55,6 +55,7 @@ class RaceSim:
         self.track_id = track_id
         self.t = 0.0
         self.pid = 0
+        self.lap = 0
         self.frames: list[RaceState] = []
 
     def _push(self, **over) -> RaceState:
@@ -75,6 +76,16 @@ class RaceSim:
 
     def at_track(self) -> RaceSim:
         self._push(phase=Phase.AT_TRACK, current_lap=0, fuel_level=self.fuel)
+        return self
+
+    def paused(self) -> RaceSim:
+        """Pause menu during the lap in progress."""
+        self._push(phase=Phase.PAUSED, current_lap=self.lap, fuel_level=self.fuel)
+        return self
+
+    def loading(self, current_lap: int = 0) -> RaceSim:
+        """Loading screen; GT7 resets the lap counter to 0 when quitting a session."""
+        self._push(phase=Phase.LOADING, current_lap=current_lap, fuel_level=self.fuel)
         return self
 
     def race(
@@ -117,6 +128,7 @@ class RaceSim:
             lap += 1
             self._push(current_lap=lap, fuel_level=fuel, best_lap_ms=best, last_lap_ms=last)
         self.fuel = fuel
+        self.lap = lap
         if finish:
             self.menu()
         return self

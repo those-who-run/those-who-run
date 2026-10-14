@@ -21,6 +21,7 @@ class PositionRule(Rule):
         self.settle_secs = float(self.cfg.get("settle_secs", 2.0))
         self.min_interval = float(self.cfg.get("min_interval_secs", 5.0))
         self.announced: int | None = None
+        self.started_at: float | None = None
         self.pending_since: float | None = None
         self.last_spoken_at: float | None = None
 
@@ -30,8 +31,11 @@ class PositionRule(Rule):
         pos = state.position
         if pos is None:
             return []
-        if self.announced is None:
-            # First position seen this race is the grid slot; nothing to say yet.
+        if self.started_at is None:
+            self.started_at = state.t
+        if self.announced is None or state.t - self.started_at < self.settle_secs:
+            # The grid slot takes a moment to settle: qualifying reported P20 on the
+            # first driving frame and P1 on the next (2026-10-14). Follow it quietly.
             self.announced = pos
             return []
         if pos == self.announced:

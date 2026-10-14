@@ -26,6 +26,8 @@ ACTIVE_PHASES = {Phase.AT_TRACK, Phase.IN_RACE, Phase.PAUSED}
 
 
 class DiscordPlayer:
+    STALE_ATTEMPTS_BEFORE_RESET = 4  # x reconnect_backoff_secs = 60 s by default
+
     def __init__(
         self,
         token: str,
@@ -52,6 +54,7 @@ class DiscordPlayer:
         self._vc: discord.VoiceClient | None = None
         self._connect_lock = asyncio.Lock()
         self._last_connect_attempt = 0.0
+        self._stale_attempts = 0
         self._idle_since: float | None = None
         self._play_lock = asyncio.Lock()
 
@@ -107,13 +110,52 @@ class DiscordPlayer:
                     channel = await self._client.fetch_channel(self._channel_id)
                 if not isinstance(channel, discord.VoiceChannel):
                     raise RuntimeError(f"channel {self._channel_id} is not a voice channel")
+                if await self._adopt_existing(channel):
+                    return
                 self._vc = await channel.connect(reconnect=True, self_deaf=True)
+                self._stale_attempts = 0
                 log.info("joined voice channel %s", channel.name)
                 self._report_voice(True)
             except Exception:  # noqa: BLE001
                 log.exception("failed to join voice channel %s", self._channel_id)
                 self._vc = None
                 self._report_voice(False)
+
+    async def _adopt_existing(self, channel: Any) -> bool:
+        """Handle a voice client discord.py already holds for this guild.
+
+        After a gateway hiccup discord.py reconnects voice on its own, and
+        ``channel.connect`` raises "Already connected to a voice channel" for
+        as long as that client exists. Reuse it when it is up; while it is
+        still reconnecting, wait, and only tear it down if it stays dead for
+        several attempts. Returns True when the caller should not connect.
+        """
+        existing = getattr(channel.guild, "voice_client", None)
+        if existing is None:
+            self._stale_attempts = 0
+            return False
+        if existing.is_connected():
+            self._vc = existing
+            self._stale_attempts = 0
+            log.info("reusing voice connection to %s", channel.name)
+            self._report_voice(True)
+            return True
+        self._stale_attempts += 1
+        if self._stale_attempts < self.STALE_ATTEMPTS_BEFORE_RESET:
+            log.info(
+                "voice client for %s is reconnecting, waiting (%d/%d)",
+                channel.name,
+                self._stale_attempts,
+                self.STALE_ATTEMPTS_BEFORE_RESET,
+            )
+            self._vc = existing
+            return True
+        log.warning("voice client for %s stuck reconnecting, forcing a fresh join", channel.name)
+        with contextlib.suppress(Exception):
+            await existing.disconnect(force=True)
+        self._vc = None
+        self._stale_attempts = 0
+        return False
 
     async def _disconnect(self) -> None:
         if self._vc is not None:

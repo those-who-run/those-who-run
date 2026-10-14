@@ -9,14 +9,24 @@ Layout under the data directory::
 Frames are buffered in memory and written when the lap completes, so a crash
 costs at most the lap in progress. Parquet is written through DuckDB, which
 the pit wall also uses to read it back; no pandas or pyarrow in the engineer.
+
+The Parquet write runs on a single background thread. An 8-minute Nordschleife
+lap is ~28k frames and DuckDB's row-by-row ``executemany`` took over a minute
+for it on the event loop (2026-10-14), which starved the Discord heartbeat.
+Spooling the rows through a CSV file and ``COPY``-ing it in takes well under
+a second for the same lap.
 """
 
 from __future__ import annotations
 
+import contextlib
+import csv
+import functools
 import json
 import logging
 import sqlite3
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -137,20 +147,31 @@ def frame_row(state: RaceState) -> tuple[Any, ...]:
     )
 
 
-def write_parquet(path: Path, rows: list[tuple[Any, ...]]) -> None:
+def write_parquet(path: Path, rows: list[tuple[Any, ...]]) -> float:
+    """Write ``rows`` (in FRAME_COLUMNS order) to ``path``; returns seconds taken."""
     import duckdb
 
+    started = time.perf_counter()
     cols = ", ".join(f"{name} {typ}" for name, typ in FRAME_COLUMNS)
-    placeholders = ", ".join("?" for _ in FRAME_COLUMNS)
-    con = duckdb.connect()
+    tmp_csv = path.with_suffix(".tmp.csv")
+    tmp_parquet = path.with_suffix(".tmp.parquet")
     try:
-        con.execute(f"CREATE TABLE frames ({cols})")
-        con.executemany(f"INSERT INTO frames VALUES ({placeholders})", rows)
-        tmp = path.with_suffix(".tmp.parquet")
-        con.execute(f"COPY frames TO '{tmp}' (FORMAT PARQUET, COMPRESSION ZSTD)")
-        tmp.replace(path)
+        with tmp_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([name for name, _ in FRAME_COLUMNS])
+            writer.writerows(rows)
+        con = duckdb.connect()
+        try:
+            con.execute(f"CREATE TABLE frames ({cols})")
+            con.execute(f"COPY frames FROM '{tmp_csv}' (HEADER, NULLSTR '')")
+            con.execute(f"COPY frames TO '{tmp_parquet}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+        finally:
+            con.close()
+        tmp_parquet.replace(path)
     finally:
-        con.close()
+        tmp_csv.unlink(missing_ok=True)
+        tmp_parquet.unlink(missing_ok=True)
+    return time.perf_counter() - started
 
 
 def session_type(state: RaceState) -> str:
@@ -183,9 +204,31 @@ class SessionStore:
         self._db = sqlite3.connect(self.data_dir / "index.sqlite", check_same_thread=False)
         self._db.executescript(_SCHEMA)
         self._db.commit()
+        self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
+        self._pending: list[Future[float]] = []
 
     def close(self) -> None:
+        self.wait()
+        self._writer.shutdown(wait=True)
         self._db.close()
+
+    def wait(self) -> None:
+        """Block until every queued lap file has been written."""
+        pending, self._pending = self._pending, []
+        for fut in pending:
+            with contextlib.suppress(Exception):  # already logged by _on_written
+                fut.result()
+
+    @property
+    def writes_pending(self) -> int:
+        return sum(1 for f in self._pending if not f.done())
+
+    def _on_written(self, path: Path, frames: int, fut: Future[float]) -> None:
+        exc = fut.exception()
+        if exc is not None:
+            log.error("failed to write %s (%d frames): %s", path, frames, exc)
+        else:
+            log.info("wrote %s: %d frames in %.2fs", path.name, frames, fut.result())
 
     # session lifecycle
 
@@ -254,7 +297,9 @@ class SessionStore:
             s.buffer = [rows[-1]]
             rows = rows[:-1]
         path = s.dir / f"lap-{lap_no:02d}.parquet"
-        write_parquet(path, rows)
+        fut = self._writer.submit(write_parquet, path, rows)
+        fut.add_done_callback(functools.partial(self._on_written, path, len(rows)))
+        self._pending.append(fut)
         lap = {
             "lap": lap_no,
             "lap_time_ms": state.last_lap_ms if complete and state.last_lap_ms > 0 else None,
@@ -292,7 +337,6 @@ class SessionStore:
             (sum(1 for x in s.laps if x["complete"]), s.track_id, s.session_id),
         )
         self._db.commit()
-        log.debug("lap %d: %d frames -> %s", lap_no, len(rows), path.name)
 
     def end_session(self, state: RaceState) -> Path | None:
         s = self.session
@@ -301,6 +345,7 @@ class SessionStore:
         if s.buffer:
             # Partial lap at the end of a session (quit, or the lap in progress).
             self._flush_lap(s.buffer[-1][2], state, complete=False)
+        self.wait()  # the summary marks the session directory as complete
         completed = [x for x in s.laps if x["complete"]]
         times = [x["lap_time_ms"] for x in completed if x["lap_time_ms"]]
         summary = {

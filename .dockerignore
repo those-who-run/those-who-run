@@ -1,0 +1,9 @@
+.venv
+.git
+.github
+tests
+data
+*.jsonl
+*.wav
+.pytest_cache
+.ruff_cache

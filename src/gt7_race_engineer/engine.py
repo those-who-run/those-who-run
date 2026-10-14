@@ -6,10 +6,10 @@ import logging
 
 from gt7_race_engineer.callouts import Callout, CalloutQueue
 from gt7_race_engineer.metrics import Metrics
-from gt7_race_engineer.recorder import LapRecorder
 from gt7_race_engineer.rules.base import Rule
 from gt7_race_engineer.rules.fuel import FuelRule
 from gt7_race_engineer.state import RaceState, race_ended, race_started, racing_frame
+from gt7_race_engineer.store import SessionStore
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class Engine:
         self,
         rules: list[Rule],
         queue: CalloutQueue,
-        recorder: LapRecorder | None = None,
+        recorder: SessionStore | None = None,
         metrics: Metrics | None = None,
     ) -> None:
         self.rules = rules

@@ -5,15 +5,15 @@ from gt7_race_engineer.callouts import CalloutQueue
 from gt7_race_engineer.config import DEFAULT_RULES
 from gt7_race_engineer.engine import Engine
 from gt7_race_engineer.metrics import Metrics
-from gt7_race_engineer.recorder import LapRecorder
 from gt7_race_engineer.replay import read_recording, replay, write_recording
 from gt7_race_engineer.rules import build_rules
+from gt7_race_engineer.store import SessionStore
 
 
 def make_engine(tmp_path, max_age=None):
     rules = build_rules(DEFAULT_RULES["rules"])
     queue = CalloutQueue(max_age=max_age)
-    return Engine(rules, queue, LapRecorder(tmp_path), Metrics()), queue
+    return Engine(rules, queue, SessionStore(tmp_path), Metrics()), queue
 
 
 async def test_full_race_callouts_and_records(tmp_path, sim):
@@ -34,14 +34,14 @@ async def test_full_race_callouts_and_records(tmp_path, sim):
 
     sessions = list((tmp_path / "sessions").iterdir())
     assert len(sessions) == 1
-    laps = sorted(p.name for p in sessions[0].glob("lap-*.json"))
-    assert laps == ["lap-01.json", "lap-02.json", "lap-03.json"]
-    lap2 = json.loads((sessions[0] / "lap-02.json").read_text())
-    assert lap2["lap"] == 2 and lap2["lap_time_ms"] == 99000 and lap2["fuel_used"] == 5.0
+    laps = sorted(p.name for p in sessions[0].glob("lap-*.parquet"))
+    assert laps == ["lap-01.parquet", "lap-02.parquet", "lap-03.parquet"]
     summary = json.loads((sessions[0] / "summary.json").read_text())
     assert summary["laps_completed"] == 3
     assert summary["best_lap_ms"] == 99000
     assert summary["fuel_used"] == 15.0
+    lap2 = summary["laps"][1]
+    assert lap2["lap"] == 2 and lap2["lap_time_ms"] == 99000 and lap2["fuel_used"] == 5.0
 
 
 async def test_pause_does_not_restart_race(tmp_path, sim):

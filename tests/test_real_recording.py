@@ -12,10 +12,10 @@ from gt7_race_engineer.audio.player import ConsolePlayer
 from gt7_race_engineer.callouts import CalloutQueue
 from gt7_race_engineer.config import DEFAULT_RULES
 from gt7_race_engineer.engine import Engine
-from gt7_race_engineer.recorder import LapRecorder
 from gt7_race_engineer.replay import read_recording, replay
 from gt7_race_engineer.rules import build_rules
 from gt7_race_engineer.state import Phase
+from gt7_race_engineer.store import SessionStore
 
 FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
 
@@ -27,7 +27,7 @@ def test_fixture_phases_cover_the_whole_session():
 
 async def test_real_session_callouts_and_sessions(tmp_path):
     engine = Engine(
-        build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), LapRecorder(tmp_path)
+        build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), SessionStore(tmp_path)
     )
     spoken = await replay(read_recording(FIXTURE), engine, ConsolePlayer())
     texts = [c.text for c in spoken]
@@ -47,5 +47,8 @@ async def test_real_session_callouts_and_sessions(tmp_path):
     sessions = sorted((tmp_path / "sessions").iterdir())
     assert len(sessions) == 2
     race = sessions[1]
-    assert sorted(p.name for p in race.glob("lap-*.json")) == ["lap-01.json", "lap-02.json"]
+    assert sorted(p.name for p in race.glob("lap-*.parquet")) == [
+        "lap-01.parquet",
+        "lap-02.parquet",
+    ]
     assert (race / "summary.json").exists()

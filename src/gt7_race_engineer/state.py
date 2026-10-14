@@ -11,7 +11,10 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
 
-STATE_FORMAT_VERSION = 1
+STATE_FORMAT_VERSION = 2
+SUPPORTED_FORMAT_VERSIONS = {1, 2}
+
+Wheel = tuple[float, float, float, float]
 
 
 class Phase(StrEnum):
@@ -67,6 +70,26 @@ class RaceState:
     race_start_pos: int
     total_cars: int
     cars_on_track: bool = False
+    # Full-frame fields (format v2). Not used by the rules; kept for the session
+    # store and the pit wall. Defaults let v1 recordings load.
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+    pos_z: float = 0.0
+    vel_x: float = 0.0
+    vel_y: float = 0.0
+    vel_z: float = 0.0
+    throttle: int = 0
+    brake: int = 0
+    current_gear: int = 0
+    suggested_gear: int = 0
+    tire_radius: Wheel = (0.0, 0.0, 0.0, 0.0)
+    suspension_height: Wheel = (0.0, 0.0, 0.0, 0.0)
+    wheel_rps: Wheel = (0.0, 0.0, 0.0, 0.0)
+    boost_pressure: float = 0.0
+    oil_pressure: float = 0.0
+    body_height: float = 0.0
+    car_code: int = 0
+    time_of_day_ms: int = 0
 
     @property
     def in_race(self) -> bool:
@@ -99,6 +122,7 @@ class RaceState:
     def from_telemetry(cls, tel: Any, t: float) -> RaceState:
         """Build from a ``gt_telem.models.telemetry.Telemetry`` instance."""
         tt = tel.tire_temp
+        tr, sh, wr = tel.tire_radius, tel.suspension_height, tel.wheel_rps
         return cls(
             t=t,
             packet_id=int(tel.packet_id),
@@ -123,20 +147,39 @@ class RaceState:
             race_start_pos=int(tel.race_start_pos),
             total_cars=int(tel.total_cars),
             cars_on_track=bool(tel.cars_on_track),
+            pos_x=float(tel.position_x),
+            pos_y=float(tel.position_y),
+            pos_z=float(tel.position_z),
+            vel_x=float(tel.velocity_x),
+            vel_y=float(tel.velocity_y),
+            vel_z=float(tel.velocity_z),
+            throttle=int(tel.throttle),
+            brake=int(tel.brake),
+            current_gear=int(tel.current_gear),
+            suggested_gear=int(tel.suggested_gear),
+            tire_radius=(float(tr.fl), float(tr.fr), float(tr.rl), float(tr.rr)),
+            suspension_height=(float(sh.fl), float(sh.fr), float(sh.rl), float(sh.rr)),
+            wheel_rps=(float(wr.fl), float(wr.fr), float(wr.rl), float(wr.rr)),
+            boost_pressure=float(tel.boost_pressure),
+            oil_pressure=float(tel.oil_pressure),
+            body_height=float(tel.body_height),
+            car_code=int(tel.car_code),
+            time_of_day_ms=int(tel.time_of_day_ms),
         )
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["phase"] = self.phase.value
-        d["tire_temp"] = list(self.tire_temp)
+        for k in _WHEEL_FIELDS:
+            d[k] = list(getattr(self, k))
         d["v"] = STATE_FORMAT_VERSION
         return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> RaceState:
         d = dict(d)
-        version = d.pop("v", STATE_FORMAT_VERSION)
-        if version != STATE_FORMAT_VERSION:
+        version = d.pop("v", 1)
+        if version not in SUPPORTED_FORMAT_VERSIONS:
             raise ValueError(f"unsupported state format version {version}")
         phase = Phase(d["phase"])
         if phase in (Phase.AT_TRACK, Phase.IN_RACE, Phase.FINISHED):
@@ -144,9 +187,13 @@ class RaceState:
             # older labels; the lap counters are authoritative, so re-derive.
             phase = derive_phase(int(d["current_lap"]), int(d["total_laps"]), False, False)
         d["phase"] = phase
-        d["tire_temp"] = tuple(float(x) for x in d["tire_temp"])
-        d.setdefault("cars_on_track", False)
+        for k in _WHEEL_FIELDS:
+            if k in d:
+                d[k] = tuple(float(x) for x in d[k])
         return cls(**d)
+
+
+_WHEEL_FIELDS = ("tire_temp", "tire_radius", "suspension_height", "wheel_rps")
 
 
 def _optional_int(value: Any) -> int | None:

@@ -17,7 +17,7 @@ from gt7_race_engineer.engine import Engine
 from gt7_race_engineer.metrics import HealthServer, Metrics
 from gt7_race_engineer.recorder import LapRecorder
 from gt7_race_engineer.rules import build_rules
-from gt7_race_engineer.state import RaceState
+from gt7_race_engineer.state import Phase, RaceState
 
 log = logging.getLogger("gt7_race_engineer")
 
@@ -27,7 +27,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("run", help="live: PS5 telemetry in, Discord voice out")
+    rn = sub.add_parser("run", help="live: PS5 telemetry in, Discord voice out")
+    rn.add_argument(
+        "--record", type=Path, help="also append every telemetry frame to this JSONL file"
+    )
+
+    sy = sub.add_parser("say", help="join the voice channel, speak a phrase, leave (audio test)")
+    sy.add_argument("text", nargs="?", default="Radio check. Race engineer online.")
 
     rp = sub.add_parser("replay", help="run the rules over a recording, no PS5 or Discord needed")
     rp.add_argument("recording", type=Path)
@@ -53,7 +59,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         if args.command == "run":
-            return asyncio.run(run_live(settings))
+            return asyncio.run(run_live(settings, record=args.record))
+        if args.command == "say":
+            return asyncio.run(run_say(settings, args.text))
         if args.command == "replay":
             return asyncio.run(run_replay(settings, args.recording, args.wav_out, args.realtime))
         if args.command == "record":
@@ -116,8 +124,35 @@ async def run_record(settings: Settings, output: Path, ps5_ip: str | None, secon
     return 0
 
 
-async def run_live(settings: Settings) -> int:
+async def run_say(settings: Settings, text: str) -> int:
+    """Audio path test: no telemetry involved."""
     from gt7_race_engineer.audio.discord_player import DiscordPlayer
+    from gt7_race_engineer.callouts import Callout
+    from gt7_race_engineer.speech import PiperSpeech
+
+    if not settings.discord_token or not settings.discord_channel_id:
+        raise ConfigError("DISCORD_BOT_TOKEN and DISCORD_VOICE_CHANNEL_ID are required")
+    rules_cfg = load_rules_config(settings.rules_file)
+    speech = PiperSpeech(
+        settings.voice_model, Path("/tmp/gt7-race-engineer/cache"), rules_cfg["voice"]
+    )
+    player = DiscordPlayer(settings.discord_token, settings.discord_channel_id, speech)
+    await player.start()
+    try:
+        await player.on_phase(Phase.AT_TRACK, time.monotonic())
+        if not player.connected:
+            log.error("could not join the voice channel, see errors above")
+            return 1
+        await player.play(Callout(text=text, priority=0, rule="say", created_at=time.monotonic()))
+        await asyncio.sleep(0.5)
+    finally:
+        await player.close()
+    return 0
+
+
+async def run_live(settings: Settings, record: Path | None = None) -> int:
+    from gt7_race_engineer.audio.discord_player import DiscordPlayer
+    from gt7_race_engineer.replay import RecordingWriter
     from gt7_race_engineer.speech import PiperSpeech
     from gt7_race_engineer.telemetry import LiveTelemetry
 
@@ -162,6 +197,10 @@ async def run_live(settings: Settings) -> int:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
+    writer = RecordingWriter(record) if record is not None else None
+    if writer is not None:
+        log.info("recording telemetry frames to %s", record)
+
     log.info("gt7-race-engineer %s starting", __version__)
     # Pre-warm the voice so the first callout is not late.
     await loop.run_in_executor(None, speech.synthesize, "Race engineer online.")
@@ -171,6 +210,8 @@ async def run_live(settings: Settings) -> int:
     async def ingest() -> None:
         while True:
             state = await states.get()
+            if writer is not None:
+                writer.write(state)
             engine.process(state)
             await player.on_phase(state.phase, state.t)
 
@@ -183,13 +224,14 @@ async def run_live(settings: Settings) -> int:
             await player.play(c)
 
     async def watchdog() -> None:
-        was = None
+        was: bool | None = None
+        log.info("telemetry: waiting for packets from %s", settings.ps5_ip)
         while True:
             now_connected = telem.connected(settings.telemetry_timeout_secs)
             metrics.telemetry_connected.set(1 if now_connected else 0)
-            if now_connected != was:
+            if now_connected != was and (was is not None or now_connected):
                 log.info("telemetry %s", "connected" if now_connected else "lost")
-                was = now_connected
+            was = now_connected
             await asyncio.sleep(1)
 
     tasks = [
@@ -207,6 +249,9 @@ async def run_live(settings: Settings) -> int:
         await player.close()
         await telem.stop()
         http.stop()
+        if writer is not None:
+            writer.close()
+            log.info("recorded %d frames to %s", writer.count, record)
     return 0
 
 

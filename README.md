@@ -86,9 +86,15 @@ make voice           # downloads the Piper voice into ./voices
 GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/gt7-race-engineer run
 ```
 
-### Replay and record
+### Audio check, replay and record
 
-Develop without a PS5 or Discord:
+Test the Discord audio path without racing:
+
+```sh
+gt7-race-engineer say "Radio check"
+```
+
+Capture frames during a live session with `run --record session.jsonl`, or develop without a PS5 or Discord:
 
 ```sh
 # capture a session from any machine on the LAN (uses discovery if no IP given)

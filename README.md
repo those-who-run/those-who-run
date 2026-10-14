@@ -1,0 +1,135 @@
+# gt7-race-engineer
+
+A self-hosted voice race engineer for Gran Turismo 7. It reads the PS5's UDP
+telemetry, applies deterministic rules, synthesises speech locally with Piper,
+and plays it into a Discord voice channel. Join that channel from the PS5's
+Discord integration and the engineer speaks inside your PSVR2 headset.
+
+No cloud services, no subscription, no LLM. Everything runs on one small box on
+your LAN.
+
+## What it says (v1)
+
+| Rule | When | Example |
+|---|---|---|
+| `lap_time` | every completed lap | "Lap three. One forty-one point zero. One point five over best." |
+| `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
+| `final_lap` | last lap of a lap-count race starts | "Final lap." |
+
+Fuel is estimated from the last three laps' consumption and only announced
+when it is shorter than the laps left in the race. A pit stop resets the
+warnings. Every threshold and phrase is configurable, see `rules.example.yaml`.
+
+## How it works
+
+```
+PS5 (GT7) --UDP 33740--> engineer --Piper WAV--> Discord voice channel --> PS5 Discord --> headset
+         <--UDP 33739 heartbeat--
+```
+
+- Telemetry: [gt-telem](https://github.com/RaceCrewAI/gt-telem). The PS5 streams
+  encrypted packets at 60 Hz to whoever sends it a heartbeat.
+- Rules are pure functions of consecutive `RaceState` frames and have no I/O, so
+  they are tested against synthetic races and can be replayed from recordings.
+- Speech: [Piper](https://github.com/OHF-Voice/piper1-gpl) with the
+  `en_GB-alba-medium` voice baked into the image. Phrases are cached.
+- Audio: discord.py plays WAVs into the configured voice channel. The bot joins
+  when you are at a track and leaves after an idle timeout in menus.
+- Observability: Prometheus metrics and a health endpoint on `:9850`, one JSON
+  file per lap plus a session summary under the data directory.
+
+## Requirements
+
+- A PS5 running GT7 with **Settings > Network > Telemetry** enabled, on the same
+  LAN as the host, ideally with a DHCP reservation.
+- A Discord server with a voice channel, and a bot application with the
+  **Connect** and **Speak** permissions in that channel. No privileged intents.
+- The PS5 signed in to Discord and joined to the same voice channel.
+- Linux host with `ffmpeg` and `libopus`, or the container image.
+
+## Configuration
+
+Environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GT7_PS5_IP` | required | PS5 address. Broadcast discovery is not used when set. |
+| `DISCORD_BOT_TOKEN` | required | Bot token. |
+| `DISCORD_VOICE_CHANNEL_ID` | required | Voice channel the PS5 joins. |
+| `GT7_RULES_FILE` | built-in defaults | YAML overriding any value in `rules.example.yaml`. |
+| `GT7_DATA_DIR` | `./data` | Lap and session JSON output. |
+| `GT7_VOICE_MODEL` | `voices/en_GB-alba-medium.onnx` | Piper voice. |
+| `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
+| `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus. |
+| `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
+| `LOG_LEVEL` | `INFO` | |
+
+## Running
+
+Container (amd64):
+
+```sh
+podman run --rm \
+  -e GT7_PS5_IP=192.0.2.108 \
+  -e DISCORD_BOT_TOKEN=... \
+  -e DISCORD_VOICE_CHANNEL_ID=... \
+  -p 33740:33740/udp -p 9850:9850 \
+  -v ./data:/data \
+  muldoon/gt7-race-engineer:0.1.0
+```
+
+From source:
+
+```sh
+make venv            # creates .venv and installs with dev extras
+make voice           # downloads the Piper voice into ./voices
+GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/gt7-race-engineer run
+```
+
+### Replay and record
+
+Develop without a PS5 or Discord:
+
+```sh
+# capture a session from any machine on the LAN (uses discovery if no IP given)
+gt7-race-engineer record session.jsonl --ps5-ip 192.0.2.108
+
+# run the rules over it, printing callouts; optionally write WAVs to listen to
+gt7-race-engineer replay session.jsonl --wav-out ./out
+```
+
+Recordings are one `RaceState` JSON object per line, version-tagged, and do not
+depend on gt-telem's packet layout.
+
+## Metrics
+
+`gt7_telemetry_packets_total`, `gt7_telemetry_connected`, `gt7_voice_connected`,
+`gt7_in_race`, `gt7_callouts_total{rule}`, `gt7_callouts_dropped_total`,
+`gt7_current_lap`, `gt7_total_laps`, `gt7_fuel_level`, `gt7_fuel_capacity`,
+`gt7_fuel_laps_remaining`, `gt7_last_lap_seconds`, `gt7_best_lap_seconds`,
+`gt7_speed_kph`, `gt7_speech_seconds`.
+
+`GET /healthz` returns JSON with telemetry and voice connection state.
+
+## Development
+
+```sh
+make lint test       # ruff + pytest
+make build           # podman build for linux/amd64
+make release VERSION=0.1.0   # build and push muldoon/gt7-race-engineer:0.1.0
+```
+
+Tags matching `v*` are built and pushed to Docker Hub by GitHub Actions. The
+workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
+
+## Known limits
+
+- GT7 only exposes your own car. There are no gaps to other cars, and the
+  position field is not confirmed to update during a race, so there are no
+  position callouts yet.
+- Timed races report zero total laps, so there is no final-lap call for them.
+- Only the Discord send path is implemented. Spoken questions are a later phase.
+
+## Licence
+
+GPL-3.0-only. gt-telem and Piper are GPL-3.0, which this project inherits.

@@ -118,6 +118,11 @@ depend on gt-telem's packet layout.
 
 `GET /healthz` returns JSON with telemetry and voice connection state.
 
+## Roadmap
+
+Planned work is tracked as GitHub milestones, one per release:
+https://github.com/those-who-run/those-who-run/milestones
+
 ## Development
 
 ```sh

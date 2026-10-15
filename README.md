@@ -128,6 +128,41 @@ those-who-run replay session.jsonl --wav-out ./out
 Recordings are one `RaceState` JSON object per line, version-tagged, and do not
 depend on gt-telem's packet layout.
 
+## Track detection
+
+GT7 never says which track you are on. The engineer works it out from where
+the car goes, using a table of 106 layouts (finish line, direction, lap
+bounding box; adapted from gt-telem and Bornhall's gt7telemetry) and three
+independent facts checked on every frame:
+
+1. **Starts near the line.** A grid or a pit lane is within a kilometre of the
+   layout's finish line. This separates the real track from unrelated layouts
+   whose enormous boxes happen to contain the same coordinates.
+2. **Path stays inside the box.** A layout is dropped the moment the car leaves
+   its bounds. Family members that share a finish line (GP vs 24h, Indy vs
+   full) fall out as you drive past the shorter one.
+3. **Finish line crossed, in the right direction.** Decisive, and the only thing
+   that tells a reverse layout from its twin.
+
+The verdict carries a confidence: `confirmed` (line crossed, nothing else
+fits), `probable` (only one layout left, line not yet crossed), `ambiguous`
+(several still fit; the table cannot separate some pairs such as Fuji and Fuji
+Short at all) or `none`. A rolling start usually crosses the line before lap
+1, so a race is often confirmed before the lights go out; a flying lap from the
+pits is probable within a minute and confirmed at the end of the lap.
+
+The verdict is logged, stored with the session (`track_id` and
+`track_confidence` in the index, a `track` block with the candidates in
+`summary.json`), exported as `gt7_track_id` and `gt7_track_info`, and shown
+by `/healthz`.
+
+```sh
+those-who-run tracks list                      # the table
+those-who-run tracks detect session.jsonl      # how the decision evolved over a recording
+those-who-run tracks detect data/sessions/<id> # same, from stored Parquet laps
+those-who-run tracks backfill                  # fill in sessions recorded before detection existed
+```
+
 ## Data
 
 Every frame of every lap is kept, so the pit wall (milestone 2.0) can show
@@ -203,8 +238,7 @@ Learned from recordings, and encoded in `state.py`:
   tracks its own best as a fallback and lap 2 still gets a delta.
 - Time trials and practice report zero total laps and no cars on track. Lap
   times are still announced; final-lap and position rules stay quiet.
-- GT7 sends no track id. Detection from the car's position is tracked as a
-  milestone 0.2 issue.
+- GT7 sends no track id; see Track detection above.
 
 ## Known limits
 

@@ -16,6 +16,7 @@ from those_who_run.state import (
     racing_frame,
 )
 from those_who_run.store import SessionStore
+from those_who_run.trackdetect import CONFIDENCE_RANK, TrackDetector, TrackMatch
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ class Engine:
         self.metrics = metrics
         self.prev: RaceState | None = None
         self.races_started = 0
+        self.tracks = TrackDetector()
+        self.track: TrackMatch | None = None  # best match applied to the open session
 
     def process(self, state: RaceState) -> list[Callout]:
         prev = self.prev
@@ -53,8 +56,15 @@ class Engine:
             for rule in self.rules:
                 rule.reset()
             self.queue.clear()
+            if restarted:
+                self.tracks.reset()  # the car was teleported back to the grid
+            self.track = None
             if self.recorder is not None:
                 self.recorder.start_session(state)
+            # A rolling start crosses the finish line before lap 1, so the
+            # detector may already know the track when the session opens.
+            if self.tracks.match.confidence != "none":
+                self._apply_track(self.tracks.match)
 
         callouts: list[Callout] = []
         if state.in_race or racing_frame(prev, state):
@@ -69,11 +79,16 @@ class Engine:
             if self.metrics is not None:
                 self.metrics.callouts_total.labels(c.rule).inc()
 
+        match = self.tracks.observe(state)
+        if match is not None and self.session_open:
+            self._apply_track(match)
+
         if self.recorder is not None:
             self.recorder.observe(prev, state)
             if race_ended(prev, state) and self.recorder.session is not None:
                 log.info("race end at lap %d", state.current_lap)
                 self.recorder.end_session(state)
+                self.track = None
 
         if self.metrics is not None:
             self.metrics.observe_state(state)
@@ -84,3 +99,28 @@ class Engine:
 
         self.prev = state
         return callouts
+
+    @property
+    def session_open(self) -> bool:
+        return self.recorder is None or self.recorder.session is not None
+
+    def _apply_track(self, match: TrackMatch) -> None:
+        """Keep the best answer the session has had; never downgrade on a blip."""
+        if self.track is not None and (
+            CONFIDENCE_RANK[match.confidence] < CONFIDENCE_RANK[self.track.confidence]
+        ):
+            return
+        if self.track is not None and match.decision == self.track.decision:
+            return
+        self.track = match
+        log.info(
+            "track %s: %s (%s), %s",
+            match.confidence,
+            match.name,
+            match.track_id,
+            match.evidence,
+        )
+        if self.recorder is not None and self.recorder.session is not None:
+            self.recorder.set_track(match)
+        if self.metrics is not None:
+            self.metrics.set_track(match)

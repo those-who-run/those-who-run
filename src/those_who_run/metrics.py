@@ -13,6 +13,7 @@ from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, gene
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
 from those_who_run.state import RaceState
+from those_who_run.trackdetect import TrackMatch
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,13 @@ class Metrics:
         self.last_lap_seconds = Gauge("gt7_last_lap_seconds", "Last lap time", registry=r)
         self.best_lap_seconds = Gauge("gt7_best_lap_seconds", "Best lap time", registry=r)
         self.speed_kph = Gauge("gt7_speed_kph", "Speed", registry=r)
+        self.track_id = Gauge("gt7_track_id", "Detected track id (0 = unknown)", registry=r)
+        self.track_info = Gauge(
+            "gt7_track_info",
+            "Detected track, 1 with name and confidence as labels",
+            ["track_id", "name", "confidence"],
+            registry=r,
+        )
         self.speech_seconds = Histogram(
             "gt7_speech_seconds",
             "Time to synthesise a callout",
@@ -65,6 +73,13 @@ class Metrics:
         self.last_lap_seconds.set(state.last_lap_ms / 1000 if state.last_lap_ms > 0 else 0)
         self.best_lap_seconds.set(state.best_lap_ms / 1000 if state.best_lap_ms > 0 else 0)
         self.speed_kph.set(state.speed_kph)
+
+    def set_track(self, match: TrackMatch) -> None:
+        self.track_id.set(match.track_id or 0)
+        self.track_info.clear()
+        self.track_info.labels(
+            str(match.track_id or 0), match.name or "unknown", match.confidence
+        ).set(1)
 
     def observe_dropped(self, dropped_total: int) -> None:
         delta = dropped_total - self._dropped_seen

@@ -34,15 +34,19 @@ async def test_real_session_callouts_and_sessions(tmp_path):
     spoken = await replay(read_recording(FIXTURE), engine, ConsolePlayer())
     texts = [c.text for c in spoken]
     assert texts == [
-        # practice session: the engineer started mid-session on lap 7
+        # practice session: the engineer started mid-session on lap 7, no brief
         "Lap seven. forty-nine point seven.",
-        # the race: P10 on the grid
+        # the race: P10 on the grid (the track was unknown: standing start, lap 1 only)
+        "Two laps. P ten of twenty.",
         "Up to ninth.",
         "Final lap.",
         "Lap one. fifty-one point zero.",
         "Up to eighth.",
         "Up to seventh.",
         "Lap two. fifty-three point one. two point one over best.",
+        # P6 was taken in the last two seconds; the summary reads it off the flag frame
+        "Chequered flag. Finished sixth. Best lap fifty-one point zero. "
+        "Fuel used thirty-eight percent.",
     ]
     # practice + race, and nothing for the post-race replay frames
     assert engine.races_started == 2
@@ -64,10 +68,16 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
     spoken = await replay(read_recording(QUALI), engine, ConsolePlayer())
     assert [c.text for c in spoken] == [
+        # qualifying looks like a timed race to GT7: no lap total, twenty cars
+        "Timed race. P one of twenty.",
+        "Nurburgring twenty-four hour.",  # probable 78 s in, on the first line crossing
         "Fuel. three laps remaining.",
         "Lap one. eight twenty-six point four.",
+        "Timed race. P one of twenty.",  # the restart briefs again
+        "Nurburgring twenty-four hour.",
         "Lap one. eight twenty point four.",
-        "Lap two. eight twenty point two. zero point two under best.",
+        "Lap two. eight twenty point two. New best by zero point two.",
+        # no summary: the session was quit, not finished
     ]
     assert engine.races_started == 2
     assert store.session is None, "the quit closed the second session"

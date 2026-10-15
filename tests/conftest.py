@@ -47,15 +47,25 @@ class RaceSim:
         capacity: float = 100.0,
         burn: float = 5.0,
         track_id: int = 7,
+        position: int = 5,
+        cars: int = 16,
+        tyres: tuple[float, float, float, float] = (60.0, 60.0, 60.0, 60.0),
+        is_race: bool | None = None,
     ) -> None:
         self.total_laps = total_laps
         self.fuel = fuel
         self.capacity = capacity
         self.burn = burn
         self.track_id = track_id
+        self.position = position
+        self.cars = cars
+        self.tyres = tyres
+        self.is_race = is_race
         self.t = 0.0
         self.pid = 0
         self.lap = 0
+        self.best = 0
+        self.last = 0
         self.frames: list[RaceState] = []
 
     def _push(self, **over) -> RaceState:
@@ -66,6 +76,11 @@ class RaceSim:
         over.setdefault("total_laps", self.total_laps)
         over.setdefault("fuel_capacity", self.capacity)
         over.setdefault("track_id", self.track_id)
+        over.setdefault("race_start_pos", self.position)
+        over.setdefault("total_cars", self.cars)
+        over.setdefault("tire_temp", self.tyres)
+        if self.is_race is not None:
+            over.setdefault("cars_on_track", self.is_race)
         s = make_state(**over)
         self.frames.append(s)
         return s
@@ -88,6 +103,20 @@ class RaceSim:
         self._push(phase=Phase.LOADING, current_lap=current_lap, fuel_level=self.fuel)
         return self
 
+    def drive(self, seconds: int, **over) -> RaceSim:
+        """Hold the lap in progress for ``seconds`` frames, one per second, with
+        overrides such as ``tire_temp`` or ``water_temp`` applied to each."""
+        for _ in range(seconds):
+            kw = dict(
+                current_lap=max(self.lap, 1),
+                fuel_level=self.fuel,
+                best_lap_ms=self.best,
+                last_lap_ms=self.last,
+            )
+            kw.update(over)
+            self._push(**kw)
+        return self
+
     def race(
         self,
         lap_times: Sequence[int],
@@ -96,7 +125,7 @@ class RaceSim:
         pause_in_lap: int | None = None,
         finish: bool = True,
     ) -> RaceSim:
-        best = 0
+        best = 0  # GT7 clears its best on a restart too (qualifying, 2026-10-14)
         last = 0
         fuel = self.fuel
         lap = 1
@@ -129,6 +158,8 @@ class RaceSim:
             self._push(current_lap=lap, fuel_level=fuel, best_lap_ms=best, last_lap_ms=last)
         self.fuel = fuel
         self.lap = lap
+        self.best = best
+        self.last = last
         if finish:
             self.menu()
         return self

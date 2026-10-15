@@ -7,6 +7,7 @@ from typing import Any
 
 from those_who_run.callouts import Callout
 from those_who_run.state import RaceState
+from those_who_run.trackdetect import TrackMatch
 
 
 class Rule(ABC):
@@ -20,6 +21,10 @@ class Rule(ABC):
 
     def reset(self) -> None:
         """Forget per-race state. Called on every race start."""
+        return None
+
+    def on_track(self, match: TrackMatch) -> None:
+        """The engine's track verdict changed (never downgraded within a session)."""
         return None
 
     @abstractmethod

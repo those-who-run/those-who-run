@@ -13,6 +13,8 @@ rules:
     delta_slower: "{delta} over best"
     delta_equal: "equal to best"
     delta_first: ""
+    template_new_best: "Lap {lap}. {time}. New best by {gap}."   # replaces the plain phrase
+    new_best_priority: 11   # {gap} is the bare margin, {delta} the delta_faster wording
   fuel:
     enabled: true
     priority: 15
@@ -33,3 +35,22 @@ rules:
     min_interval_secs: 5
     template_gained: "Up to {position}."
     template_lost: "Down to {position}."
+  start_brief:
+    enabled: true
+    priority: 8
+    settle_secs: 2           # the grid slot takes a frame or two to settle
+    announce_track: true     # say the track on its own once it is known after the brief
+    min_confidence: probable # or confirmed
+    template_track: "{track}."
+    template_laps: "{laps}."
+    template_laps_to_go: "{laps} to go."   # engineer started mid-race
+    template_timed: "Timed race."          # also what qualifying looks like to GT7
+    template_position: "P {p} of {total}."
+  race_summary:
+    enabled: true
+    priority: 25             # after the final lap time, posted on the same frame
+    min_fuel: 1.0            # skip the fuel clause under this many units used
+    template: "Chequered flag. {position} {best} {fuel}"
+    template_position: "Finished {position}."
+    template_best: "Best lap {time}."
+    template_fuel: "Fuel used {fuel}."

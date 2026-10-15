@@ -34,3 +34,34 @@ def test_delta_words():
 def test_laps_words():
     assert laps_words(1) == "one lap"
     assert laps_words(3) == "three laps"
+
+
+def test_percent_words_rounds_half_up():
+    from those_who_run.verbalise import percent_words
+
+    assert percent_words(37.5) == "thirty-eight percent"
+    assert percent_words(0.4) == "zero percent"
+
+
+def test_track_words_spells_out_what_the_voice_would_mangle():
+    from those_who_run.verbalise import track_words
+
+    assert track_words("Nurburgring 24h") == "Nurburgring twenty-four hour"
+    assert track_words("Nurburgring GP") == "Nurburgring G P"
+    assert track_words("Alsace - Village Reverse") == "Alsace. Village Reverse"
+    assert track_words("Willow Springs International Raceway: Big Willow") == (
+        "Willow Springs International Raceway. Big Willow"
+    )
+    assert (
+        track_words("Kyoto Driving Park - Yamagiwa+Miyabi")
+        == "Kyoto Driving Park. Yamagiwa and Miyabi"
+    )
+    assert track_words("24 Heures du Mans Racing Circuit No Chicane") == "Le Mans No Chicane"
+    assert track_words("Fuji International Speedway (Short)") == "Fuji International Speedway Short"
+
+
+def test_tidy_sentence():
+    from those_who_run.verbalise import tidy_sentence
+
+    assert tidy_sentence("Lap one.  one forty.  ") == "Lap one. one forty."
+    assert tidy_sentence("Final lap") == "Final lap."

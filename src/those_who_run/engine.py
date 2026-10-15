@@ -126,3 +126,8 @@ class Engine:
             self.recorder.set_track(match)
         if self.metrics is not None:
             self.metrics.set_track(match)
+        for rule in self.rules:
+            try:
+                rule.on_track(match)
+            except Exception:  # noqa: BLE001
+                log.exception("rule %s failed on track update", rule.name)

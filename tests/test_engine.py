@@ -26,10 +26,13 @@ async def test_full_race_callouts_and_records(tmp_path, sim):
     spoken = await replay(frames, engine, player)
     texts = [c.text for c in spoken]
     assert texts == [
+        "Three laps. P five of sixteen.",
         "Lap one. one forty point zero.",
         "Final lap.",  # final lap outranks the lap time posted on the same crossing
-        "Lap two. one thirty-nine point zero. one point zero under best.",
+        "Lap two. one thirty-nine point zero. New best by one point zero.",
         "Lap three. one thirty-nine point five. zero point five over best.",
+        "Chequered flag. Finished fifth. Best lap one thirty-nine point zero. "
+        "Fuel used fifteen percent.",
     ]
     assert engine.races_started == 1
 
@@ -72,11 +75,15 @@ async def test_restart_closes_session_and_starts_another(tmp_path, sim):
     engine, _ = make_engine(tmp_path)
     spoken = await replay(s.frames, engine, ConsolePlayer())
     assert [c.text for c in spoken] == [
+        "Three laps. P five of sixteen.",
         "Lap one. one forty point zero.",
+        "Three laps. P five of sixteen.",  # briefed again from the grid
         "Lap one. one thirty-nine point zero.",  # best is reset by the restart
         "Final lap.",
-        "Lap two. one thirty-eight point zero. one point zero under best.",
-        "Lap three. one thirty-seven point zero. one point zero under best.",
+        "Lap two. one thirty-eight point zero. New best by one point zero.",
+        "Lap three. one thirty-seven point zero. New best by one point zero.",
+        "Chequered flag. Finished fifth. Best lap one thirty-seven point zero. "
+        "Fuel used fifteen percent.",
     ]
     assert engine.races_started == 2
     db = sqlite3.connect(tmp_path / "index.sqlite")
@@ -132,3 +139,41 @@ async def test_metrics_follow_state(tmp_path, sim):
     assert "gt7_current_lap 3.0" in text
     assert 'gt7_callouts_total{rule="fuel"} 1.0' in text
     assert "gt7_fuel_laps_remaining 8.0" in text
+
+
+async def test_post_results_blip_is_quiet(tmp_path, sim):
+    """After the results screen GT7 replays the last frames of the race: a FINISHED
+    frame and then an in-race frame with no lap total, no cars and no position
+    (recording 2026-10-14). The in-race frame is evaluated, so every rule must
+    treat it as nothing new."""
+    s = sim(total_laps=2, position=4, cars=12)
+    s.race([100000, 99000], finish=False)  # ends on the flag frame
+    s.at_track()
+    s._push(current_lap=3)  # FINISHED again
+    s._push(current_lap=3, total_laps=0, cars_on_track=False, race_start_pos=-1, total_cars=-1)
+    s.loading(0).menu()
+    engine, _ = make_engine(tmp_path)
+    spoken = await replay(s.frames, engine, ConsolePlayer())
+    assert [c.text for c in spoken] == [
+        "Two laps. P four of twelve.",
+        "Final lap.",
+        "Lap one. one forty point zero.",
+        "Lap two. one thirty-nine point zero. New best by one point zero.",
+        "Chequered flag. Finished fourth. Best lap one thirty-nine point zero. "
+        "Fuel used ten percent.",
+    ]
+    assert engine.races_started == 1
+
+
+async def test_track_verdict_reaches_the_brief_through_the_engine(tmp_path, sim):
+    from those_who_run.trackdetect import TrackMatch
+
+    s = sim(total_laps=2, position=3, cars=8)
+    s.race([100000, 99000])
+    engine, _ = make_engine(tmp_path)
+    player = ConsolePlayer()
+    frames = iter(s.frames)
+    engine.process(next(frames))  # race start: session opens, rules reset
+    engine._apply_track(TrackMatch(471, "Tsukuba Circuit", "probable", (), "test"))
+    spoken = await replay(frames, engine, player)
+    assert [c.text for c in spoken][0] == "Tsukuba Circuit. Two laps. P three of eight."

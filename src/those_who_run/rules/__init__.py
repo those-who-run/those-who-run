@@ -9,12 +9,16 @@ from those_who_run.rules.final_lap import FinalLapRule
 from those_who_run.rules.fuel import FuelRule
 from those_who_run.rules.lap_time import LapTimeRule
 from those_who_run.rules.position import PositionRule
+from those_who_run.rules.race_summary import RaceSummaryRule
+from those_who_run.rules.start_brief import StartBriefRule
 
 REGISTRY: dict[str, type[Rule]] = {
     LapTimeRule.name: LapTimeRule,
     FuelRule.name: FuelRule,
     FinalLapRule.name: FinalLapRule,
     PositionRule.name: PositionRule,
+    StartBriefRule.name: StartBriefRule,
+    RaceSummaryRule.name: RaceSummaryRule,
 }
 
 
@@ -35,6 +39,8 @@ __all__ = [
     "FuelRule",
     "LapTimeRule",
     "PositionRule",
+    "RaceSummaryRule",
     "Rule",
+    "StartBriefRule",
     "build_rules",
 ]

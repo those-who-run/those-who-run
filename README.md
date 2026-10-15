@@ -29,22 +29,28 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 | Rule | When | Example |
 |---|---|---|
 | `start_brief` | two seconds into a race: track (if known), distance, grid slot | "Sportsland SUGO. Two laps. P ten of twenty." |
-| `start_brief` | the detector names the track after the brief | "Nurburgring twenty-four hour." |
-| `lap_time` | every completed lap | "Lap three. One forty-one point zero. One point five over best." |
+| `start_brief` | the detector names the track after the brief, still on the first lap | "Nurburgring twenty-four hour." |
+| `lap_time` | every completed lap, including the in-lap to a pit stop | "Lap three. One forty-one point zero. One point five over best." |
 | `lap_time` | a lap beats the best so far (own template and priority) | "Lap two. One thirty-nine point zero. New best by one point zero." |
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
 | `fuel` | the lap after this one cannot be completed, once per stint | "Pit this lap." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
-| `position` | a place is gained or lost (races only), after a short settle | "Up to sixth." |
+| `position` | a place is gained or lost (races only), after a 3 s settle, at most every 10 s, quiet for the first 15 s | "Up to sixth." |
 | `temps` | a tyre stays over 120 °C for five seconds; water or oil high; cold tyres at the start | "Front left tyre hot." |
 | `telemetry` | packets stop for 3 s mid-race or mid-pause, and when they return | "Lost telemetry." / "Telemetry back." |
-| `race_summary` | the chequered flag | "Chequered flag. Finished sixth. Best lap fifty-one point zero. Fuel used thirty-eight percent." |
+| `race_summary` | the chequered flag (kept for 30 s, so it waits behind the final lap time) | "Chequered flag. Finished sixth. Best lap fifty-three point one. Fuel used thirty-eight percent." |
 
 The telemetry callout is the one thing not driven by frames: the live
 watchdog (`GT7_TELEMETRY_TIMEOUT_SECS`, 3 s) raises it, so a quiet headset is
 never ambiguous. Fuel is estimated from the last three laps' consumption and only announced
 when it is shorter than the laps left in the race. A pit stop resets the
 warnings. Every threshold and phrase is configurable, see `rules.example.yaml`.
+
+Each sentence is synthesised on its own with `voice.sentence_pause_secs`
+(0.35 s) of silence between them, so "Lap two." and the time and the delta do
+not run together. Sentences are cached separately, so only the numbers are new
+work for each lap. Callouts older than `queue.max_age_seconds` (8 s) are
+dropped rather than spoken late; a rule can set its own `max_age_seconds`.
 
 ## How it works
 
@@ -104,7 +110,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.2.2
+  muldoon/those-who-run:0.2.3
 ```
 
 From source:
@@ -260,7 +266,7 @@ https://github.com/those-who-run/those-who-run/milestones
 ```sh
 make lint test       # ruff + pytest
 make build           # podman build for linux/amd64
-make release VERSION=0.2.2   # build and push muldoon/those-who-run:0.2.2
+make release VERSION=0.2.3   # build and push muldoon/those-who-run:0.2.3
 ```
 
 Tags matching `v*` are built and pushed to Docker Hub by GitHub Actions. The
@@ -274,8 +280,16 @@ Learned from recordings, and encoded in `state.py`:
   driving, and `total_laps + 1` once you take the flag. The results screen
   briefly replays the final frames afterwards; those are ignored.
 - The position field (`race_start_pos` in gt-telem) updates live during a race.
-- GT7 does not count lap 1 of a race towards its best lap, so the engineer
-  tracks its own best as a fallback and lap 2 still gets a delta.
+- GT7 does not count lap 1 of a lap-count race towards its best lap: the grid
+  sits ahead of the line, so lap 1 is short (57.1 s against 60 s laps at Suzuka
+  East). The engineer follows GT7, so lap 2 has no delta and the summary's best
+  lap is GT7's. Timed races and time trials do count lap 1.
+- Laps within 50 ms of the best are "equal to best"; time-trial laps can repeat
+  to a few milliseconds.
+- Driving into the pits, the car crosses the line inside the pit cut-scene, so
+  the lap time and the lap counter bump arrive on a loading frame. The engine
+  compares the next driving frame with the one before the loading screen, so the
+  in-lap is still called, and the fuel rule stays quiet on that crossing.
 - Time trials and practice report zero total laps and no cars on track. Lap
   times are still announced; the brief, final-lap, position and summary rules
   stay quiet. Qualifying reports zero total laps *with* cars on track, so it is

@@ -9,6 +9,7 @@ from those_who_run.metrics import Metrics
 from those_who_run.rules.base import Rule
 from those_who_run.rules.fuel import FuelRule
 from those_who_run.state import (
+    Phase,
     RaceState,
     race_ended,
     race_restarted,
@@ -37,6 +38,7 @@ class Engine:
         self.races_started = 0
         self.tracks = TrackDetector()
         self.track: TrackMatch | None = None  # best match applied to the open session
+        self.last_driving: RaceState | None = None  # last IN_RACE frame of this race
 
     def process(self, state: RaceState) -> list[Callout]:
         prev = self.prev
@@ -59,6 +61,7 @@ class Engine:
             if restarted:
                 self.tracks.reset()  # the car was teleported back to the grid
             self.track = None
+            self.last_driving = None
             if self.recorder is not None:
                 self.recorder.start_session(state)
             # A rolling start crosses the finish line before lap 1, so the
@@ -66,11 +69,30 @@ class Engine:
             if self.tracks.match.confidence != "none":
                 self._apply_track(self.tracks.match)
 
-        callouts: list[Callout] = []
-        if state.in_race or racing_frame(prev, state):
+        # Rules and the lap store compare against the last driving frame. A pause or
+        # a loading screen in between hides nothing: GT7 posts the pit-in lap on a
+        # loading frame when the car crosses the line into the pit cut-scene
+        # (2026-10-15), so the crossing is only visible from the frame before it.
+        seen = prev
+        if (
+            prev is not None
+            and prev.phase in (Phase.LOADING, Phase.PAUSED)
+            and state.phase in (Phase.IN_RACE, Phase.FINISHED)
+            and self.last_driving is not None
+            and not restarted
+        ):
+            seen = self.last_driving
             for rule in self.rules:
                 try:
-                    callouts.extend(rule.evaluate(prev, state))
+                    rule.on_bridge(prev.phase)
+                except Exception:  # noqa: BLE001
+                    log.exception("rule %s failed on bridge", rule.name)
+
+        callouts: list[Callout] = []
+        if state.in_race or racing_frame(seen, state):
+            for rule in self.rules:
+                try:
+                    callouts.extend(rule.evaluate(seen, state))
                 except Exception:  # noqa: BLE001
                     log.exception("rule %s failed", rule.name)
         for c in callouts:
@@ -84,7 +106,7 @@ class Engine:
             self._apply_track(match)
 
         if self.recorder is not None:
-            self.recorder.observe(prev, state)
+            self.recorder.observe(seen, state)
             if race_ended(prev, state) and self.recorder.session is not None:
                 log.info("race end at lap %d", state.current_lap)
                 if self.track is not None and self.tracks.match.decision == self.track.decision:
@@ -99,6 +121,10 @@ class Engine:
                 if isinstance(rule, FuelRule) and rule.laps_remaining is not None:
                     self.metrics.fuel_laps_remaining.set(rule.laps_remaining)
 
+        if state.in_race:
+            self.last_driving = state
+        elif race_ended(prev, state):
+            self.last_driving = None
         self.prev = state
         return callouts
 

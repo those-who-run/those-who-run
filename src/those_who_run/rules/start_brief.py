@@ -5,8 +5,11 @@ frame or two to settle the grid position (qualifying reported P20 and then P1 on
 consecutive frames, 2026-10-14). The track comes from the detector through
 ``on_track``. On a rolling start it is usually known before the lights; on a
 standing start it is not, so the name is spoken on its own once the detector
-names a track. A changed verdict later in the race is spoken again; a confidence
-upgrade for the same track is not.
+names a track, as long as the first lap is still being driven. Once the line
+is crossed the driver knows where they are, so a name that only became certain
+at the line (Suzuka East, 2026-10-15) is not read out a lap late. A changed
+verdict is spoken again under the same limit; a confidence upgrade for the same
+track is not. ``late_track_first_lap_only: false`` lifts the limit.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ class StartBriefRule(Rule):
     def reset(self) -> None:
         self.settle_secs = float(self.cfg.get("settle_secs", 2.0))
         self.announce_track = bool(self.cfg.get("announce_track", True))
+        self.first_lap_only = bool(self.cfg.get("late_track_first_lap_only", True))
         min_confidence = str(self.cfg.get("min_confidence", "probable"))
         self.min_rank = CONFIDENCE_RANK.get(min_confidence, CONFIDENCE_RANK["probable"])
         self.started_at: float | None = None
@@ -49,7 +53,8 @@ class StartBriefRule(Rule):
         out: list[Callout] = []
         if self.pending_track is not None:
             match, self.pending_track = self.pending_track, None
-            if match.track_id != self.track_spoken_id:
+            too_late = self.first_lap_only and state.current_lap > max(self.start_lap, 1)
+            if match.track_id != self.track_spoken_id and not too_late:
                 self.track_spoken_id = match.track_id
                 out.append(self.callout(self._track_phrase(match), state))
         if self.briefed or state.t - self.started_at < self.settle_secs:

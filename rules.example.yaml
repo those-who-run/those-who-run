@@ -2,8 +2,10 @@
 # file with only the keys you want to change is fine.
 voice:
   length_scale: 0.9     # < 1 speaks faster
+  sentence_pause_secs: 0.35   # silence between sentences ("Lap two. <pause> one oh four...")
 queue:
-  max_age_seconds: 8    # callouts older than this are dropped instead of spoken late
+  max_age_seconds: 8    # callouts older than this are dropped instead of spoken late;
+                        # any rule can set its own max_age_seconds
 rules:
   lap_time:
     enabled: true
@@ -13,6 +15,7 @@ rules:
     delta_slower: "{delta} over best"
     delta_equal: "equal to best"
     delta_first: ""
+    equal_ms: 50            # within this of the best is "equal", not a new best by zero point zero
     template_new_best: "Lap {lap}. {time}. New best by {gap}."   # replaces the plain phrase
     new_best_priority: 11   # {gap} is the bare margin, {delta} the delta_faster wording
   fuel:
@@ -35,8 +38,9 @@ rules:
   position:
     enabled: true          # races only; GT7 updates the position field live
     priority: 12
-    settle_secs: 2         # wait for a burst of place changes to settle
-    min_interval_secs: 5
+    settle_secs: 3         # wait for a burst of place changes to settle
+    min_interval_secs: 10
+    start_grace_secs: 15   # quiet while the field sorts itself out after the start
     template_gained: "Up to {position}."
     template_lost: "Down to {position}."
   start_brief:
@@ -44,6 +48,7 @@ rules:
     priority: 8
     settle_secs: 2           # the grid slot takes a frame or two to settle
     announce_track: true     # say the track on its own once it is known after the brief
+    late_track_first_lap_only: true   # ... but only while the first lap is being driven
     min_confidence: probable # or confirmed
     template_track: "{track}."
     template_laps: "{laps}."
@@ -53,6 +58,7 @@ rules:
   race_summary:
     enabled: true
     priority: 25             # after the final lap time, posted on the same frame
+    max_age_seconds: 30      # waits behind the final lap time instead of being dropped
     min_fuel: 1.0            # skip the fuel clause under this many units used
     template: "Chequered flag. {position} {best} {fuel}"
     template_position: "Finished {position}."

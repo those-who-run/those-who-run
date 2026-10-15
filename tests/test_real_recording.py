@@ -20,6 +20,8 @@ from those_who_run.store import SessionStore
 
 FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
 QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl"
+PIT_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"
+NO_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-no-stop-2026-10-15.jsonl"
 
 
 def test_fixture_phases_cover_the_whole_session():
@@ -43,9 +45,11 @@ async def test_real_session_callouts_and_sessions(tmp_path):
         "Lap one. fifty-one point zero.",
         "Up to eighth.",
         "Up to seventh.",
-        "Lap two. fifty-three point one. two point one over best.",
+        # lap 1 starts on the grid ahead of the line and is short, so like GT7 the
+        # engineer does not count it as a best: no delta for lap 2
+        "Lap two. fifty-three point one.",
         # P6 was taken in the last two seconds; the summary reads it off the flag frame
-        "Chequered flag. Finished sixth. Best lap fifty-one point zero. "
+        "Chequered flag. Finished sixth. Best lap fifty-three point one. "
         "Fuel used thirty-eight percent.",
     ]
     # practice + race, and nothing for the post-race replay frames
@@ -89,3 +93,81 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
     assert sessions == [(1, 506429, 1), (2, 500204, 1)]
     laps = db.execute("SELECT lap, complete FROM laps ORDER BY session_id, lap").fetchall()
     assert laps == [(1, 1), (2, 0), (1, 1), (2, 1), (3, 0)]
+
+
+async def _replay_with_store(path, tmp_path):
+    store = SessionStore(tmp_path)
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
+    spoken = await replay(read_recording(path), engine, ConsolePlayer())
+    store.close()
+    laps = (
+        sqlite3.connect(tmp_path / "index.sqlite")
+        .execute("SELECT lap, lap_time_ms FROM laps ORDER BY lap")
+        .fetchall()
+    )
+    return engine, [c.text for c in spoken], laps
+
+
+async def test_real_pit_stop_race(tmp_path):
+    """Suzuka East, six laps against one car, recorded on the NUC 2026-10-15. Heavy
+    fuel wear, the pit call after lap 2, and a stop on lap 3: GT7 posts the pit-in
+    lap on a loading frame as the car crosses into the pit cut-scene, then refuels
+    behind two more loading screens (22.9 to 100)."""
+    engine, texts, laps = await _replay_with_store(PIT_STOP, tmp_path)
+    assert texts == [
+        "Six laps. P one of two.",
+        "Down to second.",
+        "Up to first.",
+        "Fuel. two laps remaining.",
+        "Lap one. fifty-seven point one.",  # from the grid, short: not a best
+        "Pit this lap.",
+        "Fuel. one lap remaining.",
+        "Lap two. one oh zero point five.",
+        # the in-lap, posted on the loading frame; no fuel call on the way into the pits
+        "Lap three. one twenty-two point five. twenty-two point zero over best.",
+        "Lap four. one oh nine point nine. nine point four over best.",
+        "Final lap.",
+        "Lap five. fifty-nine point five. New best by one point zero.",
+        "Lap six. one oh zero point three. zero point eight over best.",
+        "Chequered flag. Finished first. Best lap fifty-nine point five. "
+        "Fuel used one hundred and thirty percent.",
+    ]
+    assert engine.races_started == 1
+    assert laps == [(1, 57109), (2, 60538), (3, 82544), (4, 69892), (5, 59541), (6, 60310)]
+
+
+async def test_real_race_with_the_pit_call_ignored(tmp_path):
+    """Suzuka East, six laps from P10 of twenty, NUC 2026-10-15. The driver ignored
+    the pit call and finished on the last litre."""
+    _, texts, laps = await _replay_with_store(NO_STOP, tmp_path)
+    assert texts == [
+        "Six laps. P ten of twenty.",
+        # quiet for fifteen seconds while the field shuffles, then one call a settle apart
+        "Down to twelfth.",
+        "Up to eleventh.",
+        "Down to thirteenth.",
+        "Lap one. one oh zero point four.",
+        # Suzuka East is only certain at the line: no track name a lap in
+        "Up to tenth.",
+        "Down to eleventh.",
+        "Up to tenth.",
+        "Up to ninth.",
+        "Lap two. one oh four point six.",
+        "Up to sixth.",
+        "Up to fourth.",
+        "Down to fifth.",
+        "Up to fourth.",
+        "Lap three. one oh three point one. New best by one point five.",
+        "Up to third.",
+        "Up to second.",
+        "Pit this lap.",
+        "Lap four. one oh one point two. New best by two point zero.",
+        "Fuel. one lap remaining.",
+        "Fuel critical. Less than one lap.",
+        "Final lap.",
+        "Lap five. one oh three point four. two point two over best.",
+        "Lap six. one oh four point zero. two point eight over best.",
+        "Chequered flag. Finished second. Best lap one oh one point two. "
+        "Fuel used ninety-seven percent.",
+    ]
+    assert [lap for lap, _ in laps] == [1, 2, 3, 4, 5, 6]

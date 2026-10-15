@@ -8,6 +8,10 @@ given when the estimate is shorter than the laps left in a lap-count race.
 The pit call is the instruction that goes with the numbers: once the estimate
 says the lap after this one cannot be completed, "Pit this lap." is spoken once
 per stint, ahead of the threshold phrase for the same crossing.
+
+A crossing seen through a loading screen is the car entering the pit lane (GT7
+cuts to the pit scene as it crosses the line). The tank is about to be filled,
+so that crossing only records consumption and says nothing.
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ from collections import deque
 
 from those_who_run.callouts import Callout
 from those_who_run.rules.base import Rule
-from those_who_run.state import RaceState, lap_completed
+from those_who_run.state import Phase, RaceState, lap_completed
 from those_who_run.verbalise import laps_words
 
 
@@ -41,10 +45,15 @@ class FuelRule(Rule):
         self.critical_announced = False
         self.lap_start_fuel: float | None = None
         self.laps_remaining: float | None = None
+        self.entering_pits = False
+
+    def on_bridge(self, phase: Phase) -> None:
+        self.entering_pits = phase is Phase.LOADING
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if self.lap_start_fuel is None and state.in_race and state.current_lap >= 1:
             self.lap_start_fuel = state.fuel_level
+        entering_pits, self.entering_pits = self.entering_pits, False
         if prev is None or not lap_completed(prev, state):
             return []
         assert self.lap_start_fuel is not None
@@ -66,7 +75,7 @@ class FuelRule(Rule):
             return []
         self.laps_remaining = state.fuel_level / avg
 
-        if state.has_lap_count and state.current_lap > state.total_laps:
+        if entering_pits or (state.has_lap_count and state.current_lap > state.total_laps):
             return []
         laps_left = state.laps_left
         if laps_left is not None and self.laps_remaining >= laps_left:

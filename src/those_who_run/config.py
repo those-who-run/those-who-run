@@ -12,7 +12,12 @@ from typing import Any
 import yaml
 
 DEFAULT_RULES: dict[str, Any] = {
-    "voice": {"length_scale": 0.9, "noise_scale": 0.5, "noise_w_scale": 0.5},
+    "voice": {
+        "length_scale": 0.9,
+        "noise_scale": 0.5,
+        "noise_w_scale": 0.5,
+        "sentence_pause_secs": 0.35,
+    },
     "queue": {"max_age_seconds": 8.0},
     "rules": {
         "lap_time": {
@@ -23,6 +28,7 @@ DEFAULT_RULES: dict[str, Any] = {
             "delta_slower": "{delta} over best",
             "delta_equal": "equal to best",
             "delta_first": "",
+            "equal_ms": 50,
             "template_new_best": "Lap {lap}. {time}. New best by {gap}.",
             "new_best_priority": 11,
         },
@@ -44,8 +50,9 @@ DEFAULT_RULES: dict[str, Any] = {
         "position": {
             "enabled": True,
             "priority": 12,
-            "settle_secs": 2.0,
-            "min_interval_secs": 5.0,
+            "settle_secs": 3.0,
+            "min_interval_secs": 10.0,
+            "start_grace_secs": 15.0,
             "template_gained": "Up to {position}.",
             "template_lost": "Down to {position}.",
         },
@@ -54,6 +61,7 @@ DEFAULT_RULES: dict[str, Any] = {
             "priority": 8,
             "settle_secs": 2.0,
             "announce_track": True,
+            "late_track_first_lap_only": True,
             "min_confidence": "probable",
             "template_track": "{track}.",
             "template_laps": "{laps}.",
@@ -64,6 +72,7 @@ DEFAULT_RULES: dict[str, Any] = {
         "race_summary": {
             "enabled": True,
             "priority": 25,
+            "max_age_seconds": 30.0,
             "min_fuel": 1.0,
             "template": "Chequered flag. {position} {best} {fuel}",
             "template_position": "Finished {position}.",

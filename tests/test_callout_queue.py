@@ -29,3 +29,21 @@ def test_clear():
     q.push(c("b"))
     assert q.clear() == 2
     assert len(q) == 0
+
+
+def test_a_callout_can_outlive_the_queue_limit():
+    # The race summary waits behind the final lap time (2026-10-15: both summaries
+    # were dropped at 8 s while the lap time was still being spoken).
+    q = CalloutQueue(max_age=8.0)
+    q.push(Callout(text="summary", priority=25, rule="race_summary", created_at=0.0, max_age=30.0))
+    q.push(c("lap", at=0.0))
+    assert q.pop(12.0).text == "summary"
+    assert q.dropped == 1
+    q.push(Callout(text="late", priority=25, rule="race_summary", created_at=0.0, max_age=30.0))
+    assert q.pop(31.0) is None
+
+
+def test_replay_queue_never_drops_even_with_a_callout_limit():
+    q = CalloutQueue(max_age=None)
+    q.push(Callout(text="summary", priority=25, rule="r", created_at=0.0, max_age=1.0))
+    assert q.pop(100.0).text == "summary"

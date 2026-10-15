@@ -4,7 +4,9 @@ Spoken on the first FINISHED frame: finishing position, best lap and fuel used.
 The position is read straight off the flag frame, which also covers a place
 gained in the final seconds that the position rule's settle window would have
 swallowed (recording 2026-10-14: "Up to sixth" was lost to the flag). The best
-lap is tracked here because GT7's own best ignores lap 1. Fuel used sums the
+lap is GT7's own from the flag frame; when GT7 has none (time trial) it is the
+best posted lap, skipping lap 1 of a lap-count race as GT7 does (lap 1 starts on
+the grid, ahead of the line, and is short). Fuel used sums the
 drops frame by frame, so a pit stop does not cancel the first stint.
 
 Timed races never reach FINISHED (GT7 reports no lap total), so they get no
@@ -34,7 +36,11 @@ class RaceSummaryRule(Rule):
         if self.last_fuel is not None and state.fuel_level < self.last_fuel:
             self.fuel_used += self.last_fuel - state.fuel_level
         self.last_fuel = state.fuel_level
-        if lap_time_posted(prev, state) and (self.best_ms <= 0 or state.last_lap_ms < self.best_ms):
+        if (
+            lap_time_posted(prev, state)
+            and not (state.has_lap_count and prev is not None and prev.current_lap <= 1)
+            and (self.best_ms <= 0 or state.last_lap_ms < self.best_ms)
+        ):
             self.best_ms = state.last_lap_ms
         if self.announced or state.phase is not Phase.FINISHED:
             return []
@@ -46,9 +52,10 @@ class RaceSummaryRule(Rule):
                 position=ordinal_words(state.position), p=state.position
             )
         best = ""
-        if self.best_ms > 0:
+        best_ms = state.best_lap_ms if state.best_lap_ms > 0 else self.best_ms
+        if best_ms > 0:
             best = self.template("template_best", "Best lap {time}.").format(
-                time=lap_time_words(self.best_ms)
+                time=lap_time_words(best_ms)
             )
         fuel = ""
         if state.fuel_capacity > 0 and self.fuel_used >= self.min_fuel:

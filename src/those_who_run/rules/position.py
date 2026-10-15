@@ -2,7 +2,11 @@
 
 GT7 updates the position field live. Places change in bursts at the start
 and through traffic, so a change is held for ``settle_secs`` and the latest
-position is spoken once things calm down, rather than every swap.
+position is spoken once things calm down, rather than every swap. The first
+``start_grace_secs`` of a race are quiet apart from that settling: the start
+brief has just given the grid slot, and the field shuffles for a while (nine
+calls in the first minute at Suzuka East, 2026-10-15). The first call after the
+grace compares with the grid slot.
 """
 
 from __future__ import annotations
@@ -18,8 +22,9 @@ class PositionRule(Rule):
     default_priority = 12
 
     def reset(self) -> None:
-        self.settle_secs = float(self.cfg.get("settle_secs", 2.0))
-        self.min_interval = float(self.cfg.get("min_interval_secs", 5.0))
+        self.settle_secs = float(self.cfg.get("settle_secs", 3.0))
+        self.min_interval = float(self.cfg.get("min_interval_secs", 10.0))
+        self.grace = float(self.cfg.get("start_grace_secs", 15.0))
         self.announced: int | None = None
         self.started_at: float | None = None
         self.pending_since: float | None = None
@@ -37,6 +42,8 @@ class PositionRule(Rule):
             # The grid slot takes a moment to settle: qualifying reported P20 on the
             # first driving frame and P1 on the next (2026-10-14). Follow it quietly.
             self.announced = pos
+            return []
+        if state.t - self.started_at < self.grace:
             return []
         if pos == self.announced:
             self.pending_since = None

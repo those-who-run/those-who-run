@@ -1,4 +1,4 @@
-"""Command line entry point: run, replay, record."""
+"""Command line entry point: run, say, replay, record, thin, tracks."""
 
 from __future__ import annotations
 
@@ -49,6 +49,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--seconds", type=float, default=0, help="stop after this long (0 = until Ctrl-C)"
     )
 
+    th = sub.add_parser("thin", help="cut a recording down to a test fixture")
+    th.add_argument("source", type=Path, help="a .jsonl or .jsonl.gz recording")
+    th.add_argument("output", type=Path)
+    th.add_argument("--start", type=float, help="seconds from the first frame")
+    th.add_argument("--end", type=float, help="seconds from the first frame")
+    th.add_argument(
+        "--every", type=float, default=0.5, help="keep one frame per this many seconds (0.5)"
+    )
+
     tr = sub.add_parser("tracks", help="track detection: list the table, test it, backfill data")
     trs = tr.add_subparsers(dest="tracks_command", required=True)
     trs.add_parser("list", help="print the track table")
@@ -84,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(run_replay(settings, args.recording, args.wav_out, args.realtime))
         if args.command == "record":
             return asyncio.run(run_record(settings, args.output, args.ps5_ip, args.seconds))
+        if args.command == "thin":
+            return run_thin(args.source, args.output, args.start, args.end, args.every)
         if args.command == "tracks":
             return run_tracks(settings, args)
     except ConfigError as exc:
@@ -168,6 +179,17 @@ async def run_replay(
     return 0
 
 
+def run_thin(
+    source: Path, output: Path, start: float | None, end: float | None, every: float
+) -> int:
+    from those_who_run.replay import read_recording, thin, write_recording
+
+    frames = list(read_recording(source))
+    kept = write_recording(output, thin(frames, every=every, start=start, end=end))
+    print(f"{kept} of {len(frames)} frames kept in {output}")
+    return 0
+
+
 async def run_record(settings: Settings, output: Path, ps5_ip: str | None, seconds: float) -> int:
     from those_who_run.replay import RecordingWriter
     from those_who_run.telemetry import LiveTelemetry
@@ -223,7 +245,7 @@ async def run_say(settings: Settings, text: str) -> int:
 
 async def run_live(settings: Settings, record: Path | None = None) -> int:
     from those_who_run.audio.discord_player import DiscordPlayer
-    from those_who_run.replay import RecordingWriter
+    from those_who_run.replay import OutingRecorder, RecordingWriter
     from those_who_run.rules.telemetry import TelemetryVoice
     from those_who_run.speech import PiperSpeech
     from those_who_run.telemetry import LiveTelemetry
@@ -276,9 +298,13 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
-    writer = RecordingWriter(record) if record is not None else None
-    if writer is not None:
+    writer: RecordingWriter | OutingRecorder | None = None
+    if record is not None:
+        writer = RecordingWriter(record)
         log.info("recording telemetry frames to %s", record)
+    elif settings.record_dir is not None:
+        writer = OutingRecorder(settings.record_dir, settings.record_keep)
+        log.info("recording outings to %s, keeping %d", settings.record_dir, settings.record_keep)
 
     log.info("%s starting", brand.banner(__version__))
     # Pre-warm the voice so the first callout is not late.
@@ -339,7 +365,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
         recorder.close()
         if writer is not None:
             writer.close()
-            log.info("recorded %d frames to %s", writer.count, record)
+            log.info("recorded %d frames to %s", writer.count, record or settings.record_dir)
     return 0
 
 

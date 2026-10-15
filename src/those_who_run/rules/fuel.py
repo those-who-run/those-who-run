@@ -4,6 +4,10 @@ Consumption is measured at each line crossing (fuel at lap start minus fuel at
 lap end) and averaged over the last ``rolling_laps`` laps. A rise in fuel level
 is treated as a pit stop and clears the announced thresholds. Warnings are only
 given when the estimate is shorter than the laps left in a lap-count race.
+
+The pit call is the instruction that goes with the numbers: once the estimate
+says the lap after this one cannot be completed, "Pit this lap." is spoken once
+per stint, ahead of the threshold phrase for the same crossing.
 """
 
 from __future__ import annotations
@@ -28,6 +32,10 @@ class FuelRule(Rule):
         self.rolling = max(int(self.cfg.get("rolling_laps", 3)), 1)
         self.refuel_epsilon = float(self.cfg.get("refuel_epsilon", 0.5))
         self.critical_priority = int(self.cfg.get("critical_priority", 5))
+        self.pit_window = bool(self.cfg.get("pit_window", True))
+        self.pit_laps = float(self.cfg.get("pit_laps", 2.0))
+        self.pit_priority = int(self.cfg.get("pit_priority", 5))
+        self.pit_announced = False
         self.consumption: deque[float] = deque(maxlen=self.rolling)
         self.announced: set[int] = set()
         self.critical_announced = False
@@ -46,6 +54,7 @@ class FuelRule(Rule):
             # Fuel went up: a pit stop happened during that lap.
             self.announced.clear()
             self.critical_announced = False
+            self.pit_announced = False
         elif used > 0:
             self.consumption.append(used)
         self.lap_start_fuel = state.fuel_level
@@ -63,20 +72,28 @@ class FuelRule(Rule):
         if laps_left is not None and self.laps_remaining >= laps_left:
             return []
 
+        out: list[Callout] = []
+        if self.pit_window and not self.pit_announced and self.laps_remaining < self.pit_laps:
+            self.pit_announced = True
+            text = self.template("template_pit", "Pit this lap.")
+            out.append(self.callout(text, state, priority=self.pit_priority))
+
         whole = math.floor(self.laps_remaining)
         if whole < 1:
-            if self.critical_announced:
-                return []
-            self.critical_announced = True
-            self.announced.update(self.thresholds)
-            text = self.template("template_critical", "Fuel critical. Less than one lap.")
-            return [self.callout(text, state, priority=self.critical_priority)]
+            if not self.critical_announced:
+                self.critical_announced = True
+                self.announced.update(self.thresholds)
+                text = self.template("template_critical", "Fuel critical. Less than one lap.")
+                out.append(self.callout(text, state, priority=self.critical_priority))
+            return out
 
         crossed = [
             t for t in self.thresholds if self.laps_remaining <= t and t not in self.announced
         ]
-        if not crossed:
-            return []
-        self.announced.update(crossed)
-        text = self.template("template", "Fuel. {laps} remaining.").format(laps=laps_words(whole))
-        return [self.callout(text, state)]
+        if crossed:
+            self.announced.update(crossed)
+            text = self.template("template", "Fuel. {laps} remaining.").format(
+                laps=laps_words(whole)
+            )
+            out.append(self.callout(text, state))
+        return out

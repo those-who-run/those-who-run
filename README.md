@@ -33,6 +33,7 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 | `lap_time` | every completed lap | "Lap three. One forty-one point zero. One point five over best." |
 | `lap_time` | a lap beats the best so far (own template and priority) | "Lap two. One thirty-nine point zero. New best by one point zero." |
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
+| `fuel` | the lap after this one cannot be completed, once per stint | "Pit this lap." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
 | `position` | a place is gained or lost (races only), after a short settle | "Up to sixth." |
 | `temps` | a tyre stays over 120 °C for five seconds; water or oil high; cold tyres at the start | "Front left tyre hot." |

@@ -24,6 +24,10 @@ rules:
     refuel_epsilon: 0.5
     template: "Fuel. {laps} remaining."
     template_critical: "Fuel critical. Less than one lap."
+    pit_window: true       # "Pit this lap." once per stint when the estimate drops under pit_laps
+    pit_laps: 2            # ... and the race needs more than that
+    pit_priority: 5
+    template_pit: "Pit this lap."
   final_lap:
     enabled: true
     priority: 10

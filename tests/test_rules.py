@@ -71,9 +71,37 @@ def test_fuel_thresholds(sim):
         "Fuel. five laps remaining.",
         "Fuel. three laps remaining.",
         "Fuel. two laps remaining.",
+        "Pit this lap.",  # the instruction comes first, then the number
         "Fuel. one lap remaining.",
         "Fuel critical. Less than one lap.",
     ]
+
+
+def test_fuel_pit_call_once_per_stint_and_again_after_a_stop(sim):
+    frames = (
+        sim(total_laps=30, fuel=30, burn=10)
+        .race([100000] * 5, refuel_after_lap=3, refuel_to=30, finish=False)
+        .frames
+    )
+    texts = run_rule(FuelRule(), frames)
+    # lap 1: 2.0 laps left is not under 2; lap 2: 1.0 -> pit; the stop on lap 3
+    # re-arms it; lap 4: 2.0; lap 5: 1.0 -> pit again
+    assert texts.count("Pit this lap.") == 2
+    assert texts.index("Pit this lap.") < texts.index("Fuel. one lap remaining.")
+
+
+def test_fuel_pit_call_in_a_timed_race(sim):
+    frames = sim(total_laps=0, fuel=20, burn=10).race([100000] * 2, finish=False).frames
+    assert run_rule(FuelRule(), frames)[0] == "Pit this lap."
+
+
+def test_fuel_pit_call_can_be_disabled_or_moved(sim):
+    frames = sim(total_laps=20, fuel=100, burn=10).race([100000] * 10, finish=False).frames
+    assert "Pit this lap." not in run_rule(FuelRule({"pit_window": False}), frames)
+    out = run_rule_callouts(FuelRule({"pit_laps": 3, "pit_priority": 2}), frames)
+    pit = next(c for c in out if c.text == "Pit this lap.")
+    assert pit.priority == 2
+    assert out.index(pit) == out.index(next(c for c in out if "two laps" in c.text)) - 1
 
 
 def test_fuel_silent_when_enough_for_the_race(sim):

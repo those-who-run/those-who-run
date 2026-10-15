@@ -177,3 +177,22 @@ async def test_track_verdict_reaches_the_brief_through_the_engine(tmp_path, sim)
     engine._apply_track(TrackMatch(471, "Tsukuba Circuit", "probable", (), "test"))
     spoken = await replay(frames, engine, player)
     assert [c.text for c in spoken][0] == "Tsukuba Circuit. Two laps. P three of eight."
+
+
+async def test_a_lap_posted_on_a_loading_frame_is_still_called(tmp_path, sim):
+    """GT7 crosses the line into the pit cut-scene: the lap time and the counter
+    bump arrive on a LOADING frame (Suzuka East, 2026-10-15). The engine compares
+    the next driving frame with the last one before the loading screen."""
+    from dataclasses import replace
+
+    from those_who_run.state import Phase
+
+    s = sim(total_laps=3)
+    s.race([60000], finish=False)
+    crossing = replace(s.frames[-1], phase=Phase.LOADING, t=s.frames[-1].t)
+    frames = s.frames[:-1] + [crossing, replace(crossing, phase=Phase.IN_RACE, t=crossing.t + 0.1)]
+    engine, _ = make_engine(tmp_path)
+    spoken = await replay(iter(frames), engine, ConsolePlayer())
+    assert "Lap one. one oh zero point zero." in [c.text for c in spoken]
+    assert [lap["lap"] for lap in engine.recorder.session.laps] == [1], "lap 1 stored on its own"
+    engine.recorder.close()

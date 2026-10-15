@@ -35,6 +35,10 @@ DEFAULT_RULES: dict[str, Any] = {
             "refuel_epsilon": 0.5,
             "template": "Fuel. {laps} remaining.",
             "template_critical": "Fuel critical. Less than one lap.",
+            "pit_window": True,
+            "pit_laps": 2.0,
+            "pit_priority": 5,
+            "template_pit": "Pit this lap.",
         },
         "final_lap": {"enabled": True, "priority": 10, "template": "Final lap."},
         "position": {

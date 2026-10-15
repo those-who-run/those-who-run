@@ -162,26 +162,59 @@ def test_build_rules_respects_enabled():
     assert rules[0].priority == 7
 
 
-def test_lap_time_uses_own_best_when_gt7_has_none(sim):
-    # GT7 leaves best_lap_ms at -1 after lap 1 of a race. Lap 2 should still get a delta.
-    s = sim(total_laps=2)
-    s.race([51000, 53100])
-    frames = [f for f in s.frames]
-    # emulate GT7: best stays -1 until lap 2 completes
+def _gt7_best(frames, counts_lap_one):
+    """Emulate GT7's best_lap_ms: -1 until a counted lap is done; lap 1 of a
+    lap-count race never counts (the grid is ahead of the line)."""
     from dataclasses import replace
 
-    frames = [
-        replace(f, best_lap_ms=-1) if f.current_lap <= 2 and f.phase.value != "menu" else f
-        for f in frames
-    ]
+    out, best = [], -1
+    for f in frames:
+        if f.phase.value != "menu" and f.last_lap_ms > 0:
+            completed = f.current_lap - 1
+            if (counts_lap_one or completed > 1) and (best <= 0 or f.last_lap_ms < best):
+                best = f.last_lap_ms
+        out.append(replace(f, best_lap_ms=best) if f.phase.value != "menu" else f)
+    return out
+
+
+def test_lap_time_ignores_the_short_first_lap_of_a_lap_race(sim):
+    # Suzuka East 2026-10-15: lap 1 57.1 s from the grid, then 60 s laps.
+    frames = _gt7_best(sim(total_laps=4).race([57100, 60500, 60900, 59500]).frames, False)
     assert run_rule(LapTimeRule(), frames) == [
-        "Lap one. fifty-one point zero.",
-        "Lap two. fifty-three point one. two point one over best.",
+        "Lap one. fifty-seven point one.",
+        "Lap two. one oh zero point five.",
+        "Lap three. one oh zero point nine. zero point four over best.",
+        "Lap four. fifty-nine point five. New best by one point zero.",
     ]
+
+
+def test_lap_time_counts_lap_one_without_a_lap_total(sim):
+    # A timed race or time trial: GT7 counts lap 1 (SUGO 2026-10-15), and so do we
+    # while GT7's best is still empty.
+    frames = _gt7_best(sim(total_laps=0).race([100300, 101300]).frames, True)
+    assert run_rule(LapTimeRule(), frames) == [
+        "Lap one. one forty point three.",
+        "Lap two. one forty-one point three. one point zero over best.",
+    ]
+    from dataclasses import replace
+
+    no_gt7 = [replace(f, best_lap_ms=-1) for f in frames]
+    assert run_rule(LapTimeRule(), no_gt7)[1].endswith("one point zero over best.")
+
+
+def test_lap_time_within_a_twentieth_is_equal_not_a_new_best(sim):
+    frames = sim(total_laps=0).race([93892, 93896, 93885]).frames
+    assert run_rule(LapTimeRule(), frames) == [
+        "Lap one. one thirty-three point nine.",
+        "Lap two. one thirty-three point nine. equal to best.",
+        "Lap three. one thirty-three point nine. equal to best.",
+    ]
+    strict = LapTimeRule({"equal_ms": 0})
+    assert run_rule(strict, frames)[2].endswith("New best by zero point zero.")
 
 
 def test_position_ignores_the_grid_settling_then_announces():
-    rule = PositionRule({"settle_secs": 2.0, "min_interval_secs": 5.0})
+    rule = PositionRule({"settle_secs": 2.0, "min_interval_secs": 5.0, "start_grace_secs": 0})
     rule.reset()
 
     def frame(t, pos):
@@ -252,7 +285,7 @@ def test_start_brief_includes_a_track_known_at_the_start(sim):
 def test_start_brief_speaks_a_track_learned_later_once_per_track(sim):
     rule = StartBriefRule()
     s = sim(total_laps=5)
-    s.race([100000], finish=False)
+    s.race([], finish=False).drive(2)
     assert run_rule(rule, s.frames) == ["Five laps. P five of sixteen."]
 
     rule.on_track(_match(16, "Fuji International Speedway", "ambiguous"))
@@ -314,18 +347,20 @@ def test_race_summary_without_position_or_fuel(sim):
     assert run_rule(RaceSummaryRule(), frames) == ["Chequered flag. Best lap one forty point zero."]
 
 
-def test_race_summary_uses_its_own_best_not_gt7s(sim):
+def test_race_summary_best_lap_is_gt7s(sim):
+    # The short grid lap (51.0) is not a best lap; GT7 says 53.1 at the flag.
+    frames = _gt7_best(sim(total_laps=2).race([51000, 53100]).frames, False)
+    (text,) = run_rule(RaceSummaryRule(), frames)
+    assert "Best lap fifty-three point one." in text
+
+
+def test_race_summary_best_lap_without_gt7s(sim):
     from dataclasses import replace
 
-    s = sim(total_laps=2)
-    s.race([51000, 53100])
-    # GT7's best ignores lap 1, so at the flag it says 53.1; ours says 51.0.
-    frames = [
-        replace(f, best_lap_ms=53100 if f.current_lap > 2 else -1) if f.phase.value != "menu" else f
-        for f in s.frames
-    ]
-    (text,) = run_rule(RaceSummaryRule(), frames)
-    assert "Best lap fifty-one point zero." in text
+    frames = sim(total_laps=3).race([51000, 53100, 52800]).frames
+    no_gt7 = [replace(f, best_lap_ms=-1) for f in frames]
+    (text,) = run_rule(RaceSummaryRule(), no_gt7)
+    assert "Best lap fifty-two point eight." in text, "lap 1 of a lap race does not count"
 
 
 def test_race_summary_silent_on_quit(sim):
@@ -423,3 +458,56 @@ def test_temps_thresholds_can_be_disabled(sim):
     s = sim(total_laps=10, tyres=(21.0, 21.0, 21.0, 21.0))
     s.race([100000], finish=False).drive(6, tire_temp=HOT_FL, water_temp=150.0)
     assert run_rule(rule, s.frames) == []
+
+
+def test_start_brief_does_not_name_the_track_after_the_first_lap(sim):
+    # Suzuka East is only certain at the line; a lap in, the driver knows.
+    rule = StartBriefRule()
+    s = sim(total_laps=5)
+    s.race([60000], finish=False)
+    assert run_rule(rule, s.frames) == ["Five laps. P five of sixteen."]
+    rule.on_track(_match(442, "Suzuka Circuit East Course", "confirmed"))
+    assert run_rule(rule, s.drive(2).frames[-2:]) == []
+
+    anytime = StartBriefRule({"late_track_first_lap_only": False})
+    run_rule(anytime, s.frames[:-2])
+    anytime.on_track(_match(442, "Suzuka Circuit East Course", "confirmed"))
+    assert run_rule(anytime, s.drive(2).frames[-2:]) == ["Suzuka Circuit East Course."]
+
+
+def test_position_quiet_through_the_start_then_compares_with_the_grid():
+    rule = PositionRule({"settle_secs": 2.0, "min_interval_secs": 5.0, "start_grace_secs": 15})
+
+    def frame(t, pos):
+        return make_state(t=t, current_lap=1, race_start_pos=pos, cars_on_track=True)
+
+    shuffle = [frame(0.0, 10), frame(3.0, 11), frame(6.0, 12), frame(9.0, 13), frame(12.0, 12)]
+    assert run_rule(rule, shuffle) == [], "the field sorts itself out after the lights"
+    after = [frame(15.0, 12), frame(16.0, 12), frame(17.5, 12)]
+    assert run_rule(rule, after) == ["Down to twelfth."], "ten on the grid, twelfth now"
+
+
+def test_position_defaults_are_calmer_than_a_call_per_swap():
+    rule = PositionRule()
+    assert (rule.settle_secs, rule.min_interval, rule.grace) == (3.0, 10.0, 15.0)
+
+
+def test_fuel_says_nothing_on_the_crossing_into_the_pits():
+    # GT7 crosses the line inside the pit cut-scene (a loading screen), before
+    # the refuel. The engine bridges it and tells the rule what it bridged.
+    rule = FuelRule()
+
+    def frame(t, lap, fuel):
+        return make_state(t=t, current_lap=lap, total_laps=6, fuel_level=fuel)
+
+    frames = [frame(0, 1, 96.7), frame(1, 2, 65.6), frame(2, 3, 37.9)]
+    run_rule(rule, frames)
+    rule.on_bridge(Phase.LOADING)
+    assert rule.evaluate(frames[-1], frame(3, 4, 22.9)) == []
+
+    ignored = FuelRule()  # the same crossing on track (race 1: the call was ignored)
+    run_rule(ignored, frames)
+    ignored.on_bridge(Phase.PAUSED)
+    assert [c.text for c in ignored.evaluate(frames[-1], frame(3, 4, 22.9))] == [
+        "Fuel critical. Less than one lap."
+    ]

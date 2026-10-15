@@ -1,5 +1,11 @@
 """Speak each completed lap's time and its delta to the best lap.
 
+The best lap is GT7's own once it has one. In a lap-count race GT7 ignores lap 1
+(the grid sits ahead of the line, so the lap is short: 57.1 s against 60 s laps at
+Suzuka East, 2026-10-15), and so does the fallback kept here; a timed race or a
+time trial counts lap 1. Laps within ``equal_ms`` of the best are "equal", so
+identical time-trial laps are not called a new best by zero point zero.
+
 A lap that beats the best so far is a "new best" and gets its own template and
 priority; it replaces the plain lap-time phrase rather than adding a second one.
 """
@@ -20,6 +26,7 @@ class LapTimeRule(Rule):
         self.new_best_priority = int(self.cfg.get("new_best_priority", 11))
         self.last_announced_lap = 0
         self.own_best_ms = 0
+        self.equal_ms = int(self.cfg.get("equal_ms", 50))
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if not lap_time_posted(prev, state):
@@ -35,16 +42,16 @@ class LapTimeRule(Rule):
         self.last_announced_lap = lap_no
 
         time_words = lap_time_words(state.last_lap_ms)
-        # GT7 does not count lap 1 of a race towards its best lap, so its best
-        # is empty until lap 2 is done. Track our own best as a fallback so
-        # the second lap still gets a delta against the first.
         prev_best = prev.best_lap_ms if prev.best_lap_ms > 0 else self.own_best_ms
-        if self.own_best_ms <= 0 or state.last_lap_ms < self.own_best_ms:
+        counts = not (state.has_lap_count and lap_no == 1)
+        if counts and (self.own_best_ms <= 0 or state.last_lap_ms < self.own_best_ms):
             self.own_best_ms = state.last_lap_ms
         if prev_best <= 0:
             delta = self.template("delta_first", "")
         else:
             diff = state.last_lap_ms - prev_best
+            if abs(diff) < self.equal_ms:
+                diff = 0
             if diff < 0:
                 text = self.template(
                     "template_new_best", "Lap {lap}. {time}. New best by {gap}."

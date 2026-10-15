@@ -28,10 +28,14 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 
 | Rule | When | Example |
 |---|---|---|
+| `start_brief` | two seconds into a race: track (if known), distance, grid slot | "Sportsland SUGO. Two laps. P ten of twenty." |
+| `start_brief` | the detector names the track after the brief | "Nurburgring twenty-four hour." |
 | `lap_time` | every completed lap | "Lap three. One forty-one point zero. One point five over best." |
+| `lap_time` | a lap beats the best so far (own template and priority) | "Lap two. One thirty-nine point zero. New best by one point zero." |
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
 | `position` | a place is gained or lost (races only), after a short settle | "Up to sixth." |
+| `race_summary` | the chequered flag | "Chequered flag. Finished sixth. Best lap fifty-one point zero. Fuel used thirty-eight percent." |
 
 Fuel is estimated from the last three laps' consumption and only announced
 when it is shorter than the laps left in the race. A pit stop resets the
@@ -254,7 +258,11 @@ Learned from recordings, and encoded in `state.py`:
 - GT7 does not count lap 1 of a race towards its best lap, so the engineer
   tracks its own best as a fallback and lap 2 still gets a delta.
 - Time trials and practice report zero total laps and no cars on track. Lap
-  times are still announced; final-lap and position rules stay quiet.
+  times are still announced; the brief, final-lap, position and summary rules
+  stay quiet. Qualifying reports zero total laps *with* cars on track, so it is
+  briefed as a timed race.
+- Timed races never report a flag (no lap total to exceed), so they get no
+  summary yet. That needs a timed-race recording.
 - GT7 sends no track id; see Track detection above.
 
 ## Known limits

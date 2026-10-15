@@ -1,0 +1,61 @@
+"""Sum up the race when the chequered flag falls.
+
+Spoken on the first FINISHED frame: finishing position, best lap and fuel used.
+The position is read straight off the flag frame, which also covers a place
+gained in the final seconds that the position rule's settle window would have
+swallowed (recording 2026-10-14: "Up to sixth" was lost to the flag). The best
+lap is tracked here because GT7's own best ignores lap 1. Fuel used sums the
+drops frame by frame, so a pit stop does not cancel the first stint.
+
+Timed races never reach FINISHED (GT7 reports no lap total), so they get no
+summary yet; that needs a timed-race recording to settle what the end looks like.
+"""
+
+from __future__ import annotations
+
+from those_who_run.callouts import Callout
+from those_who_run.rules.base import Rule
+from those_who_run.state import Phase, RaceState, lap_time_posted
+from those_who_run.verbalise import lap_time_words, ordinal_words, percent_words, tidy_sentence
+
+
+class RaceSummaryRule(Rule):
+    name = "race_summary"
+    default_priority = 25  # after the final lap time, which is posted on the same frame
+
+    def reset(self) -> None:
+        self.min_fuel = float(self.cfg.get("min_fuel", 1.0))
+        self.fuel_used = 0.0
+        self.last_fuel: float | None = None
+        self.best_ms = 0
+        self.announced = False
+
+    def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
+        if self.last_fuel is not None and state.fuel_level < self.last_fuel:
+            self.fuel_used += self.last_fuel - state.fuel_level
+        self.last_fuel = state.fuel_level
+        if lap_time_posted(prev, state) and (self.best_ms <= 0 or state.last_lap_ms < self.best_ms):
+            self.best_ms = state.last_lap_ms
+        if self.announced or state.phase is not Phase.FINISHED:
+            return []
+        self.announced = True
+
+        position = ""
+        if state.is_race and state.total_cars > 1 and state.position is not None:
+            position = self.template("template_position", "Finished {position}.").format(
+                position=ordinal_words(state.position), p=state.position
+            )
+        best = ""
+        if self.best_ms > 0:
+            best = self.template("template_best", "Best lap {time}.").format(
+                time=lap_time_words(self.best_ms)
+            )
+        fuel = ""
+        if state.fuel_capacity > 0 and self.fuel_used >= self.min_fuel:
+            fuel = self.template("template_fuel", "Fuel used {fuel}.").format(
+                fuel=percent_words(100.0 * self.fuel_used / state.fuel_capacity)
+            )
+        text = self.template("template", "Chequered flag. {position} {best} {fuel}").format(
+            position=position, best=best, fuel=fuel
+        )
+        return [self.callout(tidy_sentence(text), state)]

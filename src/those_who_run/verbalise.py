@@ -90,3 +90,36 @@ def ordinal_words(n: int) -> str:
     if n in _ORDINALS:
         return _ORDINALS[n]
     return f"P {number_words(n)}"
+
+
+def percent_words(value: float) -> str:
+    """``37.5`` -> "thirty-eight percent" (one word for the speech model, not "per cent")."""
+    return f"{number_words(int(value + 0.5))} percent"
+
+
+_TRACK_SUBS = (
+    ("24 Heures du Mans Racing Circuit", "Le Mans"),
+    (" 24h", " twenty-four hour"),
+    (" GP ", " G P "),
+    (" GP", " G P"),
+    ("Spa-Francorchamps", "Spa Francorchamps"),
+    ("Barcelona-Catalunya", "Barcelona Catalunya"),
+    (" (Short)", " Short"),
+    ("+", " and "),
+    (": ", ". "),
+    (" - ", ". "),
+)
+
+
+def track_words(name: str) -> str:
+    """Table names as the speech model should read them: "Nurburgring 24h" ->
+    "Nurburgring twenty-four hour", "Alsace - Village" -> "Alsace. Village"."""
+    for src, dst in _TRACK_SUBS:
+        name = name.replace(src, dst)
+    return " ".join(name.split())
+
+
+def tidy_sentence(text: str) -> str:
+    """Collapse whitespace left by empty template slots and end with one full stop."""
+    text = " ".join(text.split())
+    return text.rstrip(" ,.") + "."

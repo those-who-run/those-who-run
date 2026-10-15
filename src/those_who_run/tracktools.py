@@ -175,8 +175,10 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
 
     Sessions already ``confirmed`` are left alone unless ``force``. Sessions
     without Parquet laps (the first JSON-era recordings) are reported and
-    skipped. The detector is only applied when it would not lower the stored
-    confidence.
+    skipped. A verdict only replaces the stored one when it is at least as
+    confident, with one exception: "nothing fits" (``none``) from a newer
+    detector replaces an earlier ``ambiguous`` or ``probable`` guess, because
+    a wrong name is worse than no name.
     """
     data_dir = Path(data_dir)
     db = sqlite3.connect(data_dir / "index.sqlite")
@@ -190,8 +192,9 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
         ).fetchall()
         for session_id, track_id, confidence in rows:
             before = (track_id, confidence)
+            stored = confidence or "none"
             sdir = data_dir / "sessions" / session_id
-            if confidence == "confirmed" and not force:
+            if stored == "confirmed" and not force:
                 results.append(
                     BackfillResult(
                         session_id, before, _unchanged(before), False, "already confirmed"
@@ -204,11 +207,12 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
                 )
                 continue
             match, _ = detect_session(sdir)
-            if match.confidence == "none":
+            if match.confidence == "none" and track_id is None and stored == "none":
                 results.append(BackfillResult(session_id, before, match, False, "no layout fits"))
                 continue
             if (
-                CONFIDENCE_RANK[match.confidence] < CONFIDENCE_RANK[confidence or "none"]
+                match.confidence != "none"
+                and CONFIDENCE_RANK[match.confidence] < CONFIDENCE_RANK[stored]
                 and not force
             ):
                 results.append(
@@ -225,7 +229,8 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
                 summary["track_id"] = match.track_id
                 summary["track"] = track_record(match)
                 summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-            results.append(BackfillResult(session_id, before, match, True, "updated"))
+            note = "cleared stale guess" if match.confidence == "none" else "updated"
+            results.append(BackfillResult(session_id, before, match, True, note))
         db.commit()
     finally:
         db.close()

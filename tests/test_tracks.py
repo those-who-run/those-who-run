@@ -451,6 +451,36 @@ def test_backfill_restores_a_session_detected_from_parquet(tmp_path):
     assert forced[0].updated
 
 
+def test_backfill_clears_a_stale_guess_when_nothing_fits(tmp_path):
+    import asyncio
+
+    store = SessionStore(tmp_path)
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
+    frames = list(read_recording(UNKNOWN_FIXTURE))
+    asyncio.run(replay(frames, engine, ConsolePlayer()))
+    store.end_session(frames[-1])
+    store.close()
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    # An older detector had guessed Blue Moon Bay for this lap.
+    db.execute("UPDATE sessions SET track_id = 356, track_confidence = 'ambiguous'")
+    db.commit()
+    results = backfill(tmp_path)
+    assert len(results) == 1 and results[0].updated and results[0].note == "cleared stale guess"
+    assert db.execute("SELECT track_id, track_confidence FROM sessions").fetchall() == [
+        (None, "none")
+    ]
+    summary = json.loads(next((tmp_path / "sessions").glob("*/summary.json")).read_text())
+    assert summary["track_id"] is None and summary["track"]["confidence"] == "none"
+    # Nothing to do on a second run.
+    assert not backfill(tmp_path)[0].updated
+    # A confirmation is never replaced by "nothing fits" unless forced.
+    db.execute("UPDATE sessions SET track_id = 356, track_confidence = 'confirmed'")
+    db.commit()
+    again = backfill(tmp_path)
+    assert not again[0].updated and again[0].note == "already confirmed"
+    assert backfill(tmp_path, force=True)[0].updated
+
+
 def test_index_without_the_confidence_column_is_migrated(tmp_path):
     db = sqlite3.connect(tmp_path / "index.sqlite")
     db.executescript(

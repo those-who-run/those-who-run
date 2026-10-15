@@ -86,6 +86,14 @@ DEFAULT_RULES: dict[str, Any] = {
             "template_water": "Water temperature high.",
             "template_oil": "Oil temperature high.",
         },
+        # Not a frame rule: driven by the live watchdog, so replay never speaks it.
+        "telemetry": {
+            "enabled": True,
+            "priority": 5,
+            "phases": ["in_race", "paused"],
+            "template_lost": "Lost telemetry.",
+            "template_back": "Telemetry back.",
+        },
     },
 }
 

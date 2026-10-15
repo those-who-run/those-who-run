@@ -35,6 +35,7 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
 | `position` | a place is gained or lost (races only), after a short settle | "Up to sixth." |
+| `temps` | a tyre stays over 120 °C for five seconds; water or oil high; cold tyres at the start | "Front left tyre hot." |
 | `race_summary` | the chequered flag | "Chequered flag. Finished sixth. Best lap fifty-one point zero. Fuel used thirty-eight percent." |
 
 Fuel is estimated from the last three laps' consumption and only announced

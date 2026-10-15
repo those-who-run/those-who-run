@@ -66,6 +66,22 @@ DEFAULT_RULES: dict[str, Any] = {
             "template_best": "Best lap {time}.",
             "template_fuel": "Fuel used {fuel}.",
         },
+        "temps": {
+            "enabled": True,
+            "priority": 14,
+            "sustain_secs": 5.0,
+            "cooldown_secs": 60.0,
+            "hysteresis_c": 10.0,
+            "tyre_hot_c": 120.0,
+            "tyre_cold_c": 50.0,
+            "cold_settle_secs": 2.0,
+            "water_hot_c": 110.0,
+            "oil_hot_c": 130.0,
+            "template_tyre_hot": "{corners} hot.",
+            "template_tyres_cold": "Tyres cold.",
+            "template_water": "Water temperature high.",
+            "template_oil": "Oil temperature high.",
+        },
     },
 }
 

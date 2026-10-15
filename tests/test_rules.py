@@ -6,6 +6,7 @@ from those_who_run.rules.lap_time import LapTimeRule
 from those_who_run.rules.position import PositionRule
 from those_who_run.rules.race_summary import RaceSummaryRule
 from those_who_run.rules.start_brief import StartBriefRule
+from those_who_run.rules.temps import TempsRule
 from those_who_run.state import Phase, racing_frame
 from those_who_run.trackdetect import TrackMatch
 
@@ -122,7 +123,14 @@ def test_final_lap_not_for_timed_races(sim):
 def test_build_rules_respects_enabled():
     rules = build_rules({"fuel": {"enabled": False}, "lap_time": {"priority": 7}})
     names = [r.name for r in rules]
-    assert names == ["lap_time", "final_lap", "position", "start_brief", "race_summary"]
+    assert names == [
+        "lap_time",
+        "final_lap",
+        "position",
+        "start_brief",
+        "race_summary",
+        "temps",
+    ]
     assert rules[0].priority == 7
 
 
@@ -303,3 +311,87 @@ def test_race_summary_templates_are_configurable(sim):
     rule = RaceSummaryRule({"template": "{position} {fuel}", "template_position": "P {p}."})
     frames = sim(total_laps=2, fuel=100, burn=10, position=3).race([100000] * 2).frames
     assert run_rule(rule, frames) == ["P 3. Fuel used twenty percent."]
+
+
+# temperatures
+
+HOT_FL = (125.0, 90.0, 90.0, 90.0)
+WARM = (90.0, 90.0, 90.0, 90.0)
+
+
+def _stint(sim, laps=1):
+    s = sim(total_laps=10, tyres=WARM)
+    s.race([100000] * laps, finish=False)
+    return s
+
+
+def test_temps_hot_corner_after_sustain(sim):
+    s = _stint(sim)
+    assert run_rule(TempsRule(), s.drive(5, tire_temp=HOT_FL).frames) == []
+    assert run_rule(TempsRule(), s.drive(1, tire_temp=HOT_FL).frames) == ["Front left tyre hot."]
+
+
+def test_temps_spike_is_ignored(sim):
+    s = _stint(sim)
+    s.drive(3, tire_temp=HOT_FL).drive(3, tire_temp=WARM).drive(3, tire_temp=HOT_FL)
+    assert run_rule(TempsRule(), s.frames) == []
+
+
+def test_temps_corners_are_joined_into_one_phrase(sim):
+    s = _stint(sim).drive(6, tire_temp=(125.0, 90.0, 125.0, 90.0))
+    assert run_rule(TempsRule(), s.frames) == ["Front left and rear left tyres hot."]
+    s = _stint(sim).drive(6, tire_temp=(125.0, 125.0, 125.0, 125.0))
+    assert run_rule(TempsRule(), s.frames) == ["All tyres hot."]
+    s = _stint(sim).drive(6, tire_temp=(125.0, 125.0, 125.0, 90.0))
+    assert run_rule(TempsRule(), s.frames) == ["Front left, front right and rear left tyres hot."]
+
+
+def test_temps_once_while_hot_then_again_after_cooling_and_cooldown(sim):
+    rule = TempsRule()
+    s = _stint(sim).drive(130, tire_temp=HOT_FL)
+    assert run_rule(rule, s.frames) == ["Front left tyre hot."], "no nagging while it stays hot"
+    # back under threshold but not under threshold - hysteresis: still armed off
+    assert run_rule(rule, s.drive(3, tire_temp=(115.0, 90.0, 90.0, 90.0)).frames[-3:]) == []
+    assert run_rule(rule, s.drive(6, tire_temp=HOT_FL).frames[-6:]) == []
+    # cooled properly: re-armed, and the cooldown has long passed
+    s.drive(2, tire_temp=WARM)
+    assert run_rule(rule, s.drive(6, tire_temp=HOT_FL).frames[-8:]) == ["Front left tyre hot."]
+
+
+def test_temps_cooldown_blocks_a_quick_second_warning(sim):
+    rule = TempsRule({"cooldown_secs": 60})
+    s = _stint(sim).drive(6, tire_temp=HOT_FL)
+    assert run_rule(rule, s.frames) == ["Front left tyre hot."]
+    s.drive(2, tire_temp=WARM)
+    assert run_rule(rule, s.drive(6, tire_temp=HOT_FL).frames[-8:]) == [], "re-armed, in cooldown"
+
+
+def test_temps_pause_restarts_the_sustain_window(sim):
+    rule = TempsRule()
+    s = _stint(sim).drive(3, tire_temp=HOT_FL)
+    for _ in range(6):
+        s.paused()
+    assert run_rule(rule, s.drive(5, tire_temp=HOT_FL).frames) == []
+    assert run_rule(rule, s.drive(1, tire_temp=HOT_FL).frames[-1:]) == ["Front left tyre hot."]
+
+
+def test_temps_cold_tyres_once_at_the_start(sim):
+    frames = sim(total_laps=3, tyres=(21.0, 21.0, 21.0, 21.0)).race([100000] * 2).frames
+    assert run_rule(TempsRule(), frames) == ["Tyres cold."]
+    frames = sim(total_laps=3, tyres=(60.0, 60.0, 60.0, 60.0)).race([100000] * 2).frames
+    assert run_rule(TempsRule(), frames) == [], "a fresh load reads a flat 60 to 70"
+
+
+def test_temps_water_and_oil(sim):
+    s = _stint(sim).drive(6, water_temp=115.0, oil_temp=135.0)
+    assert run_rule(TempsRule(), s.frames) == [
+        "Water temperature high.",
+        "Oil temperature high.",
+    ]
+
+
+def test_temps_thresholds_can_be_disabled(sim):
+    rule = TempsRule({"tyre_hot_c": None, "water_hot_c": 0, "tyre_cold_c": None})
+    s = sim(total_laps=10, tyres=(21.0, 21.0, 21.0, 21.0))
+    s.race([100000], finish=False).drive(6, tire_temp=HOT_FL, water_temp=150.0)
+    assert run_rule(rule, s.frames) == []

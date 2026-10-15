@@ -54,3 +54,18 @@ rules:
     template_position: "Finished {position}."
     template_best: "Best lap {time}."
     template_fuel: "Fuel used {fuel}."
+  temps:
+    enabled: true
+    priority: 14
+    sustain_secs: 5          # above the threshold this long before it counts (spins are brief)
+    cooldown_secs: 60        # at most one warning per check in this window
+    hysteresis_c: 10         # re-arm only once this far back under the threshold
+    tyre_hot_c: 120          # per corner; null or 0 disables any threshold
+    tyre_cold_c: 50          # once, two seconds into the race ("Tyres cold.")
+    cold_settle_secs: 2
+    water_hot_c: 110         # water and oil have not moved off 85/110 in any recording yet
+    oil_hot_c: 130
+    template_tyre_hot: "{corners} hot."   # "Front left tyre", "Front left and rear left tyres", "All tyres"
+    template_tyres_cold: "Tyres cold."
+    template_water: "Water temperature high."
+    template_oil: "Oil temperature high."

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from gt7_race_engineer.state import Phase, RaceState, derive_phase
+from those_who_run.state import Phase, RaceState, derive_phase
 
 
 def make_state(**over) -> RaceState:

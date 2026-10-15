@@ -10,21 +10,23 @@ import sys
 import time
 from pathlib import Path
 
-from gt7_race_engineer import __version__
-from gt7_race_engineer.callouts import CalloutQueue
-from gt7_race_engineer.config import ConfigError, Settings, load_rules_config
-from gt7_race_engineer.engine import Engine
-from gt7_race_engineer.metrics import HealthServer, Metrics
-from gt7_race_engineer.rules import build_rules
-from gt7_race_engineer.state import Phase, RaceState
-from gt7_race_engineer.store import SessionStore
+from those_who_run import __version__, brand
+from those_who_run.callouts import CalloutQueue
+from those_who_run.config import ConfigError, Settings, load_rules_config
+from those_who_run.engine import Engine
+from those_who_run.metrics import HealthServer, Metrics
+from those_who_run.rules import build_rules
+from those_who_run.state import Phase, RaceState
+from those_who_run.store import SessionStore
 
-log = logging.getLogger("gt7_race_engineer")
+log = logging.getLogger("those_who_run")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="gt7-race-engineer", description=__doc__)
-    p.add_argument("--version", action="version", version=__version__)
+    p = argparse.ArgumentParser(
+        prog="those-who-run", description=f"{brand.NAME} {brand.KANJI}: {brand.TAGLINE}."
+    )
+    p.add_argument("--version", action="version", version=brand.banner(__version__))
     sub = p.add_subparsers(dest="command", required=True)
 
     rn = sub.add_parser("run", help="live: PS5 telemetry in, Discord voice out")
@@ -77,14 +79,14 @@ def main(argv: list[str] | None = None) -> int:
 async def run_replay(
     settings: Settings, recording: Path, wav_out: Path | None, realtime: bool
 ) -> int:
-    from gt7_race_engineer.audio.player import ConsolePlayer, WavDirPlayer
-    from gt7_race_engineer.replay import read_recording, replay, summarise
+    from those_who_run.audio.player import ConsolePlayer, WavDirPlayer
+    from those_who_run.replay import read_recording, replay, summarise
 
     rules_cfg = load_rules_config(settings.rules_file)
     queue = CalloutQueue(max_age=None)
     engine = Engine(build_rules(rules_cfg["rules"]), queue, SessionStore(settings.data_dir))
     if wav_out is not None:
-        from gt7_race_engineer.speech import PiperSpeech
+        from those_who_run.speech import PiperSpeech
 
         speech = PiperSpeech(settings.voice_model, wav_out / ".cache", rules_cfg["voice"])
         player: ConsolePlayer = WavDirPlayer(speech, wav_out)
@@ -96,8 +98,8 @@ async def run_replay(
 
 
 async def run_record(settings: Settings, output: Path, ps5_ip: str | None, seconds: float) -> int:
-    from gt7_race_engineer.replay import RecordingWriter
-    from gt7_race_engineer.telemetry import LiveTelemetry
+    from those_who_run.replay import RecordingWriter
+    from those_who_run.telemetry import LiveTelemetry
 
     ip = ps5_ip or settings.ps5_ip
     loop = asyncio.get_running_loop()
@@ -126,16 +128,14 @@ async def run_record(settings: Settings, output: Path, ps5_ip: str | None, secon
 
 async def run_say(settings: Settings, text: str) -> int:
     """Audio path test: no telemetry involved."""
-    from gt7_race_engineer.audio.discord_player import DiscordPlayer
-    from gt7_race_engineer.callouts import Callout
-    from gt7_race_engineer.speech import PiperSpeech
+    from those_who_run.audio.discord_player import DiscordPlayer
+    from those_who_run.callouts import Callout
+    from those_who_run.speech import PiperSpeech
 
     if not settings.discord_token or not settings.discord_channel_id:
         raise ConfigError("DISCORD_BOT_TOKEN and DISCORD_VOICE_CHANNEL_ID are required")
     rules_cfg = load_rules_config(settings.rules_file)
-    speech = PiperSpeech(
-        settings.voice_model, Path("/tmp/gt7-race-engineer/cache"), rules_cfg["voice"]
-    )
+    speech = PiperSpeech(settings.voice_model, Path("/tmp/those-who-run/cache"), rules_cfg["voice"])
     player = DiscordPlayer(settings.discord_token, settings.discord_channel_id, speech)
     await player.start()
     try:
@@ -151,10 +151,10 @@ async def run_say(settings: Settings, text: str) -> int:
 
 
 async def run_live(settings: Settings, record: Path | None = None) -> int:
-    from gt7_race_engineer.audio.discord_player import DiscordPlayer
-    from gt7_race_engineer.replay import RecordingWriter
-    from gt7_race_engineer.speech import PiperSpeech
-    from gt7_race_engineer.telemetry import LiveTelemetry
+    from those_who_run.audio.discord_player import DiscordPlayer
+    from those_who_run.replay import RecordingWriter
+    from those_who_run.speech import PiperSpeech
+    from those_who_run.telemetry import LiveTelemetry
 
     settings.require_live()
     assert settings.ps5_ip and settings.discord_token and settings.discord_channel_id
@@ -166,7 +166,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     engine = Engine(rules, queue, recorder, metrics)
     speech = PiperSpeech(
         settings.voice_model,
-        Path("/tmp/gt7-race-engineer/cache"),
+        Path("/tmp/those-who-run/cache"),
         rules_cfg["voice"],
         on_duration=metrics.speech_seconds.observe,
     )
@@ -201,7 +201,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     if writer is not None:
         log.info("recording telemetry frames to %s", record)
 
-    log.info("gt7-race-engineer %s starting", __version__)
+    log.info("%s starting", brand.banner(__version__))
     # Pre-warm the voice so the first callout is not late.
     await loop.run_in_executor(None, speech.synthesize, "Race engineer online.")
     await player.start()

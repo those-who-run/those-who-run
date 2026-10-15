@@ -12,7 +12,7 @@ from typing import Any
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
-from gt7_race_engineer.state import RaceState
+from those_who_run.state import RaceState
 
 log = logging.getLogger(__name__)
 

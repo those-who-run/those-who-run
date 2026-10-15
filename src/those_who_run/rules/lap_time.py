@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from gt7_race_engineer.callouts import Callout
-from gt7_race_engineer.rules.base import Rule
-from gt7_race_engineer.state import RaceState, lap_time_posted
-from gt7_race_engineer.verbalise import delta_words, lap_time_words, number_words
+from those_who_run.callouts import Callout
+from those_who_run.rules.base import Rule
+from those_who_run.state import RaceState, lap_time_posted
+from those_who_run.verbalise import delta_words, lap_time_words, number_words
 
 
 class LapTimeRule(Rule):

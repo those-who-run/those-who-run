@@ -9,14 +9,14 @@ no cars on track), a two-lap race from P10 to P6, the chequered flag at
 import sqlite3
 from pathlib import Path
 
-from gt7_race_engineer.audio.player import ConsolePlayer
-from gt7_race_engineer.callouts import CalloutQueue
-from gt7_race_engineer.config import DEFAULT_RULES
-from gt7_race_engineer.engine import Engine
-from gt7_race_engineer.replay import read_recording, replay
-from gt7_race_engineer.rules import build_rules
-from gt7_race_engineer.state import Phase
-from gt7_race_engineer.store import SessionStore
+from those_who_run.audio.player import ConsolePlayer
+from those_who_run.callouts import CalloutQueue
+from those_who_run.config import DEFAULT_RULES
+from those_who_run.engine import Engine
+from those_who_run.replay import read_recording, replay
+from those_who_run.rules import build_rules
+from those_who_run.state import Phase
+from those_who_run.store import SessionStore
 
 FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
 QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl"

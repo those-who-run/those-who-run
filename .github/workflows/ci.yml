@@ -31,6 +31,6 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
-          tags: muldoon/gt7-race-engineer:ci
+          tags: muldoon/those-who-run:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

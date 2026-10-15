@@ -23,7 +23,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            muldoon/gt7-race-engineer:${{ steps.v.outputs.version }}
-            muldoon/gt7-race-engineer:latest
+            muldoon/those-who-run:${{ steps.v.outputs.version }}
+            muldoon/those-who-run:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

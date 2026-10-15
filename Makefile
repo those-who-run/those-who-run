@@ -1,4 +1,4 @@
-IMAGE_NAME := muldoon/gt7-race-engineer
+IMAGE_NAME := muldoon/those-who-run
 PLATFORM   := linux/amd64
 VERSION    ?= dev
 VOICE      := en_GB-alba-medium
@@ -49,7 +49,7 @@ release:
 	@echo "Released $(IMAGE_NAME):$(VERSION)"
 
 replay:
-	$(PY) -m gt7_race_engineer replay $(FILE)
+	$(PY) -m those_who_run replay $(FILE)
 
 clean:
 	rm -rf .venv .pytest_cache .ruff_cache dist build src/*.egg-info

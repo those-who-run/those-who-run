@@ -49,3 +49,10 @@ def test_phases_and_enabled_are_configurable():
     assert texts(quiet, [(True, RACING), (False, RACING), (True, RACING)]) == []
     only_race = TelemetryVoice({"phases": ["in_race"]})
     assert texts(only_race, [(True, PAUSED), (False, PAUSED), (True, PAUSED)]) == []
+
+
+def test_telemetry_phrases_can_be_variants():
+    voice = TelemetryVoice({"template_lost": ["Data link is down."], "template_back": ["Back."]})
+    voice.observe(True, RACING, 0.0)
+    assert [c.text for c in voice.observe(False, RACING, 1.0)] == ["Data link is down."]
+    assert [c.text for c in voice.observe(True, RACING, 2.0)] == ["Back."]

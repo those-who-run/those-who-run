@@ -46,6 +46,22 @@ never ambiguous. Fuel is estimated from the last three laps' consumption and onl
 when it is shorter than the laps left in the race. A pit stop resets the
 warnings. Every threshold and phrase is configurable, see `rules.example.yaml`.
 
+### The script
+
+Phrases come from a bundled script, `src/those_who_run/data/script.yaml`:
+four to six variants per callout, picked at random and never the same one twice
+running, so an endurance race does not hear one sentence a hundred times. A few
+situations have their own pools: into the lead or onto the podium, losing the
+lead, a delta under 0.3 s or over 2 s, a new best by under 0.2 s, a win or a
+podium at the flag, and "Fuel is fine to the end" when fuel was a worry and the
+final lap is covered. The table above shows the plain built-in phrases.
+
+Any template in the rules file may be a string or a list, and replaces the
+script's list for that key. `script: false` at the top level of the rules file
+turns the script off and leaves the single built-in phrases. Placeholders are
+filled with words, never digits; `tests/test_script.py` formats every variant
+and fails on an unknown slot.
+
 Each sentence is synthesised on its own with `voice.sentence_pause_secs`
 (0.35 s) of silence between them, so "Lap two." and the time and the delta do
 not run together. Sentences are cached separately, so only the numbers are new

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import random
 from abc import ABC, abstractmethod
 from typing import Any
 
 from those_who_run.callouts import Callout
+from those_who_run.phrasing import Phrasebook
 from those_who_run.state import Phase, RaceState
 from those_who_run.trackdetect import TrackMatch
+from those_who_run.verbalise import tidy_sentence
 
 
 class Rule(ABC):
@@ -19,6 +22,7 @@ class Rule(ABC):
         self.priority: int = int(self.cfg.get("priority", self.default_priority))
         max_age = self.cfg.get("max_age_seconds")
         self.max_age: float | None = float(max_age) if max_age else None
+        self.phrases = Phrasebook(self.cfg, random.Random())
         self.reset()
 
     def reset(self) -> None:
@@ -40,7 +44,7 @@ class Rule(ABC):
 
     def callout(self, text: str, state: RaceState, priority: int | None = None) -> Callout:
         return Callout(
-            text=text,
+            text=tidy_sentence(text),
             priority=self.priority if priority is None else priority,
             rule=self.name,
             created_at=state.t,
@@ -48,4 +52,10 @@ class Rule(ABC):
         )
 
     def template(self, key: str, default: str) -> str:
-        return str(self.cfg.get(key, default))
+        """The template for ``key``, or one of its variants when it is a list."""
+        return self.phrases.pick(key, default)
+
+    def first_template(self, keys: list[str], default: str) -> str:
+        """The first of ``keys`` that is configured, so a situational pool such as
+        ``template_gained_lead`` can stand in for the general one."""
+        return self.phrases.first(keys, default)

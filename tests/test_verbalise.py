@@ -65,3 +65,15 @@ def test_tidy_sentence():
 
     assert tidy_sentence("Lap one.  one forty.  ") == "Lap one. one forty."
     assert tidy_sentence("Final lap") == "Final lap."
+
+
+def test_tidy_sentence_drops_empty_slots_and_doubled_stops():
+    from those_who_run.verbalise import tidy_sentence
+
+    assert tidy_sentence("Lap one. fifty-seven point one. .") == "Lap one. fifty-seven point one."
+    assert tidy_sentence("Lap two. x. zero point eight over best..") == (
+        "Lap two. x. zero point eight over best."
+    )
+    assert tidy_sentence("Race over. . Best lap y.. ") == "Race over. Best lap y."
+    assert tidy_sentence("Box!") == "Box!"
+    assert tidy_sentence("Final lap") == "Final lap."

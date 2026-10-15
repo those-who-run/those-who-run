@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from those_who_run.callouts import Callout
+from those_who_run.phrasing import Phrasebook
 from those_who_run.state import Phase, RaceState
 
 DEFAULT_PHASES = (Phase.IN_RACE.value, Phase.PAUSED.value)
@@ -27,6 +28,7 @@ class TelemetryVoice:
         self.phases = {str(p) for p in self.cfg.get("phases", DEFAULT_PHASES)}
         self.was: bool | None = None
         self.lost_announced = False
+        self.phrases = Phrasebook(self.cfg)
 
     def observe(self, connected: bool, last_state: RaceState | None, now: float) -> list[Callout]:
         was, self.was = self.was, connected
@@ -36,11 +38,11 @@ class TelemetryVoice:
             if last_state is None or last_state.phase.value not in self.phases:
                 return []
             self.lost_announced = True
-            return [self._callout(self.cfg.get("template_lost", "Lost telemetry."), now)]
+            return [self._callout(self.phrases.pick("template_lost", "Lost telemetry."), now)]
         if not self.lost_announced:
             return []
         self.lost_announced = False
-        return [self._callout(self.cfg.get("template_back", "Telemetry back."), now)]
+        return [self._callout(self.phrases.pick("template_back", "Telemetry back."), now)]
 
     def _callout(self, text: str, now: float) -> Callout:
         return Callout(text=str(text), priority=self.priority, rule=self.name, created_at=now)

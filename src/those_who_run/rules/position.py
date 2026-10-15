@@ -7,6 +7,9 @@ position is spoken once things calm down, rather than every swap. The first
 brief has just given the grid slot, and the field shuffles for a while (nine
 calls in the first minute at Suzuka East, 2026-10-15). The first call after the
 grace compares with the grid slot.
+
+Situational pools, used when configured: ``template_gained_lead`` (into first),
+``template_gained_podium`` (into second or third), ``template_lost_lead``.
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ from __future__ import annotations
 from those_who_run.callouts import Callout
 from those_who_run.rules.base import Rule
 from those_who_run.state import RaceState
-from those_who_run.verbalise import ordinal_words
+from those_who_run.verbalise import number_words, ordinal_words
 
 
 class PositionRule(Rule):
@@ -55,10 +58,23 @@ class PositionRule(Rule):
         if self.last_spoken_at is not None and state.t - self.last_spoken_at < self.min_interval:
             return []
         gained = pos < self.announced
+        was = self.announced
         self.announced = pos
         self.pending_since = None
         self.last_spoken_at = state.t
-        key = "template_gained" if gained else "template_lost"
-        default = "Up to {position}." if gained else "Down to {position}."
-        text = self.template(key, default).format(position=ordinal_words(pos), p=pos)
+        if gained:
+            keys = ["template_gained"]
+            if pos == 1:
+                keys.insert(0, "template_gained_lead")
+            elif pos <= 3:
+                keys.insert(0, "template_gained_podium")
+            default = "Up to {position}."
+        else:
+            keys = ["template_lost"]
+            if was == 1:
+                keys.insert(0, "template_lost_lead")
+            default = "Down to {position}."
+        text = self.first_template(keys, default).format(
+            position=ordinal_words(pos), p=number_words(pos)
+        )
         return [self.callout(text, state)]

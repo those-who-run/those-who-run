@@ -6,6 +6,10 @@ Suzuka East, 2026-10-15), and so does the fallback kept here; a timed race or a
 time trial counts lap 1. Laps within ``equal_ms`` of the best are "equal", so
 identical time-trial laps are not called a new best by zero point zero.
 
+Situational pools, used when configured: ``delta_slower_small`` (under
+``small_delta_ms``), ``delta_slower_large`` (over ``large_delta_ms``) and
+``template_new_best_small`` (a gap under ``small_gap_ms``).
+
 A lap that beats the best so far is a "new best" and gets its own template and
 priority; it replaces the plain lap-time phrase rather than adding a second one.
 """
@@ -27,6 +31,9 @@ class LapTimeRule(Rule):
         self.last_announced_lap = 0
         self.own_best_ms = 0
         self.equal_ms = int(self.cfg.get("equal_ms", 50))
+        self.small_delta_ms = int(self.cfg.get("small_delta_ms", 300))
+        self.large_delta_ms = int(self.cfg.get("large_delta_ms", 2000))
+        self.small_gap_ms = int(self.cfg.get("small_gap_ms", 200))
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if not lap_time_posted(prev, state):
@@ -53,9 +60,10 @@ class LapTimeRule(Rule):
             if abs(diff) < self.equal_ms:
                 diff = 0
             if diff < 0:
-                text = self.template(
-                    "template_new_best", "Lap {lap}. {time}. New best by {gap}."
-                ).format(
+                keys = ["template_new_best"]
+                if -diff < self.small_gap_ms:
+                    keys.insert(0, "template_new_best_small")
+                text = self.first_template(keys, "Lap {lap}. {time}. New best by {gap}.").format(
                     lap=number_words(lap_no),
                     time=time_words,
                     gap=delta_words(diff),
@@ -67,7 +75,12 @@ class LapTimeRule(Rule):
             if diff == 0:
                 delta = self.template("delta_equal", "equal to best")
             else:
-                delta = self.template("delta_slower", "{delta} over best").format(
+                keys = ["delta_slower"]
+                if diff < self.small_delta_ms:
+                    keys.insert(0, "delta_slower_small")
+                elif diff > self.large_delta_ms:
+                    keys.insert(0, "delta_slower_large")
+                delta = self.first_template(keys, "{delta} over best").format(
                     delta=delta_words(diff)
                 )
 

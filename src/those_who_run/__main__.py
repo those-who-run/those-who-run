@@ -224,6 +224,7 @@ async def run_say(settings: Settings, text: str) -> int:
 async def run_live(settings: Settings, record: Path | None = None) -> int:
     from those_who_run.audio.discord_player import DiscordPlayer
     from those_who_run.replay import RecordingWriter
+    from those_who_run.rules.telemetry import TelemetryVoice
     from those_who_run.speech import PiperSpeech
     from those_who_run.telemetry import LiveTelemetry
 
@@ -303,6 +304,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
 
     async def watchdog() -> None:
         was: bool | None = None
+        voice = TelemetryVoice(rules_cfg["rules"].get("telemetry"))
         log.info("telemetry: waiting for packets from %s", settings.ps5_ip)
         while True:
             now_connected = telem.connected(settings.telemetry_timeout_secs)
@@ -310,6 +312,10 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
             if now_connected != was and (was is not None or now_connected):
                 log.info("telemetry %s", "connected" if now_connected else "lost")
             was = now_connected
+            for c in voice.observe(now_connected, engine.prev, time.monotonic()):
+                queue.push(c)
+                metrics.callouts_total.labels(c.rule).inc()
+                log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
             await asyncio.sleep(1)
 
     tasks = [

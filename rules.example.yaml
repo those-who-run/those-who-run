@@ -73,3 +73,9 @@ rules:
     template_tyres_cold: "Tyres cold."
     template_water: "Water temperature high."
     template_oil: "Oil temperature high."
+  telemetry:               # packets stop mid-session (live only; a menu going quiet is normal)
+    enabled: true
+    priority: 5
+    phases: [in_race, paused]   # what the last frame must have been for silence to count
+    template_lost: "Lost telemetry."
+    template_back: "Telemetry back."

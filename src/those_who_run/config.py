@@ -12,6 +12,9 @@ from typing import Any
 import yaml
 
 DEFAULT_RULES: dict[str, Any] = {
+    # Layer the bundled script (data/script.yaml) of phrase variants over the
+    # single templates below. The rules file still wins key by key.
+    "script": True,
     "voice": {
         "length_scale": 0.9,
         "noise_scale": 0.5,
@@ -29,6 +32,9 @@ DEFAULT_RULES: dict[str, Any] = {
             "delta_equal": "equal to best",
             "delta_first": "",
             "equal_ms": 50,
+            "small_delta_ms": 300,
+            "large_delta_ms": 2000,
+            "small_gap_ms": 200,
             "template_new_best": "Lap {lap}. {time}. New best by {gap}.",
             "new_best_priority": 11,
         },
@@ -178,10 +184,25 @@ def deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, A
     return out
 
 
+def load_script() -> dict[str, Any]:
+    """The bundled script: phrase variants keyed like the rules config."""
+    from importlib.resources import files
+
+    text = files("those_who_run.data").joinpath("script.yaml").read_text(encoding="utf-8")
+    return yaml.safe_load(text) or {}
+
+
 def load_rules_config(path: Path | None) -> dict[str, Any]:
-    """Defaults merged with the YAML file, if any. Unknown keys are kept for rules to read."""
-    if path is None:
-        return copy.deepcopy(DEFAULT_RULES)
+    """Defaults, then the bundled script unless ``script: false``, then the YAML
+    file, if any. Unknown keys are kept for rules to read."""
+    loaded = _read_rules_file(path) if path is not None else {}
+    base = DEFAULT_RULES
+    if loaded.get("script", DEFAULT_RULES["script"]):
+        base = deep_merge(base, load_script())
+    return deep_merge(base, loaded)
+
+
+def _read_rules_file(path: Path) -> Mapping[str, Any]:
     try:
         with open(path, encoding="utf-8") as fh:
             loaded = yaml.safe_load(fh) or {}
@@ -191,4 +212,4 @@ def load_rules_config(path: Path | None) -> dict[str, Any]:
         raise ConfigError(f"rules file is not valid YAML: {path}: {exc}") from exc
     if not isinstance(loaded, Mapping):
         raise ConfigError(f"rules file must be a mapping at the top level: {path}")
-    return deep_merge(DEFAULT_RULES, loaded)
+    return loaded

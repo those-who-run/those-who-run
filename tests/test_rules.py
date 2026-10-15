@@ -373,7 +373,7 @@ def test_race_summary_silent_on_quit(sim):
 def test_race_summary_templates_are_configurable(sim):
     rule = RaceSummaryRule({"template": "{position} {fuel}", "template_position": "P {p}."})
     frames = sim(total_laps=2, fuel=100, burn=10, position=3).race([100000] * 2).frames
-    assert run_rule(rule, frames) == ["P 3. Fuel used twenty percent."]
+    assert run_rule(rule, frames) == ["P three. Fuel used twenty percent."]
 
 
 # temperatures
@@ -511,3 +511,101 @@ def test_fuel_says_nothing_on_the_crossing_into_the_pits():
     assert [c.text for c in ignored.evaluate(frames[-1], frame(3, 4, 22.9))] == [
         "Fuel critical. Less than one lap."
     ]
+
+
+# situational pools from the script
+
+
+def test_lap_time_pools_for_small_and_large_deltas_and_a_small_new_best(sim):
+    rule = LapTimeRule(
+        {
+            "delta_slower_small": ["{delta} off, close."],
+            "delta_slower_large": ["{delta} off, regroup."],
+            "template_new_best_small": ["By a hair. {time}. Up {gap}."],
+        }
+    )
+    frames = sim(total_laps=0).race([60000, 60200, 63000, 60800, 59900]).frames
+    assert run_rule(rule, frames) == [
+        "Lap one. one oh zero point zero.",
+        "Lap two. one oh zero point two. zero point two off, close.",
+        "Lap three. one oh three point zero. three point zero off, regroup.",
+        "Lap four. one oh zero point eight. zero point eight over best.",
+        "By a hair. fifty-nine point nine. Up zero point one.",
+    ]
+
+
+def test_position_pools_for_the_lead_and_the_podium():
+    rule = PositionRule(
+        {
+            "start_grace_secs": 0,
+            "settle_secs": 1.0,
+            "min_interval_secs": 0,
+            "template_gained_lead": ["Into the lead."],
+            "template_gained_podium": ["Podium. P {p}."],
+            "template_lost_lead": ["Lost the lead. Down to {position}."],
+        }
+    )
+
+    def frame(t, pos):
+        return make_state(t=t, current_lap=1, race_start_pos=pos, cars_on_track=True)
+
+    frames = [frame(0, 5), frame(2, 5)]
+    for t, pos in [(3, 4), (5, 3), (7, 1), (9, 2), (11, 4)]:
+        frames += [frame(t, pos), frame(t + 1.5, pos)]
+    assert run_rule(rule, frames) == [
+        "Up to fourth.",
+        "Podium. P three.",
+        "Into the lead.",
+        "Lost the lead. Down to second.",
+        "Down to fourth.",
+    ]
+
+
+def test_race_summary_pools_for_a_win_and_a_podium_and_fuel_left(sim):
+    cfg = {
+        "template_position_win": ["Winner."],
+        "template_position_podium": ["Podium, {position}."],
+        "template_fuel": ["{fuel_left} left."],
+    }
+    win = sim(total_laps=2, fuel=100, burn=10, position=1).race([100000] * 2).frames
+    assert run_rule(RaceSummaryRule(cfg), win)[0].startswith("Chequered flag. Winner.")
+    third = sim(total_laps=2, fuel=100, burn=10, position=3).race([100000] * 2).frames
+    assert run_rule(RaceSummaryRule(cfg), third) == [
+        "Chequered flag. Podium, third. Best lap one forty point zero. eighty percent left."
+    ]
+
+
+def test_fuel_reassures_on_the_final_lap_only_after_a_warning(sim):
+    cfg = {"template_last_lap_enough": ["Fuel is fine to the end."], "pit_window": False}
+
+    def frame(t, lap, fuel):
+        return make_state(t=t, current_lap=lap, total_laps=4, fuel_level=fuel)
+
+    # A heavy first lap worries the estimate; lifting and coasting brings it back.
+    worried = [frame(0, 1, 100), frame(1, 2, 70), frame(2, 3, 55), frame(3, 4, 45)]
+    assert run_rule(FuelRule(cfg), worried) == [
+        "Fuel. two laps remaining.",
+        "Fuel is fine to the end.",
+    ]
+    assert run_rule(FuelRule(), worried) == ["Fuel. two laps remaining."], "no built-in phrase"
+    relaxed = sim(total_laps=4, fuel=100, burn=10).race([100000] * 3, finish=False).frames
+    assert run_rule(FuelRule(cfg), relaxed) == []
+
+
+def test_start_brief_position_can_be_an_ordinal(sim):
+    rule = StartBriefRule({"template_position": "Starting {position} from {total}."})
+    frames = sim(total_laps=2, position=10, cars=20).race([100000] * 2).frames
+    assert run_rule(rule, frames) == ["Two laps. Starting tenth from twenty."]
+
+
+def test_variants_rotate_without_repeating(sim):
+    import random
+
+    rule = FinalLapRule({"template": ["Final lap.", "Last lap now.", "One lap to go."]})
+    rule.phrases.rng = random.Random(3)
+    said = []
+    for _ in range(12):
+        rule.reset()
+        said += run_rule(rule, sim(total_laps=2).race([100000] * 2).frames)
+    assert set(said) == {"Final lap.", "Last lap now.", "One lap to go."}
+    assert all(a != b for a, b in zip(said, said[1:], strict=False))

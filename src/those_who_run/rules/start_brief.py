@@ -18,7 +18,13 @@ from those_who_run.callouts import Callout
 from those_who_run.rules.base import Rule
 from those_who_run.state import RaceState
 from those_who_run.trackdetect import CONFIDENCE_RANK, TrackMatch
-from those_who_run.verbalise import laps_words, number_words, tidy_sentence, track_words
+from those_who_run.verbalise import (
+    laps_words,
+    number_words,
+    ordinal_words,
+    tidy_sentence,
+    track_words,
+)
 
 
 class StartBriefRule(Rule):
@@ -86,7 +92,9 @@ class StartBriefRule(Rule):
         if _has_field(state) and state.position is not None:
             parts.append(
                 self.template("template_position", "P {p} of {total}.").format(
-                    p=number_words(state.position), total=number_words(state.total_cars)
+                    p=number_words(state.position),
+                    position=ordinal_words(state.position),
+                    total=number_words(state.total_cars),
                 )
             )
         if parts:

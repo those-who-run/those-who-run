@@ -7,6 +7,8 @@ one decimal place, deltas likewise.
 
 from __future__ import annotations
 
+import re
+
 _ONES = [
     "zero",
     "one",
@@ -119,7 +121,14 @@ def track_words(name: str) -> str:
     return " ".join(name.split())
 
 
+_EMPTY_SENTENCES = re.compile(r"([.!?])(?:\s*\.)+")
+
+
 def tidy_sentence(text: str) -> str:
-    """Collapse whitespace left by empty template slots and end with one full stop."""
+    """Collapse whitespace and the empty sentences left by empty template slots
+    ("{delta}." with no delta, or a slot that already ends in a full stop), and
+    end with one full stop unless the text ends in ! or ?."""
     text = " ".join(text.split())
-    return text.rstrip(" ,.") + "."
+    text = _EMPTY_SENTENCES.sub(r"\1", text).lstrip(" .")
+    text = text.rstrip(" ,")
+    return text if text.endswith((".", "!", "?")) else text + "."

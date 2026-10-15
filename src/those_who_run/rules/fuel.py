@@ -9,6 +9,10 @@ The pit call is the instruction that goes with the numbers: once the estimate
 says the lap after this one cannot be completed, "Pit this lap." is spoken once
 per stint, ahead of the threshold phrase for the same crossing.
 
+When fuel was a worry this stint (any warning given) and the estimate says the
+final lap is covered, ``template_last_lap_enough`` is spoken as the final lap
+starts, if it is configured. It has no built-in phrase.
+
 A crossing seen through a loading screen is the car entering the pit lane (GT7
 cuts to the pit scene as it crosses the line). The tank is about to be filled,
 so that crossing only records consumption and says nothing.
@@ -79,6 +83,9 @@ class FuelRule(Rule):
             return []
         laps_left = state.laps_left
         if laps_left is not None and self.laps_remaining >= laps_left:
+            warned = bool(self.announced) or self.pit_announced or self.critical_announced
+            if warned and laps_left == 1 and self.phrases.has("template_last_lap_enough"):
+                return [self.callout(self.template("template_last_lap_enough", ""), state)]
             return []
 
         out: list[Callout] = []

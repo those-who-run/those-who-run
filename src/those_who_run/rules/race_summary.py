@@ -9,6 +9,10 @@ best posted lap, skipping lap 1 of a lap-count race as GT7 does (lap 1 starts on
 the grid, ahead of the line, and is short). Fuel used sums the
 drops frame by frame, so a pit stop does not cancel the first stint.
 
+Situational pools, used when configured: ``template_position_win`` and
+``template_position_podium``. ``template_fuel`` may use ``{fuel}`` (used, as a
+percentage of the tank) or ``{fuel_left}``.
+
 Timed races never reach FINISHED (GT7 reports no lap total), so they get no
 summary yet; that needs a timed-race recording to settle what the end looks like.
 """
@@ -18,7 +22,13 @@ from __future__ import annotations
 from those_who_run.callouts import Callout
 from those_who_run.rules.base import Rule
 from those_who_run.state import Phase, RaceState, lap_time_posted
-from those_who_run.verbalise import lap_time_words, ordinal_words, percent_words, tidy_sentence
+from those_who_run.verbalise import (
+    lap_time_words,
+    number_words,
+    ordinal_words,
+    percent_words,
+    tidy_sentence,
+)
 
 
 class RaceSummaryRule(Rule):
@@ -48,8 +58,13 @@ class RaceSummaryRule(Rule):
 
         position = ""
         if state.is_race and state.total_cars > 1 and state.position is not None:
-            position = self.template("template_position", "Finished {position}.").format(
-                position=ordinal_words(state.position), p=state.position
+            keys = ["template_position"]
+            if state.position == 1:
+                keys.insert(0, "template_position_win")
+            elif state.position <= 3:
+                keys.insert(0, "template_position_podium")
+            position = self.first_template(keys, "Finished {position}.").format(
+                position=ordinal_words(state.position), p=number_words(state.position)
             )
         best = ""
         best_ms = state.best_lap_ms if state.best_lap_ms > 0 else self.best_ms
@@ -60,7 +75,8 @@ class RaceSummaryRule(Rule):
         fuel = ""
         if state.fuel_capacity > 0 and self.fuel_used >= self.min_fuel:
             fuel = self.template("template_fuel", "Fuel used {fuel}.").format(
-                fuel=percent_words(100.0 * self.fuel_used / state.fuel_capacity)
+                fuel=percent_words(100.0 * self.fuel_used / state.fuel_capacity),
+                fuel_left=percent_words(100.0 * max(state.fuel_level, 0.0) / state.fuel_capacity),
             )
         text = self.template("template", "Chequered flag. {position} {best} {fuel}").format(
             position=position, best=best, fuel=fuel

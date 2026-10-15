@@ -7,10 +7,10 @@ position is spoken once things calm down, rather than every swap.
 
 from __future__ import annotations
 
-from gt7_race_engineer.callouts import Callout
-from gt7_race_engineer.rules.base import Rule
-from gt7_race_engineer.state import RaceState
-from gt7_race_engineer.verbalise import ordinal_words
+from those_who_run.callouts import Callout
+from those_who_run.rules.base import Rule
+from those_who_run.state import RaceState
+from those_who_run.verbalise import ordinal_words
 
 
 class PositionRule(Rule):

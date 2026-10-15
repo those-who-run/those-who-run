@@ -21,8 +21,8 @@ COPY pyproject.toml README.md LICENSE rules.example.yaml ./
 COPY src ./src
 RUN pip install --no-cache-dir . \
     && useradd --uid 1000 --user-group --home-dir /app --no-create-home engineer \
-    && mkdir -p /data /tmp/gt7-race-engineer \
-    && chown -R engineer:engineer /data /tmp/gt7-race-engineer
+    && mkdir -p /data /tmp/those-who-run \
+    && chown -R engineer:engineer /data /tmp/those-who-run
 
 ENV GT7_VOICE_MODEL=/app/voices/en_GB-alba-medium.onnx \
     GT7_DATA_DIR=/data \
@@ -36,5 +36,5 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \
     CMD curl -fsS http://127.0.0.1:9850/healthz || exit 1
 
-ENTRYPOINT ["gt7-race-engineer"]
+ENTRYPOINT ["those-who-run"]
 CMD ["run"]

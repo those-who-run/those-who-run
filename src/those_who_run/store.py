@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from gt7_race_engineer.state import RaceState, lap_completed, racing_frame
+from those_who_run.state import RaceState, lap_completed, racing_frame
 
 log = logging.getLogger(__name__)
 

@@ -6,9 +6,9 @@ import logging
 from pathlib import Path
 from typing import Protocol
 
-from gt7_race_engineer.callouts import Callout
-from gt7_race_engineer.speech import Speech
-from gt7_race_engineer.state import Phase
+from those_who_run.callouts import Callout
+from those_who_run.speech import Speech
+from those_who_run.state import Phase
 
 log = logging.getLogger(__name__)
 

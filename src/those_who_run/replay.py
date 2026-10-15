@@ -9,10 +9,10 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
-from gt7_race_engineer.audio.player import Player
-from gt7_race_engineer.callouts import Callout, CalloutQueue
-from gt7_race_engineer.engine import Engine
-from gt7_race_engineer.state import RaceState
+from those_who_run.audio.player import Player
+from those_who_run.callouts import Callout, CalloutQueue
+from those_who_run.engine import Engine
+from those_who_run.state import RaceState
 
 log = logging.getLogger(__name__)
 

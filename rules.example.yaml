@@ -1,4 +1,4 @@
-# gt7-race-engineer rules. Every value here overrides a built-in default, so a
+# Those Who Run rules. Every value here overrides a built-in default, so a
 # file with only the keys you want to change is fine.
 voice:
   length_scale: 0.9     # < 1 speaks faster

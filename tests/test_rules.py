@@ -1,10 +1,10 @@
-from gt7_race_engineer.rules import build_rules
-from gt7_race_engineer.rules.final_lap import FinalLapRule
-from gt7_race_engineer.rules.fuel import FuelRule
-from gt7_race_engineer.rules.lap_time import LapTimeRule
-from gt7_race_engineer.rules.position import PositionRule
-from gt7_race_engineer.state import Phase, racing_frame
 from tests.conftest import make_state
+from those_who_run.rules import build_rules
+from those_who_run.rules.final_lap import FinalLapRule
+from those_who_run.rules.fuel import FuelRule
+from those_who_run.rules.lap_time import LapTimeRule
+from those_who_run.rules.position import PositionRule
+from those_who_run.state import Phase, racing_frame
 
 
 def run_rule(rule, frames):

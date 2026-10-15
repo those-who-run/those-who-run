@@ -4,8 +4,8 @@ import asyncio
 
 import discord
 
-from gt7_race_engineer.audio.discord_player import DiscordPlayer
-from gt7_race_engineer.state import Phase
+from those_who_run.audio.discord_player import DiscordPlayer
+from those_who_run.state import Phase
 
 
 class StubClient:
@@ -71,7 +71,7 @@ class StubVoiceChannel(discord.VoiceChannel):
     """Just enough of a VoiceChannel for the player: no discord state behind it."""
 
     def __init__(self, voice_client):
-        self.name = "race-engineer"
+        self.name = "pit-lane"
         self.guild = StubGuild(voice_client)
         self.connect_calls = 0
 

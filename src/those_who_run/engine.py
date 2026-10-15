@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from gt7_race_engineer.callouts import Callout, CalloutQueue
-from gt7_race_engineer.metrics import Metrics
-from gt7_race_engineer.rules.base import Rule
-from gt7_race_engineer.rules.fuel import FuelRule
-from gt7_race_engineer.state import (
+from those_who_run.callouts import Callout, CalloutQueue
+from those_who_run.metrics import Metrics
+from those_who_run.rules.base import Rule
+from those_who_run.rules.fuel import FuelRule
+from those_who_run.state import (
     RaceState,
     race_ended,
     race_restarted,
     race_started,
     racing_frame,
 )
-from gt7_race_engineer.store import SessionStore
+from those_who_run.store import SessionStore
 
 log = logging.getLogger(__name__)
 

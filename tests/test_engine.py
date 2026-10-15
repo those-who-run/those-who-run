@@ -1,14 +1,14 @@
 import json
 import sqlite3
 
-from gt7_race_engineer.audio.player import ConsolePlayer
-from gt7_race_engineer.callouts import CalloutQueue
-from gt7_race_engineer.config import DEFAULT_RULES
-from gt7_race_engineer.engine import Engine
-from gt7_race_engineer.metrics import Metrics
-from gt7_race_engineer.replay import read_recording, replay, write_recording
-from gt7_race_engineer.rules import build_rules
-from gt7_race_engineer.store import SessionStore
+from those_who_run.audio.player import ConsolePlayer
+from those_who_run.callouts import CalloutQueue
+from those_who_run.config import DEFAULT_RULES
+from those_who_run.engine import Engine
+from those_who_run.metrics import Metrics
+from those_who_run.replay import read_recording, replay, write_recording
+from those_who_run.rules import build_rules
+from those_who_run.store import SessionStore
 
 
 def make_engine(tmp_path, max_age=None):

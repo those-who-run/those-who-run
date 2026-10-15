@@ -1,4 +1,4 @@
-from gt7_race_engineer.verbalise import delta_words, lap_time_words, laps_words, number_words
+from those_who_run.verbalise import delta_words, lap_time_words, laps_words, number_words
 
 
 def test_number_words():

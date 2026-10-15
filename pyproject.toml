@@ -3,9 +3,9 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gt7-race-engineer"
+name = "those-who-run"
 version = "0.1.0"
-description = "Self-hosted voice race engineer for Gran Turismo 7: PS5 telemetry, rule-based callouts, Piper TTS, Discord voice"
+description = "Those Who Run (走り屋): self-hosted voice race engineer for Gran Turismo 7. PS5 telemetry in, rule-based callouts, Piper TTS, Discord voice out"
 readme = "README.md"
 license = { text = "GPL-3.0-only" }
 requires-python = ">=3.12"
@@ -23,10 +23,10 @@ dependencies = [
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
 
 [project.scripts]
-gt7-race-engineer = "gt7_race_engineer.__main__:main"
+those-who-run = "those_who_run.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/gt7_race_engineer"]
+packages = ["src/those_who_run"]
 
 [tool.ruff]
 line-length = 100

@@ -8,7 +8,7 @@ import logging
 import time
 from typing import Any
 
-from gt7_race_engineer.state import RaceState
+from those_who_run.state import RaceState
 
 log = logging.getLogger(__name__)
 

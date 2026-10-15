@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from gt7_race_engineer.__main__ import build_parser
+from those_who_run.__main__ import build_parser
 
 
 def test_run_accepts_record_flag():

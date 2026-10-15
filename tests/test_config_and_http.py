@@ -3,8 +3,8 @@ import urllib.request
 
 import pytest
 
-from gt7_race_engineer.config import ConfigError, Settings, deep_merge, load_rules_config
-from gt7_race_engineer.metrics import HealthServer, Metrics
+from those_who_run.config import ConfigError, Settings, deep_merge, load_rules_config
+from those_who_run.metrics import HealthServer, Metrics
 
 
 def test_settings_from_env():

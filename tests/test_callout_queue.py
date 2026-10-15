@@ -1,4 +1,4 @@
-from gt7_race_engineer.callouts import Callout, CalloutQueue
+from those_who_run.callouts import Callout, CalloutQueue
 
 
 def c(text, priority=20, rule="r", at=0.0):

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from gt7_race_engineer.rules.base import Rule
-from gt7_race_engineer.rules.final_lap import FinalLapRule
-from gt7_race_engineer.rules.fuel import FuelRule
-from gt7_race_engineer.rules.lap_time import LapTimeRule
-from gt7_race_engineer.rules.position import PositionRule
+from those_who_run.rules.base import Rule
+from those_who_run.rules.final_lap import FinalLapRule
+from those_who_run.rules.fuel import FuelRule
+from those_who_run.rules.lap_time import LapTimeRule
+from those_who_run.rules.position import PositionRule
 
 REGISTRY: dict[str, type[Rule]] = {
     LapTimeRule.name: LapTimeRule,

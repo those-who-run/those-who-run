@@ -3,7 +3,8 @@ from dataclasses import fields
 from gt_telem.models.telemetry import Telemetry
 from gt_telem.models.telemetry_packet import TelemetryPacket
 
-from gt7_race_engineer.state import (
+from tests.conftest import make_state
+from those_who_run.state import (
     STATE_FORMAT_VERSION,
     Phase,
     RaceState,
@@ -14,7 +15,6 @@ from gt7_race_engineer.state import (
     race_restarted,
     race_started,
 )
-from tests.conftest import make_state
 
 
 def make_telemetry(**over) -> Telemetry:

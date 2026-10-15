@@ -3,13 +3,13 @@ import sqlite3
 
 import duckdb
 
-from gt7_race_engineer.audio.player import ConsolePlayer
-from gt7_race_engineer.callouts import CalloutQueue
-from gt7_race_engineer.engine import Engine
-from gt7_race_engineer.replay import replay
-from gt7_race_engineer.state import RaceState
-from gt7_race_engineer.store import FRAME_COLUMNS, SessionStore, frame_row, write_parquet
 from tests.conftest import make_state
+from those_who_run.audio.player import ConsolePlayer
+from those_who_run.callouts import CalloutQueue
+from those_who_run.engine import Engine
+from those_who_run.replay import replay
+from those_who_run.state import RaceState
+from those_who_run.store import FRAME_COLUMNS, SessionStore, frame_row, write_parquet
 
 
 def test_frame_row_matches_columns():

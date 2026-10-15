@@ -132,24 +132,34 @@ depend on gt-telem's packet layout.
 
 GT7 never says which track you are on. The engineer works it out from where
 the car goes, using a table of 106 layouts (finish line, direction, lap
-bounding box; adapted from gt-telem and Bornhall's gt7telemetry) and three
-independent facts checked on every frame:
+bounding box, optionally lap length; adapted from gt-telem and Bornhall's
+gt7telemetry) and four independent facts:
 
-1. **Starts near the line.** A grid or a pit lane is within a kilometre of the
-   layout's finish line. This separates the real track from unrelated layouts
-   whose enormous boxes happen to contain the same coordinates.
-2. **Path stays inside the box.** A layout is dropped the moment the car leaves
-   its bounds. Family members that share a finish line (GP vs 24h, Indy vs
-   full) fall out as you drive past the shorter one.
-3. **Finish line crossed, in the right direction.** Decisive, and the only thing
-   that tells a reverse layout from its twin.
+1. **A finish line is close to where the car has been.** The grid, the pit
+   lane and every lap boundary are within a kilometre of the layout's line.
+   This separates the real track from unrelated layouts whose enormous boxes
+   happen to contain the same coordinates.
+2. **The path stays inside the box.** A layout is dropped the moment the car
+   leaves its bounds. Family members that share a finish line (GP vs 24h,
+   Indy vs full) fall out as you drive past the shorter one.
+3. **The finish line is crossed, in the right direction.** Two witnesses:
+   GT7's own lap counter (when it ticks, the car is on the line, whatever the
+   table says) and the car's path cutting the table's segment, widened to span
+   the track because the recorded segments are only a car's width. This is the
+   only thing that tells a reverse layout from its twin.
+4. **A completed lap fits the layout.** Once the lap counter has closed a lap,
+   the driven box is the lap's box and the distance is its length. A layout
+   the lap fills poorly, or whose known length is off, is ruled out. This is
+   what stops a track the table does not know from being mistaken for a
+   neighbour whose line happens to sit nearby.
 
-The verdict carries a confidence: `confirmed` (line crossed, nothing else
-fits), `probable` (only one layout left, line not yet crossed), `ambiguous`
-(several still fit; the table cannot separate some pairs such as Fuji and Fuji
-Short at all) or `none`. A rolling start usually crosses the line before lap
-1, so a race is often confirmed before the lights go out; a flying lap from the
-pits is probable within a minute and confirmed at the end of the lap.
+The verdict carries a confidence: `confirmed` (line crossed and a full lap
+fits, nothing else left), `probable` (line crossed but no full lap yet, or a
+single layout left), `ambiguous` (several still fit; no track is named unless
+a line was crossed) or `none` (nothing fits: a new track, or one the table has
+wrong). A race with a rolling start is probable before the lights and confirmed
+at the end of lap 1; a flying lap from the pits is probable within a minute and
+confirmed at the end of the lap; a one-lap race confirms at the flag.
 
 The verdict is logged, stored with the session (`track_id` and
 `track_confidence` in the index, a `track` block with the candidates in
@@ -161,7 +171,13 @@ those-who-run tracks list                      # the table
 those-who-run tracks detect session.jsonl      # how the decision evolved over a recording
 those-who-run tracks detect data/sessions/<id> # same, from stored Parquet laps
 those-who-run tracks backfill                  # fill in sessions recorded before detection existed
+those-who-run tracks learn data/sessions/<id> --id 100001 --name "New Track"
+                                               # a table row from a recorded lap, for tracks the table lacks
 ```
+
+When GT7 adds a track, drive a lap, run `tracks learn` on the session and add
+the printed row to `src/those_who_run/data/tracks.csv`. Learned rows use ids
+from 100001 up, since GT7's own ids are not visible in telemetry.
 
 ## Data
 

@@ -58,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         "backfill", help="detect the track for stored sessions and update the index"
     )
     tb.add_argument("--force", action="store_true", help="re-run even for confirmed sessions")
+    tl = trs.add_parser(
+        "learn", help="derive a table row (finish line, direction, box) from a recorded lap"
+    )
+    tl.add_argument("source", type=Path, help="a .jsonl recording or a sessions/<id> directory")
+    tl.add_argument("--id", type=int, default=0, help="track id for the printed CSV row")
+    tl.add_argument("--name", default="NAME", help="track name for the printed CSV row")
     return p
 
 
@@ -90,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_tracks(settings: Settings, args: argparse.Namespace) -> int:
     from those_who_run.tracks import load_tracks
-    from those_who_run.tracktools import backfill, detect_recording, detect_session
+    from those_who_run.tracktools import backfill, detect_recording, detect_session, learn_track
 
     if args.tracks_command == "list":
         for t in load_tracks():
@@ -119,6 +125,15 @@ def run_tracks(settings: Settings, args: argparse.Namespace) -> int:
             print(f"{head}: {m.evidence}  [{cands}]")
         print(f"\nresult: {match.confidence} {match.name} ({match.track_id})")
         return 0 if match.confidence in ("confirmed", "probable") else 1
+    if args.tracks_command == "learn":
+        learned = learn_track(args.source)
+        print(f"lap length {learned.lap_length_m:.0f} m over {learned.laps_used} completed lap(s)")
+        print(f"finish line at {learned.line[0][0]:.0f},{learned.line[0][1]:.0f} .. ", end="")
+        print(f"{learned.line[1][0]:.0f},{learned.line[1][1]:.0f}  direction {learned.direction}")
+        print(f"box {' '.join(f'{v:.0f}' for v in learned.box)}")
+        print("nearest existing lines:", learned.nearest)
+        print("\ncsv row:\n" + learned.csv_row(args.id, args.name))
+        return 0
     if args.tracks_command == "backfill":
         results = backfill(settings.data_dir, force=args.force)
         for r in results:

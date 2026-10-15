@@ -34,6 +34,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "real-n24h-race-lap1-positions-20
 UNKNOWN_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-unknown-track-2026-10-15.jsonl"
 SUZUKA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-east-2026-10-15.jsonl"
 N24H, GP, NORDSCHLEIFE, TOURIST = 348, 349, 95, 347
+SUGO = 100001  # learned 2026-10-15, the first row we added ourselves
 FUJI, FUJI_SHORT = 16, 837
 SUZUKA, SUZUKA_EAST = 10, 442
 
@@ -43,9 +44,11 @@ SUZUKA, SUZUKA_EAST = 10, 442
 
 def test_table_loads_with_names_and_geometry():
     tracks = load_tracks()
-    assert len(tracks) == 106
-    assert sum(t.has_geometry for t in tracks) == 103
-    assert all(t.length_m is None for t in tracks)  # none known yet; `tracks learn` fills them
+    assert len(tracks) == 107
+    assert sum(t.has_geometry for t in tracks) == 104
+    # gt-telem's rows carry no length; `tracks learn` fills it for tracks we add ourselves
+    assert [t.id for t in tracks if t.length_m is not None] == [SUGO]
+    assert track_name(SUGO) == "Sportsland SUGO"
     assert track_name(N24H) == "Nurburgring 24h"
     assert track_name(471) == "Tsukuba Circuit"
     assert track_name(None) is None
@@ -330,15 +333,28 @@ def test_real_n24h_race_is_probable_before_the_lights_and_confirmed_after_lap_1(
 # the table does not have, and a one-lap race at Suzuka East.
 
 
-def test_real_unknown_track_is_reported_as_none_not_as_fuji():
+def test_real_sugo_is_confirmed_from_its_learned_row():
+    """Sportsland SUGO was added to GT7 on 2026-10-15 and to the table from this very
+    lap with ``tracks learn``, so the fit is near perfect."""
     final, steps = detect_recording(UNKNOWN_FIXTURE)
-    # Fuji's recorded line sits 99 m from where the lap counter ticked, so on the lap
-    # counter alone the Fuji pair looked crossed; the completed lap fills only 35% of
-    # their box, which rules them out.
-    before = [s for s in steps if s.lap == 1]
-    assert before and all(s.match.track_id is None for s in before)
-    assert final.confidence == "none" and final.track_id is None
-    assert final.candidates == ()
+    assert final.track_id == SUGO and final.confidence == "confirmed"
+    assert final.candidates[0].fit > 0.95
+    decided = next(s for s in steps if s.match.confidence == "confirmed")
+    assert decided.lap == 2
+
+
+def test_real_unknown_track_is_reported_as_none_not_as_fuji():
+    """Without the SUGO row this lap is a track the table does not have. Fuji's recorded
+    line sits 99 m from where the lap counter ticked, so on the lap counter alone the
+    Fuji pair looked crossed; the completed lap fills only 35% of their box, which
+    rules them out."""
+    det = TrackDetector(tracks=tuple(t for t in load_tracks() if t.id != SUGO))
+    seen: list[int | None] = []
+    for s in read_recording(UNKNOWN_FIXTURE):
+        det.observe(s)
+        seen.append(det.match.track_id)
+    assert all(tid is None for tid in seen)
+    assert det.match.confidence == "none" and det.match.candidates == ()
 
 
 def test_real_suzuka_east_is_confirmed_on_the_lap_counter():
@@ -362,7 +378,9 @@ def test_learn_track_derives_a_row_from_the_unknown_lap():
     assert abs((p1z + p2z) / 2 + 213) < 5
     minx, minz, maxx, maxz = learned.box
     assert 1000 < maxx - minx < 1150 and 480 < maxz - minz < 580
-    assert learned.nearest[0][1] in (FUJI, FUJI_SHORT) and learned.nearest[0][0] < 120
+    # its own row now sits on the line; the Fuji pair is the nearest stranger
+    assert learned.nearest[0][1] == SUGO and learned.nearest[0][0] < 1
+    assert learned.nearest[1][1] in (FUJI, FUJI_SHORT) and learned.nearest[1][0] < 120
     row = learned.csv_row(100001, "New Track")
     assert row.startswith("100001,New Track,PX,") and row.endswith(f"{learned.lap_length_m:.0f}")
 
@@ -451,9 +469,12 @@ def test_backfill_restores_a_session_detected_from_parquet(tmp_path):
     assert forced[0].updated
 
 
-def test_backfill_clears_a_stale_guess_when_nothing_fits(tmp_path):
+def test_backfill_clears_a_stale_guess_when_nothing_fits(tmp_path, monkeypatch):
     import asyncio
 
+    # Pretend the SUGO row was never learned, so nothing in the table fits this lap.
+    without_sugo = tuple(t for t in load_tracks() if t.id != SUGO)
+    monkeypatch.setattr("those_who_run.trackdetect.load_tracks", lambda: without_sugo)
     store = SessionStore(tmp_path)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
     frames = list(read_recording(UNKNOWN_FIXTURE))

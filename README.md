@@ -89,6 +89,8 @@ is unchanged by the rebrand.
 | `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
+| `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
+| `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
 | `LOG_LEVEL` | `INFO` | |
 
 ## 🚩 Running
@@ -132,6 +134,18 @@ those-who-run record session.jsonl --ps5-ip 192.0.2.108
 
 # run the rules over it, printing callouts; optionally write WAVs to listen to
 those-who-run replay session.jsonl --wav-out ./out
+```
+
+On the NUC the engineer records on its own: with `GT7_RECORD_DIR` set, every
+outing (from leaving the menu to returning to it) becomes one
+`<dir>/<YYYYMMDD-HHMMSS>.jsonl.gz`, about 20 MB an hour, and only the newest
+`GT7_RECORD_KEEP` (20) files are kept. Cut a recording down to a test fixture
+with `thin`: it keeps every frame where a phase, lap, lap time, position or car
+count changed, the frames either side, and one frame per half second.
+
+```sh
+kubectl -n those-who-run cp those-who-run-xxxx:/data/recordings/20261016-193001.jsonl.gz ./outing.jsonl.gz
+those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl --start 120 --end 600
 ```
 
 Recordings are one `RaceState` JSON object per line, version-tagged, and do not

@@ -114,6 +114,8 @@ class Settings:
     idle_disconnect_secs: float
     telemetry_timeout_secs: float
     log_level: str
+    record_dir: Path | None = None
+    record_keep: int = 20
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -130,6 +132,8 @@ class Settings:
             idle_disconnect_secs=float(e.get("GT7_IDLE_DISCONNECT_SECS", "600")),
             telemetry_timeout_secs=float(e.get("GT7_TELEMETRY_TIMEOUT_SECS", "3")),
             log_level=e.get("LOG_LEVEL", "INFO").upper(),
+            record_dir=Path(e["GT7_RECORD_DIR"]) if e.get("GT7_RECORD_DIR") else None,
+            record_keep=int(e.get("GT7_RECORD_KEEP", "20")),
         )
 
     def require_live(self) -> None:

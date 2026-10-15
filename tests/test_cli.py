@@ -20,3 +20,11 @@ def test_replay_and_record_subcommands():
     assert r.recording == Path("x.jsonl") and r.wav_out == Path("o")
     c = build_parser().parse_args(["record", "y.jsonl", "--ps5-ip", "1.2.3.4", "--seconds", "30"])
     assert c.ps5_ip == "1.2.3.4" and c.seconds == 30
+
+
+def test_thin_subcommand():
+    t = build_parser().parse_args(
+        ["thin", "in.jsonl.gz", "out.jsonl", "--start", "10", "--end", "95"]
+    )
+    assert t.source == Path("in.jsonl.gz") and t.output == Path("out.jsonl")
+    assert (t.start, t.end, t.every) == (10, 95, 0.5)

@@ -21,7 +21,10 @@ def test_settings_from_env():
     assert s.discord_channel_id == 123
     assert s.metrics_port == 9000
     assert s.log_level == "DEBUG"
+    assert s.record_dir is None and s.record_keep == 20
     s.require_live()
+    s = Settings.from_env({"GT7_RECORD_DIR": "/data/recordings", "GT7_RECORD_KEEP": "5"})
+    assert str(s.record_dir) == "/data/recordings" and s.record_keep == 5
 
 
 def test_settings_missing_live_values():

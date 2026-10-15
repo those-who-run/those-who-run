@@ -11,6 +11,7 @@ from those_who_run.rules.lap_time import LapTimeRule
 from those_who_run.rules.position import PositionRule
 from those_who_run.rules.race_summary import RaceSummaryRule
 from those_who_run.rules.start_brief import StartBriefRule
+from those_who_run.rules.temps import TempsRule
 
 REGISTRY: dict[str, type[Rule]] = {
     LapTimeRule.name: LapTimeRule,
@@ -19,6 +20,7 @@ REGISTRY: dict[str, type[Rule]] = {
     PositionRule.name: PositionRule,
     StartBriefRule.name: StartBriefRule,
     RaceSummaryRule.name: RaceSummaryRule,
+    TempsRule.name: TempsRule,
 }
 
 
@@ -42,5 +44,6 @@ __all__ = [
     "RaceSummaryRule",
     "Rule",
     "StartBriefRule",
+    "TempsRule",
     "build_rules",
 ]

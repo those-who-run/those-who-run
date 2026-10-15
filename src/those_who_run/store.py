@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from those_who_run.state import RaceState, lap_completed, racing_frame
+from those_who_run.trackdetect import TrackMatch
 
 log = logging.getLogger(__name__)
 
@@ -174,6 +175,27 @@ def write_parquet(path: Path, rows: list[tuple[Any, ...]]) -> float:
     return time.perf_counter() - started
 
 
+def track_record(match: TrackMatch) -> dict[str, Any]:
+    """The detector verdict as stored in summary.json."""
+    return {
+        "id": match.track_id,
+        "name": match.name,
+        "confidence": match.confidence,
+        "evidence": match.evidence,
+        "candidates": [
+            {"id": c.track.id, "name": c.track.name, "fit": round(c.fit, 3), "line": c.line_crossed}
+            for c in match.candidates
+        ],
+    }
+
+
+def _ensure_column(db: sqlite3.Connection, table: str, column: str, decl: str) -> None:
+    """Additive schema migration: older index files predate the column."""
+    cols = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def session_type(state: RaceState) -> str:
     if state.is_race:
         return "race"
@@ -193,6 +215,7 @@ class Session:
     lap_start_fuel: float
     buffer: list[tuple[Any, ...]] = field(default_factory=list)
     laps: list[dict[str, Any]] = field(default_factory=list)
+    track: dict[str, Any] | None = None  # detector verdict, see SessionStore.set_track
 
 
 class SessionStore:
@@ -203,6 +226,7 @@ class SessionStore:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._db = sqlite3.connect(self.data_dir / "index.sqlite", check_same_thread=False)
         self._db.executescript(_SCHEMA)
+        _ensure_column(self._db, "sessions", "track_confidence", "TEXT")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
         self._pending: list[Future[float]] = []
@@ -245,7 +269,7 @@ class SessionStore:
             dir=sdir,
             started_at=self.clock(),
             type=session_type(state),
-            track_id=state.track_id,
+            track_id=None,  # set by the detector, see set_track
             car_code=state.car_code,
             total_laps=state.total_laps,
             fuel_at_start=state.fuel_level,
@@ -258,21 +282,33 @@ class SessionStore:
                 session_id,
                 self.session.started_at,
                 self.session.type,
-                state.track_id,
+                None,
                 state.car_code,
                 state.total_laps,
             ),
         )
         self._db.commit()
         log.info(
-            "session %s started (%s, track %s, car %s, %s laps)",
+            "session %s started (%s, car %s, %s laps)",
             session_id,
             self.session.type,
-            state.track_id,
             state.car_code,
             state.total_laps,
         )
         return self.session
+
+    def set_track(self, match: TrackMatch) -> None:
+        """Record the track detector's verdict for the open session."""
+        s = self.session
+        if s is None:
+            return
+        s.track_id = match.track_id
+        s.track = track_record(match)
+        self._db.execute(
+            "UPDATE sessions SET track_id = ?, track_confidence = ? WHERE id = ?",
+            (match.track_id, match.confidence, s.session_id),
+        )
+        self._db.commit()
 
     def observe(self, prev: RaceState | None, state: RaceState) -> None:
         s = self.session
@@ -280,8 +316,6 @@ class SessionStore:
             return
         if state.in_race or racing_frame(prev, state):
             s.buffer.append(frame_row(state))
-        if s.track_id is None and state.track_id is not None:
-            s.track_id = state.track_id  # detected a lap in
         if lap_completed(prev, state):
             assert prev is not None
             self._flush_lap(prev.current_lap, state, complete=True)
@@ -354,6 +388,7 @@ class SessionStore:
             "started_at": s.started_at,
             "ended_at": self.clock(),
             "track_id": s.track_id,
+            "track": s.track,
             "car_code": s.car_code,
             "total_laps": s.total_laps,
             "laps_completed": len(completed),

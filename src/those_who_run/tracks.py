@@ -27,6 +27,7 @@ class Track:
     direction: str | None  # PX/NX/PZ/NZ: sign of travel across the line, or None
     line: tuple[Point, Point] | None
     box: Box | None
+    length_m: float | None = None  # lap length when known; separates layouts with one box
 
     @property
     def has_geometry(self) -> bool:
@@ -51,7 +52,15 @@ def _parse(row: dict[str, str]) -> Track:
     # The source table calls the z axis "Y"; normalise so the names match RaceState.
     if direction in ("PY", "NY"):
         direction = direction[0] + "Z"
-    return Track(id=int(row["id"]), name=row["name"], direction=direction, line=line, box=box)
+    length = row.get("length_m", "").strip()
+    return Track(
+        id=int(row["id"]),
+        name=row["name"],
+        direction=direction,
+        line=line,
+        box=box,
+        length_m=float(length) if length else None,
+    )
 
 
 @functools.cache

@@ -87,6 +87,8 @@ class Engine:
             self.recorder.observe(prev, state)
             if race_ended(prev, state) and self.recorder.session is not None:
                 log.info("race end at lap %d", state.current_lap)
+                if self.track is not None and self.tracks.match.decision == self.track.decision:
+                    self.recorder.set_track(self.tracks.match)  # final candidates and fit
                 self.recorder.end_session(state)
                 self.track = None
 

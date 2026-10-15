@@ -18,7 +18,10 @@ independent physical facts, each cheap to check on every frame:
    drives beyond the shorter layout.
 3. **Finish line crossed, in the right direction.** The decisive fact, but it
    only arrives at the end of the first lap. Reverse layouts share a line and
-   a box with their forward twin and differ only here.
+   a box with their forward twin and differ only here. Two witnesses: GT7's
+   own lap counter (when it increments the car is on the line, whatever the
+   table says) and the car's path cutting the table's segment, widened to
+   span the track because the recorded segments are only a car's width.
 
 Ranking: layouts whose line has been crossed outrank the rest; among those,
 higher overlap between the driven box and the layout's box wins. Confidence
@@ -42,6 +45,8 @@ Confidence = Literal["none", "ambiguous", "probable", "confirmed"]
 CONFIDENCE_RANK: dict[str, int] = {"none": 0, "ambiguous": 1, "probable": 2, "confirmed": 3}
 
 POSITION_PHASES = frozenset({Phase.AT_TRACK, Phase.IN_RACE, Phase.FINISHED})
+LAP_PHASES = frozenset({Phase.IN_RACE, Phase.FINISHED})  # lap counter is meaningful
+MAX_REPORTED_CANDIDATES = 8  # an unanchored pool can be most of the table
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,9 +74,11 @@ class TrackMatch:
         return tuple(c.track.id for c in self.candidates)
 
     @property
-    def decision(self) -> tuple[int | None, str, tuple[int, ...]]:
-        """What callers act on. Fit values and wording change every frame; this does not."""
-        return (self.track_id, self.confidence, self.candidate_ids)
+    def decision(self) -> tuple[int | None, str]:
+        """What callers act on: the track and how sure we are. Candidate lists, fit
+        values and wording shift every frame while the pool narrows; those are
+        visible on ``match`` but do not count as a change."""
+        return (self.track_id, self.confidence)
 
 
 NO_MATCH = TrackMatch(None, None, "none", (), "no position data yet")
@@ -86,6 +93,10 @@ class TrackDetector:
         teleport_m: float = 100.0,
         min_distance_m: float = 500.0,
         dominance: float = 0.05,
+        line_radius_m: float = 150.0,
+        line_half_width_m: float = 50.0,
+        min_fit: float = 0.5,
+        length_tolerance: float = 0.08,
     ) -> None:
         self.tracks = tuple(t for t in (tracks or load_tracks()) if t.has_geometry)
         self.box_tolerance = box_tolerance_m
@@ -93,15 +104,28 @@ class TrackDetector:
         self.teleport = teleport_m
         self.min_distance = min_distance_m
         self.dominance = dominance
+        self.line_radius = line_radius_m
+        self.min_fit = min_fit
+        self.length_tolerance = length_tolerance
+        # Table lines are two frames of one car's crossing, 7 to 68 m long, and
+        # can sit a track-width away from where the next driver crosses.
+        self._lines: dict[int, tuple[Point, Point]] = {
+            t.id: widen_segment(t.line[0], t.line[1], line_half_width_m)  # type: ignore[index]
+            for t in self.tracks
+        }
         self.reset()
 
     def reset(self) -> None:
         """Forget everything: call on a race restart (the car is teleported to the grid)."""
         self._pending_reset = False
-        self._start: Point | None = None
+        self._anchors: list[Point] = []  # places the car is known to be on the circuit
         self._prev: Point | None = None
         self._box: Box | None = None
         self._distance = 0.0
+        self._last_lap: int | None = None
+        self._lap_distance = 0.0  # metres since the last lap boundary
+        self._lap_complete = False  # a full lap has been driven: the box is the lap's box
+        self._lap_length: float | None = None  # length of the last completed lap
         self._crossed: set[int] = set()
         self._alive: set[int] = {t.id for t in self.tracks}
         self._match: TrackMatch = NO_MATCH
@@ -114,6 +138,11 @@ class TrackDetector:
     def distance_m(self) -> float:
         """Metres driven since reset, teleports excluded."""
         return self._distance
+
+    @property
+    def lap_length_m(self) -> float | None:
+        """Length of the last completed lap, once the lap counter has closed one."""
+        return self._lap_length
 
     # feeding
 
@@ -132,12 +161,23 @@ class TrackDetector:
             return None  # paused: the car is where it was
         if self._pending_reset:
             self.reset()
-        return self.observe_point(state.pos_x, state.pos_z)
+        # The chequered flag is a lap boundary too: a lap-count race reports
+        # total_laps + 1 with the FINISHED phase on the frame that closes the last lap.
+        lap = state.current_lap if state.phase in LAP_PHASES else None
+        return self.observe_point(state.pos_x, state.pos_z, lap=lap)
 
-    def observe_point(self, x: float, z: float) -> TrackMatch | None:
+    def observe_point(self, x: float, z: float, lap: int | None = None) -> TrackMatch | None:
+        """Feed one position; ``lap`` is GT7's lap counter while racing, else None.
+
+        Anchors (positions known to be on the circuit, used to find layouts
+        whose finish line is close by): the first frame, the first racing
+        frame, and every point where the lap counter incremented. The first
+        frame alone is not enough: GT7's pre-session screens report positions
+        that are not the car's.
+        """
         p = (x, z)
-        if self._start is None:
-            self._start = p
+        if not self._anchors:
+            self._anchors.append(p)
         if self._box is None:
             self._box = (x, z, x, z)
         else:
@@ -147,13 +187,23 @@ class TrackDetector:
                 max(self._box[2], x),
                 max(self._box[3], z),
             )
+        moved = False
         if self._prev is not None:
             step = math.hypot(x - self._prev[0], z - self._prev[1])
             if step < self.teleport:
+                moved = True
                 self._distance += step
+                self._lap_distance += step
                 self._note_crossings(self._prev, p)
             # else: reset to pits, restart, or a replayed results screen; the
             # segment is not a path the car drove.
+        if lap is not None:
+            if self._last_lap is None and lap >= 1:
+                self._anchors.append(p)
+            elif self._last_lap is not None and lap > self._last_lap >= 1 and moved:
+                assert self._prev is not None
+                self._lap_boundary(self._prev, p)
+            self._last_lap = lap
         self._prev = p
         self._eliminate()
         new = self._decide()
@@ -164,15 +214,49 @@ class TrackDetector:
     # evidence
 
     def _note_crossings(self, a: Point, b: Point) -> None:
+        direction = travel_direction(a, b)
         for t in self.tracks:
             if t.id in self._crossed or t.id not in self._alive:
                 continue
-            assert t.line is not None
-            if (
-                segment_crosses(a, b, t.line[0], t.line[1])
-                and travel_direction(a, b) == t.direction
-            ):
+            c, d = self._lines[t.id]
+            if direction == t.direction and segment_crosses(a, b, c, d):
                 self._crossed.add(t.id)
+
+    def _lap_boundary(self, a: Point, b: Point) -> None:
+        """GT7 incremented the lap counter between a and b: the car is on the finish line.
+
+        Every live layout whose line is within ``line_radius`` and faces the
+        way the car is going has been crossed; every other live layout cannot
+        be this circuit and is dropped. This is what makes a short or
+        misplaced table segment survivable.
+
+        The lap just closed is a whole lap of this circuit, so the driven box
+        is now the lap's box and the distance since the previous boundary is
+        its length. A layout whose box the lap fills poorly is a neighbour in
+        coordinate space, not the circuit: a new track's line often lands near
+        a known one's, because most layouts sit near their own origin. A known
+        lap length that is off rules a layout out the same way.
+        """
+        direction = travel_direction(a, b)
+        self._anchors.append(b)
+        assert self._box is not None
+        for t in self.tracks:
+            if t.id not in self._alive:
+                continue
+            assert t.line is not None and t.box is not None
+            near = distance_to_segment(b, *t.line) <= self.line_radius
+            if not (near and direction == t.direction):
+                self._alive.discard(t.id)
+                continue
+            self._crossed.add(t.id)
+            if box_iou(self._box, t.box) < self.min_fit or (
+                t.length_m
+                and abs(self._lap_distance - t.length_m) > self.length_tolerance * t.length_m
+            ):
+                self._alive.discard(t.id)
+        self._lap_complete = True
+        self._lap_length = self._lap_distance
+        self._lap_distance = 0.0
 
     def _eliminate(self) -> None:
         assert self._box is not None
@@ -182,12 +266,37 @@ class TrackDetector:
                 self._alive.discard(t.id)
 
     def _decide(self) -> TrackMatch:
-        assert self._box is not None and self._start is not None
+        assert self._box is not None and self._anchors
         alive = [t for t in self.tracks if t.id in self._alive]
         if not alive:
-            return TrackMatch(None, None, "none", (), "car left every layout's bounds")
-        near = [t for t in alive if distance_to_segment(self._start, *t.line) <= self.start_radius]  # type: ignore[misc]
-        pool = near or alive
+            return TrackMatch(None, None, "none", (), "no layout fits the lap counter and path")
+        near = [
+            t
+            for t in alive
+            if min(distance_to_segment(an, *t.line) for an in self._anchors)  # type: ignore[misc]
+            <= self.start_radius
+        ]
+        crossed_any = [t for t in alive if t.id in self._crossed]
+        # Anchor the candidate pool on something physical: a finish line close
+        # to where the car has been, or a line actually crossed. Without
+        # either, dozens of unrelated layouts contain the path.
+        if near:
+            pool = near
+        elif crossed_any:
+            pool = crossed_any
+        else:
+            cands = tuple(
+                sorted(
+                    (Candidate(t, False, box_iou(self._box, t.box)) for t in alive),  # type: ignore[arg-type]
+                    key=lambda c: c.rank,
+                    reverse=True,
+                )
+            )[:MAX_REPORTED_CANDIDATES]
+            why = (
+                f"no finish line within {self.start_radius:.0f} m of where the car has been"
+                f" and none crossed yet; {len(alive)} layouts contain the path"
+            )
+            return TrackMatch(None, None, "ambiguous", cands, why)
         cands = sorted(
             (
                 Candidate(t, t.id in self._crossed, box_iou(self._box, t.box))  # type: ignore[arg-type]
@@ -201,25 +310,26 @@ class TrackDetector:
         if crossed:
             unique = len(crossed) == 1
             dominant = len(crossed) > 1 and crossed[0].fit - crossed[1].fit >= self.dominance
-            if unique or dominant:
+            if (unique or dominant) and self._lap_complete:
                 conf: Confidence = "confirmed"
-                why = "finish line crossed in the right direction"
-                if best.fit >= 0.1:
-                    why += f", layout bounds fit {best.fit:.2f}"
+                why = f"finish line crossed, a full lap fits the layout ({best.fit:.2f})"
                 if dominant:
                     why += f"; next best {crossed[1].track.name} fits {crossed[1].fit:.2f}"
+            elif unique or dominant:
+                conf = "probable"
+                why = "finish line crossed in the right direction, no full lap yet"
             else:
                 conf = "ambiguous"
                 names = ", ".join(c.track.name for c in crossed[1:])
                 why = f"finish line shared with {names}; bounds do not separate them"
-        elif len(cands) == 1 and self._distance >= self.min_distance:
-            conf = "probable"
+            return TrackMatch(best.track.id, best.track.name, conf, tuple(cands), why)
+        if len(cands) == 1 and self._distance >= self.min_distance:
             km = self._distance / 1000
             why = f"only layout containing the path after {km:.1f} km, line not yet crossed"
-        else:
-            conf = "ambiguous"
-            why = f"{len(cands)} layouts still fit, line not yet crossed"
-        return TrackMatch(best.track.id, best.track.name, conf, tuple(cands), why)
+            return TrackMatch(best.track.id, best.track.name, "probable", tuple(cands), why)
+        # Several layouts and no crossing: naming one would be a guess.
+        why = f"{len(cands)} layouts near the start still fit, line not yet crossed"
+        return TrackMatch(None, None, "ambiguous", tuple(cands[:MAX_REPORTED_CANDIDATES]), why)
 
 
 # geometry
@@ -273,6 +383,20 @@ def travel_direction(a: Point, b: Point) -> str | None:
     if dz < 0:
         return "NZ"
     return None
+
+
+def widen_segment(a: Point, b: Point, half_width: float) -> tuple[Point, Point]:
+    """The segment a-b extended along its own direction to 2*half_width long, same midpoint."""
+    mx, mz = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+    dx, dz = b[0] - a[0], b[1] - a[1]
+    length = math.hypot(dx, dz)
+    if length == 0:
+        return a, b
+    ux, uz = dx / length, dz / length
+    return (mx - ux * half_width, mz - uz * half_width), (
+        mx + ux * half_width,
+        mz + uz * half_width,
+    )
 
 
 def distance_to_segment(p: Point, a: Point, b: Point) -> float:

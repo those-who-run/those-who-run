@@ -13,13 +13,15 @@ class Callout:
     priority: int  # lower is more urgent
     rule: str
     created_at: float  # seconds on the same clock as RaceState.t
+    max_age: float | None = None  # overrides the queue's staleness limit for this callout
 
 
 class CalloutQueue:
     """Priority queue with staleness. Lower priority value speaks first; ties by age.
 
     ``max_age`` of None disables staleness, which replay mode uses so every
-    callout from a recording is emitted.
+    callout from a recording is emitted. A callout's own ``max_age`` replaces the
+    queue's limit, so a summary that waits behind the final lap time survives.
     """
 
     def __init__(self, max_age: float | None = 8.0) -> None:
@@ -40,7 +42,8 @@ class CalloutQueue:
         """Return the most urgent fresh callout, discarding stale ones on the way."""
         while self._heap:
             _, _, _, callout = heapq.heappop(self._heap)
-            if self.max_age is not None and now - callout.created_at > self.max_age:
+            limit = self.max_age if callout.max_age is None else callout.max_age
+            if self.max_age is not None and now - callout.created_at > limit:
                 self.dropped += 1
                 continue
             return callout

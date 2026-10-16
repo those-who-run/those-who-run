@@ -73,6 +73,14 @@ def build_parser() -> argparse.ArgumentParser:
     tl.add_argument("source", type=Path, help="a .jsonl recording or a sessions/<id> directory")
     tl.add_argument("--id", type=int, default=0, help="track id for the printed CSV row")
     tl.add_argument("--name", default="NAME", help="track name for the printed CSV row")
+
+    cr = sub.add_parser("cars", help="GT7 car names by car code")
+    crs = cr.add_subparsers(dest="cars_command", required=True)
+    crs.add_parser("list", help="print the car table")
+    cf = crs.add_parser("find", help="cars whose maker or model contains every word given")
+    cf.add_argument("text", nargs="+")
+    cn = crs.add_parser("name", help="the name for one car code")
+    cn.add_argument("code", type=int)
     return p
 
 
@@ -97,12 +105,26 @@ def main(argv: list[str] | None = None) -> int:
             return run_thin(args.source, args.output, args.start, args.end, args.every)
         if args.command == "tracks":
             return run_tracks(settings, args)
+        if args.command == "cars":
+            return run_cars(args)
     except ConfigError as exc:
         log.error("configuration error: %s", exc)
         return 2
     except KeyboardInterrupt:
         return 130
     return 1
+
+
+def run_cars(args: argparse.Namespace) -> int:
+    from those_who_run.cars import car_name, find_cars, load_cars
+
+    if args.cars_command == "name":
+        print(car_name(args.code) or "none")
+        return 0
+    cars = load_cars() if args.cars_command == "list" else find_cars(" ".join(args.text))
+    for c in cars:
+        print(f"{c.id:5d}  {c.full_name}")
+    return 0 if cars else 1
 
 
 def run_tracks(settings: Settings, args: argparse.Namespace) -> int:

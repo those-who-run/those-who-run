@@ -235,6 +235,17 @@ the printed row to `src/those_who_run/data/tracks.csv`. Learned rows use ids
 from 100001 up, since GT7's own ids are not visible in telemetry. Sportsland
 SUGO (100001) was added this way from its first lap on 2026-10-15.
 
+## Cars
+
+GT7 sends a car code, not a name. `src/those_who_run/data/cars.csv` maps codes
+to maker and model (590 cars, from ddm999/gt7info, MIT-0); a car newer than the
+table shows as "car <code>". Session summaries carry `car_name`.
+
+```sh
+those-who-run cars find rx vision   # codes and names matching every word
+those-who-run cars name 3339        # Subaru BRZ Drift Car '17
+```
+
 ## Session kind
 
 GT7 does not say what mode it is in either. The engineer sorts every session
@@ -370,4 +381,6 @@ Learned from recordings, and encoded in `state.py`:
 ## Licence
 
 GPL-3.0-only. gt-telem and Piper are GPL-3.0, which this project inherits.
+The car table comes from ddm999/gt7info under MIT-0, and the track table from
+gt-telem and Bornhall/gt7telemetry.
 走り屋 is used here in its plain sense, people who run, and claims nothing else.

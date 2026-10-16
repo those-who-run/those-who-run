@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from those_who_run.cars import car_name
 from those_who_run.sessionkind import SessionKind
 from those_who_run.state import RaceState, lap_completed, racing_frame
 from those_who_run.trackdetect import TrackMatch
@@ -308,10 +309,10 @@ class SessionStore:
         )
         self._db.commit()
         log.info(
-            "session %s started (%s, car %s, %s laps)",
+            "session %s started (%s, %s, %s laps)",
             session_id,
             self.session.type,
-            state.car_code,
+            car_name(state.car_code) or "no car",
             state.total_laps,
         )
         return self.session
@@ -423,6 +424,7 @@ class SessionStore:
             "track": s.track,
             "session_kind": s.kind,
             "car_code": s.car_code,
+            "car_name": car_name(s.car_code),
             "total_laps": s.total_laps,
             "laps_completed": len(completed),
             "best_lap_ms": min(times) if times else None,

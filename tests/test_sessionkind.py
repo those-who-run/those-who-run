@@ -211,5 +211,6 @@ def test_engine_records_the_kind_in_the_session_metrics_and_rules(tmp_path):
     summary = json.loads(next((tmp_path / "sessions").glob("*/summary.json")).read_text())
     assert summary["session_kind"]["kind"] == "lap_race"
     assert summary["session_kind"]["fuel_use"] is True
+    assert summary["car_name"] == "Honda Civic Si Group A version '87"
     labels = b'fuel_use="on",kind="lap_race",start="rolling"'
     assert b"gt7_session_info{" + labels + b"} 1.0" in metrics.render()

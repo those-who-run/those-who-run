@@ -26,6 +26,7 @@ import json
 import logging
 import sqlite3
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,7 +34,7 @@ from typing import Any
 
 from those_who_run.cars import car_name
 from those_who_run.sessionkind import SessionKind
-from those_who_run.state import RaceState, lap_completed, racing_frame
+from those_who_run.state import Phase, RaceState, lap_completed, racing_frame
 from those_who_run.trackdetect import TrackMatch
 
 log = logging.getLogger(__name__)
@@ -197,6 +198,7 @@ def track_record(match: TrackMatch) -> dict[str, Any]:
         "id": match.track_id,
         "name": match.name,
         "confidence": match.confidence,
+        "family": match.family,
         "evidence": match.evidence,
         "candidates": [
             {"id": c.track.id, "name": c.track.name, "fit": round(c.fit, 3), "line": c.line_crossed}
@@ -233,10 +235,19 @@ class Session:
     laps: list[dict[str, Any]] = field(default_factory=list)
     track: dict[str, Any] | None = None  # detector verdict, see SessionStore.set_track
     kind: dict[str, Any] | None = None  # session kind, see SessionStore.set_kind
+    fuel_burned: float = 0.0  # every drop added up, so a refuel does not cancel a stint
+    last_fuel: float | None = None
+    last_position: int | None = None  # a quit's last frame has no position
 
 
 class SessionStore:
-    def __init__(self, data_dir: Path, clock: Any = time.time) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        clock: Any = time.time,
+        on_end: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        self.on_end = on_end  # called with each summary once it is written
         self.data_dir = Path(data_dir)
         self.clock = clock
         self.session: Session | None = None
@@ -247,6 +258,7 @@ class SessionStore:
         _ensure_column(self._db, "sessions", "session_kind", "TEXT")
         _ensure_column(self._db, "sessions", "fuel_use", "INTEGER")
         _ensure_column(self._db, "sessions", "start_type", "TEXT")
+        _ensure_column(self._db, "sessions", "posted_at", "REAL")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
         self._pending: list[Future[float]] = []
@@ -330,6 +342,14 @@ class SessionStore:
         )
         self._db.commit()
 
+    def mark_posted(self, session_id: str, at: float | None = None) -> None:
+        """Record that the session's results card reached Discord."""
+        self._db.execute(
+            "UPDATE sessions SET posted_at = ? WHERE id = ?",
+            (self.clock() if at is None else at, session_id),
+        )
+        self._db.commit()
+
     def set_kind(self, kind: SessionKind) -> None:
         """Record the session kind for the open session."""
         s = self.session
@@ -349,6 +369,11 @@ class SessionStore:
             return
         if state.in_race or racing_frame(prev, state):
             s.buffer.append(frame_row(state))
+            if s.last_fuel is not None and state.fuel_level < s.last_fuel:
+                s.fuel_burned += s.last_fuel - state.fuel_level
+            s.last_fuel = state.fuel_level
+            if state.position is not None:
+                s.last_position = state.position
         if lap_completed(prev, state):
             assert prev is not None
             self._flush_lap(prev.current_lap, state, complete=True)
@@ -415,6 +440,7 @@ class SessionStore:
         self.wait()  # the summary marks the session directory as complete
         completed = [x for x in s.laps if x["complete"]]
         times = [x["lap_time_ms"] for x in completed if x["lap_time_ms"]]
+        finished = state.phase is Phase.FINISHED
         summary = {
             "session_id": s.session_id,
             "type": s.type,
@@ -428,7 +454,12 @@ class SessionStore:
             "total_laps": s.total_laps,
             "laps_completed": len(completed),
             "best_lap_ms": min(times) if times else None,
-            "final_position": state.position,
+            "finished": finished,  # the chequered flag, not a quit
+            "total_time_ms": sum(times) if finished and times else None,
+            "final_position": state.position or s.last_position,
+            "total_cars": state.total_cars if state.total_cars > 0 else None,
+            "fuel_burned": round(s.fuel_burned, 3),
+            "fuel_capacity": state.fuel_capacity,
             "fuel_at_start": s.fuel_at_start,
             "fuel_at_end": state.fuel_level,
             "fuel_used": round(sum(x["fuel_used"] for x in s.laps), 3),
@@ -451,4 +482,9 @@ class SessionStore:
         self._db.commit()
         log.info("session %s ended after %d laps", s.session_id, len(completed))
         self.session = None
+        if self.on_end is not None:
+            try:
+                self.on_end(summary)
+            except Exception:  # noqa: BLE001
+                log.exception("session end hook failed for %s", s.session_id)
         return s.dir / "summary.json"

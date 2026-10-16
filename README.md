@@ -110,6 +110,7 @@ is unchanged by the rebrand.
 | `GT7_DATA_DIR` | `./data` | Lap and session output. |
 | `GT7_VOICE_MODEL` | `voices/en_GB-alba-medium.onnx` | Piper voice. |
 | `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
+| `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
@@ -246,6 +247,25 @@ those-who-run cars find rx vision   # codes and names matching every word
 those-who-run cars name 3339        # Subaru BRZ Drift Car '17
 ```
 
+## Results channel
+
+Set `DISCORD_RESULTS_CHANNEL_ID` to a text channel and the bot posts a card for
+every session with at least one full lap: track and kind in the title
+("Sportsland SUGO · 5-lap race"), the result ("🚩 Finished P3 of 20 in
+8:14.302", "Retired on lap 2 of 3", "3 laps"), best lap with its lap number,
+car and fuel used. Position only appears where the engineer would say it (a
+field GT7 flags). Cards are queued and retried three times, so Discord never
+holds up the engineer; `gt7_results_posts_total{result}` counts ok, failed and
+skipped, and the index records `posted_at`. Unset, nothing is posted.
+
+The voice bot posts them, so it needs View Channel, Send Messages and Embed
+Links on that channel. To post or re-post a stored session by hand:
+
+```sh
+those-who-run post 20261016-190000 --dry-run   # print the card
+those-who-run post 20261016-190000             # send it
+```
+
 ## Session kind
 
 GT7 does not say what mode it is in either. The engineer sorts every session
@@ -309,7 +329,7 @@ Metric names keep the `gt7_` prefix because they describe GT7 telemetry:
 `gt7_current_lap`, `gt7_total_laps`, `gt7_fuel_level`, `gt7_fuel_capacity`,
 `gt7_fuel_laps_remaining`, `gt7_last_lap_seconds`, `gt7_best_lap_seconds`,
 `gt7_speed_kph`, `gt7_speech_seconds`, `gt7_track_id`, `gt7_track_info`,
-`gt7_session_info{kind,fuel_use,start}`.
+`gt7_session_info{kind,fuel_use,start}`, `gt7_results_posts_total{result}`.
 
 `GET /healthz` returns JSON with telemetry and voice connection state, the
 detected track and the session kind.

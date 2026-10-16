@@ -80,6 +80,11 @@ class DiscordPlayer:
                 await self._client_task
 
     @property
+    def client(self) -> discord.Client:
+        """The logged-in client, shared with the results poster."""
+        return self._client
+
+    @property
     def connected(self) -> bool:
         return self._vc is not None and self._vc.is_connected()
 

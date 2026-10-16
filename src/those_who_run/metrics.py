@@ -50,6 +50,12 @@ class Metrics:
         self.best_lap_seconds = Gauge("gt7_best_lap_seconds", "Best lap time", registry=r)
         self.speed_kph = Gauge("gt7_speed_kph", "Speed", registry=r)
         self.track_id = Gauge("gt7_track_id", "Detected track id (0 = unknown)", registry=r)
+        self.results_posts_total = Counter(
+            "gt7_results_posts_total",
+            "Results cards: ok, failed (after retries) or skipped (no full lap)",
+            ["result"],
+            registry=r,
+        )
         self.session_info = Gauge(
             "gt7_session_info",
             "Detected session kind, 1 with kind, fuel use and start type as labels",

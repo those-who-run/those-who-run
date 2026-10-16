@@ -134,6 +134,7 @@ class Settings:
     log_level: str
     record_dir: Path | None = None
     record_keep: int = 20
+    results_channel_id: int | None = None  # a text channel for results cards; None is off
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -142,7 +143,7 @@ class Settings:
         return cls(
             ps5_ip=e.get("GT7_PS5_IP") or None,
             discord_token=e.get("DISCORD_BOT_TOKEN") or None,
-            discord_channel_id=_int_or_none(e.get("DISCORD_VOICE_CHANNEL_ID")),
+            discord_channel_id=_int_or_none(e, "DISCORD_VOICE_CHANNEL_ID"),
             rules_file=Path(rules_file) if rules_file else None,
             data_dir=Path(e.get("GT7_DATA_DIR", "./data")),
             voice_model=Path(e.get("GT7_VOICE_MODEL", "voices/en_GB-alba-medium.onnx")),
@@ -152,6 +153,7 @@ class Settings:
             log_level=e.get("LOG_LEVEL", "INFO").upper(),
             record_dir=Path(e["GT7_RECORD_DIR"]) if e.get("GT7_RECORD_DIR") else None,
             record_keep=int(e.get("GT7_RECORD_KEEP", "20")),
+            results_channel_id=_int_or_none(e, "DISCORD_RESULTS_CHANNEL_ID") or None,
         )
 
     def require_live(self) -> None:
@@ -168,13 +170,14 @@ class Settings:
             raise ConfigError(f"missing required environment variables: {', '.join(missing)}")
 
 
-def _int_or_none(value: str | None) -> int | None:
+def _int_or_none(env: Mapping[str, str], name: str) -> int | None:
+    value = env.get(name)
     if value is None or value == "":
         return None
     try:
         return int(value)
     except ValueError as exc:
-        raise ConfigError(f"DISCORD_VOICE_CHANNEL_ID must be an integer, got {value!r}") from exc
+        raise ConfigError(f"{name} must be an integer, got {value!r}") from exc
 
 
 def deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:

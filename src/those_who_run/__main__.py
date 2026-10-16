@@ -81,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     cf.add_argument("text", nargs="+")
     cn = crs.add_parser("name", help="the name for one car code")
     cn.add_argument("code", type=int)
+
+    po = sub.add_parser(
+        "post", help="post a stored session's results card to DISCORD_RESULTS_CHANNEL_ID"
+    )
+    po.add_argument("session_id", help="a directory name under GT7_DATA_DIR/sessions")
+    po.add_argument("--dry-run", action="store_true", help="print the card, post nothing")
     return p
 
 
@@ -107,12 +113,49 @@ def main(argv: list[str] | None = None) -> int:
             return run_tracks(settings, args)
         if args.command == "cars":
             return run_cars(args)
+        if args.command == "post":
+            return asyncio.run(run_post(settings, args.session_id, args.dry_run))
     except ConfigError as exc:
         log.error("configuration error: %s", exc)
         return 2
     except KeyboardInterrupt:
         return 130
     return 1
+
+
+async def run_post(settings: Settings, session_id: str, dry_run: bool) -> int:
+    import json
+
+    import discord
+
+    from those_who_run.results import ResultsPoster, build_card
+
+    path = settings.data_dir / "sessions" / session_id / "summary.json"
+    if not path.exists():
+        raise ConfigError(f"{path}: no such session summary")
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    card = build_card(summary)
+    if card is None:
+        print("no full lap: nothing to post")
+        return 1
+    print(card.title)
+    print(card.description)
+    for name, value in card.fields:
+        print(f"  {name}: {value}")
+    if dry_run:
+        return 0
+    if not settings.discord_token or not settings.results_channel_id:
+        raise ConfigError("posting needs DISCORD_BOT_TOKEN and DISCORD_RESULTS_CHANNEL_ID")
+    client = discord.Client(intents=discord.Intents.none())
+    await client.login(settings.discord_token)  # HTTP only: no gateway needed to post
+    try:
+        store = SessionStore(settings.data_dir)
+        poster = ResultsPoster(client, settings.results_channel_id, on_posted=store.mark_posted)
+        ok = await poster.post(session_id, card)
+        store.close()
+    finally:
+        await client.close()
+    return 0 if ok else 1
 
 
 def run_cars(args: argparse.Namespace) -> int:
@@ -315,6 +358,19 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
             },
         }
 
+    poster = None
+    if settings.results_channel_id:
+        from those_who_run.results import ResultsPoster
+
+        poster = ResultsPoster(
+            player.client,
+            settings.results_channel_id,
+            on_posted=recorder.mark_posted,
+            on_result=lambda r: metrics.results_posts_total.labels(r).inc(),
+        )
+        recorder.on_end = poster.submit
+        log.info("results cards go to channel %s", settings.results_channel_id)
+
     http = HealthServer(settings.metrics_port, metrics, health)
     http.start()
     stop = asyncio.Event()
@@ -372,6 +428,8 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
         asyncio.create_task(speak(), name="speak"),
         asyncio.create_task(watchdog(), name="watchdog"),
     ]
+    if poster is not None:
+        tasks.append(asyncio.create_task(poster.run(), name="results"))
     try:
         await stop.wait()
     finally:
@@ -382,6 +440,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
         await player.close()
         await telem.stop()
         http.stop()
+        recorder.on_end = None  # the loop is going: no card for a session cut short here
         if recorder.session is not None and engine.prev is not None:
             log.info("closing session %s", recorder.session.session_id)
             recorder.end_session(engine.prev)

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from tests.conftest import make_state
 from those_who_run.rules import build_rules
 from those_who_run.rules.final_lap import FinalLapRule
@@ -666,3 +668,41 @@ def test_variants_rotate_without_repeating(sim):
         said += run_rule(rule, sim(total_laps=2).race([100000] * 2).frames)
     assert set(said) == {"Final lap.", "Last lap now.", "One lap to go."}
     assert all(a != b for a, b in zip(said, said[1:], strict=False))
+
+
+def test_fuel_is_not_measured_across_a_telemetry_gap():
+    """A lap crossed while the PS5 was offline reads heavy, and the lap after it
+    light (gap simulation on the Suzuka race, 2026-10-16): neither is measured."""
+    rule = FuelRule()
+
+    def lap(t, lap_no, fuel):
+        return make_state(t=t, current_lap=lap_no, total_laps=10, fuel_level=fuel)
+
+    frames = [
+        lap(0, 1, 100.0),
+        lap(99.9, 1, 90.1),
+        lap(100.0, 2, 90.0),  # 10 a lap
+        lap(190.0, 2, 81.0),
+        lap(200.0, 3, 79.0),  # crossed inside a 10 s hole: reads 11
+        lap(299.9, 3, 70.1),
+        lap(300.0, 4, 70.0),  # started inside the hole: reads 9
+        lap(399.9, 4, 60.1),
+        lap(400.0, 5, 60.0),
+    ]
+    prev = None
+    for f in frames:
+        rule.evaluate(prev, f)
+        prev = f
+    assert list(rule.consumption) == pytest.approx([10.0, 10.0])
+
+
+def test_fuel_is_measured_across_a_pause():
+    rule = FuelRule()
+    a = make_state(t=0, current_lap=1, total_laps=10, fuel_level=100.0)
+    rule.evaluate(None, a)
+    b = make_state(t=50, current_lap=1, total_laps=10, fuel_level=95.0)
+    rule.evaluate(a, b)
+    rule.on_bridge(Phase.PAUSED)  # the engine compares across the pause
+    c = make_state(t=200, current_lap=2, total_laps=10, fuel_level=90.0)
+    rule.evaluate(b, c)
+    assert list(rule.consumption) == pytest.approx([10.0])

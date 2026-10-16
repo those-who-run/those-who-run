@@ -411,6 +411,12 @@ Learned from recordings, and encoded in `state.py`:
 
 - GT7 only exposes your own car. There are no gaps to the cars around you.
 - Only the Discord send path is implemented. Spoken questions are a later phase.
+- If the PS5 drops off the network, the engineer says so after
+  `GT7_TELEMETRY_TIMEOUT_SECS` and again when packets return. The heartbeat
+  that keeps GT7 streaming goes out every 2 s and survives send errors, so the
+  stream resumes within a couple of seconds of the network. A lap crossed
+  during the gap, and the one after, are left out of the fuel average. The PS5
+  needs a fixed address (`GT7_PS5_IP`); a new DHCP lease ends the stream.
 
 ## Licence
 

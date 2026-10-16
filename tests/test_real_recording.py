@@ -82,7 +82,9 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
         "Timed race. P one of twenty.",  # the restart briefs again
         "Nurburgring twenty-four hour.",
         "Lap one. eight twenty point four.",
-        "Lap two. eight twenty point two. New best by zero point two.",
+        # GT7 left both lap 1s out of its best (out of the pits, then after the
+        # restart), so lap 2 has nothing to be measured against
+        "Lap two. eight twenty point two.",
         # no summary: the session was quit, not finished
     ]
     assert engine.races_started == 2

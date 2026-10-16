@@ -78,7 +78,9 @@ def build_card(summary: dict[str, Any]) -> Card | None:
             result += f", P{position}{of_cars}"
 
     fields: list[tuple[str, str]] = []
-    best_lap = _best_lap(summary.get("laps", []), skip_lap_1=kind == "lap_race")
+    best_lap = _best_lap(
+        summary.get("laps", []), kind == "lap_race", summary.get("gt7_best_lap_ms")
+    )
     if best_lap is not None:
         lap_no, best = best_lap
         fields.append(("Best lap", f"{race_time(best)} (lap {lap_no})"))
@@ -96,15 +98,24 @@ def build_card(summary: dict[str, Any]) -> Card | None:
         description=f"{brand.GLYPH_FLAG} {result}" if finished else result,
         fields=tuple(fields),
         colour=brand.ADVAN_RED if finished else brand.CARBON_GREY,
-        footer=f"{brand.NAME} {brand.KANJI} · session {summary.get('session_id', '?')}",
+        # Discord renders the timestamp in each viewer's time and ages it ("Today at",
+        # "Yesterday at", then the date). The session id stays in the logs.
+        footer=f"{brand.NAME} {brand.KANJI}",
         timestamp=datetime.fromtimestamp(started, UTC) if started else None,
     )
 
 
-def _best_lap(laps: list[dict[str, Any]], skip_lap_1: bool) -> tuple[int, int] | None:
-    """(lap, time) of the quickest complete lap. In a lap race lap 1 starts from the
-    grid or behind the pace and is skipped when there are others, as the spoken
-    summary does: at Suzuka East it was short, starting ahead of the line."""
+def _best_lap(
+    laps: list[dict[str, Any]], skip_lap_1: bool, gt7_best: int | None = None
+) -> tuple[int, int] | None:
+    """(lap, time) of the quickest lap. GT7's own best wins when the session has
+    one (it leaves out a start lap from a grid ahead of the line). Without it, the
+    quickest complete lap, skipping lap 1 of a lap race when there are others, as
+    the spoken summary does."""
+    if gt7_best:
+        lap_no = next((x["lap"] for x in laps if x.get("lap_time_ms") == gt7_best), None)
+        if lap_no is not None:
+            return lap_no, gt7_best
     timed = [
         (x["lap"], x["lap_time_ms"]) for x in laps if x.get("complete") and x.get("lap_time_ms")
     ]

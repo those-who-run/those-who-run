@@ -45,6 +45,11 @@ class Rule(ABC):
         ``last`` is the last driving frame. Callouts returned are queued."""
         return []
 
+    def on_finish(self, state: RaceState) -> list[Callout]:
+        """A timed race was finished at this crossing (lap races finish on the
+        FINISHED frame, which evaluate() sees). Callouts returned are queued."""
+        return []
+
     def has_field(self, state: RaceState) -> bool:
         """Other cars are racing for position, as far as we can be sure: GT7 flags
         cars on track and the session kind (once known) has a field. A time

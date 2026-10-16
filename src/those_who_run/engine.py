@@ -12,6 +12,7 @@ from those_who_run.sessionkind import SessionDetector, SessionKind
 from those_who_run.state import (
     Phase,
     RaceState,
+    lap_time_posted,
     race_ended,
     race_restarted,
     race_started,
@@ -21,6 +22,15 @@ from those_who_run.store import SessionStore
 from those_who_run.trackdetect import CONFIDENCE_RANK, TrackDetector, TrackMatch
 
 log = logging.getLogger(__name__)
+
+# A timed race has no FINISHED phase (no lap total to exceed). Its end is the
+# first line crossing after the clock runs out, and GT7 shows it the way it
+# shows the flag in a lap race: it takes the car over, throttle and brake at 0
+# while it coasts (Suzuka East timed race, 2026-10-16: 15 s of it, then the
+# results screen). Drivers never coast hands-off that long at racing speed:
+# 1.8 s at most in every race recorded with a field.
+FINISH_GRACE_SECS = 0.5  # inputs right at the line still count as the driver's
+FINISH_COAST_SECS = 3.0
 
 
 class Engine:
@@ -40,6 +50,9 @@ class Engine:
         self.tracks = TrackDetector()
         self.track: TrackMatch | None = None  # best match applied to the open session
         self.kinds = SessionDetector()
+        self.finished = False  # this session ended at the line (flag or timed finish)
+        self._crossing: RaceState | None = None  # last line crossing of a timed race
+        self._coast_since: float | None = None
         self.last_driving: RaceState | None = None  # last IN_RACE frame of this race
 
     def process(self, state: RaceState) -> list[Callout]:
@@ -66,6 +79,9 @@ class Engine:
             self.track = None
             self.last_driving = None
             self.kinds.reset()
+            self.finished = False
+            self._crossing = None
+            self._coast_since = None
             if self.recorder is not None:
                 self.recorder.start_session(state)
             # A rolling start crosses the finish line before lap 1, so the
@@ -99,9 +115,13 @@ class Engine:
                     callouts.extend(rule.evaluate(seen, state))
                 except Exception:  # noqa: BLE001
                     log.exception("rule %s failed", rule.name)
+        callouts.extend(self._timed_finish(seen, state))
+        if state.phase is Phase.FINISHED:
+            self.finished = True
         if (
             race_ended(prev, state)
             and state.phase is not Phase.FINISHED
+            and not self.finished
             and self.last_driving is not None
         ):
             for rule in self.rules:
@@ -128,7 +148,7 @@ class Engine:
                 log.info("race end at lap %d", state.current_lap)
                 if self.track is not None and self.tracks.match.decision == self.track.decision:
                     self.recorder.set_track(self.tracks.match)  # final candidates and fit
-                self.recorder.end_session(state)
+                self.recorder.end_session(state, finished=self.finished)
                 self.track = None
 
         if self.metrics is not None:
@@ -144,6 +164,46 @@ class Engine:
             self.last_driving = None
         self.prev = state
         return callouts
+
+    def _timed_finish(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
+        """Spot the end of a timed race with a field, see FINISH_COAST_SECS."""
+        kind = self.kinds.kind
+        if (
+            self.finished
+            or prev is None
+            or state.phase is not Phase.IN_RACE
+            or kind.kind != "timed_field"
+            or not kind.cars_on_track
+        ):
+            return []
+        if lap_time_posted(prev, state):
+            self._crossing, self._coast_since = state, None
+            return []
+        crossing = self._crossing
+        if crossing is None:
+            return []
+        if not (state.throttle == 0 and state.brake == 0 and state.speed_kph > 20):
+            if state.t - crossing.t > FINISH_GRACE_SECS:
+                self._crossing = None  # the driver is driving: just another lap
+            self._coast_since = None
+            return []
+        if self._coast_since is None:
+            self._coast_since = state.t
+        if state.t - self._coast_since < FINISH_COAST_SECS:
+            return []
+        self.finished = True
+        log.info(
+            "timed race finished at the line, lap %d, P%s",
+            crossing.current_lap - 1,
+            crossing.position,
+        )
+        out: list[Callout] = []
+        for rule in self.rules:
+            try:
+                out.extend(rule.on_finish(crossing))
+            except Exception:  # noqa: BLE001
+                log.exception("rule %s failed at the finish", rule.name)
+        return out
 
     @property
     def session_open(self) -> bool:

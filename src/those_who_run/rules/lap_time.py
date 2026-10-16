@@ -16,7 +16,10 @@ priority; it replaces the plain lap-time phrase rather than adding a second one.
 After a rolling start GT7 does count lap 1 (it starts on the line), but lap 1 of
 a race is slowed by the start and the pack: lap 2 at SUGO was "new best by
 eleven point nine" (2026-10-15). In a lap-count race, lap 2 measured only
-against lap 1 gets no delta, like the first lap.
+against lap 1 gets no delta, like the first lap. In a timed session lap 1
+counts only if GT7 counts it: it does in qualifying (out of the pits onto the
+line) and does not in a timed race with a grid ahead of the line (Suzuka
+East, 2026-10-16: 1:02.0 against 1:07.6 laps, GT7's best stayed blank).
 """
 
 from __future__ import annotations
@@ -56,7 +59,9 @@ class LapTimeRule(Rule):
 
         time_words = lap_time_words(state.last_lap_ms)
         prev_best = prev.best_lap_ms if prev.best_lap_ms > 0 else self.own_best_ms
-        counts = not (state.has_lap_count and lap_no == 1)
+        # GT7 leaves a start lap out of its best: posted, best still blank. Follow it.
+        start_lap = lap_no == 1 and (state.has_lap_count or state.best_lap_ms <= 0)
+        counts = not start_lap
         if counts and (self.own_best_ms <= 0 or state.last_lap_ms < self.own_best_ms):
             self.own_best_ms = state.last_lap_ms
         if lap_no == 1:

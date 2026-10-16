@@ -238,6 +238,8 @@ class Session:
     fuel_burned: float = 0.0  # every drop added up, so a refuel does not cancel a stint
     last_fuel: float | None = None
     last_position: int | None = None  # a quit's last frame has no position
+    last_cars: int | None = None  # nor a car count
+    gt7_best_ms: int = 0  # GT7's own best, which leaves out a start lap
 
 
 class SessionStore:
@@ -374,6 +376,10 @@ class SessionStore:
             s.last_fuel = state.fuel_level
             if state.position is not None:
                 s.last_position = state.position
+            if state.total_cars > 0:
+                s.last_cars = state.total_cars
+            if state.best_lap_ms > 0:
+                s.gt7_best_ms = state.best_lap_ms
         if lap_completed(prev, state):
             assert prev is not None
             self._flush_lap(prev.current_lap, state, complete=True)
@@ -430,7 +436,9 @@ class SessionStore:
         )
         self._db.commit()
 
-    def end_session(self, state: RaceState) -> Path | None:
+    def end_session(self, state: RaceState, finished: bool = False) -> Path | None:
+        """Close the open session. ``finished``: it ended at the line (the engine's
+        timed-race finish); a FINISHED frame counts on its own."""
         s = self.session
         if s is None:
             return None
@@ -440,7 +448,7 @@ class SessionStore:
         self.wait()  # the summary marks the session directory as complete
         completed = [x for x in s.laps if x["complete"]]
         times = [x["lap_time_ms"] for x in completed if x["lap_time_ms"]]
-        finished = state.phase is Phase.FINISHED
+        finished = finished or state.phase is Phase.FINISHED
         summary = {
             "session_id": s.session_id,
             "type": s.type,
@@ -457,8 +465,9 @@ class SessionStore:
             "finished": finished,  # the chequered flag, not a quit
             "total_time_ms": sum(times) if finished and times else None,
             "final_position": state.position or s.last_position,
-            "total_cars": state.total_cars if state.total_cars > 0 else None,
+            "total_cars": state.total_cars if state.total_cars > 0 else s.last_cars,
             "fuel_burned": round(s.fuel_burned, 3),
+            "gt7_best_lap_ms": s.gt7_best_ms or None,
             "fuel_capacity": state.fuel_capacity,
             "fuel_at_start": s.fuel_at_start,
             "fuel_at_end": state.fuel_level,

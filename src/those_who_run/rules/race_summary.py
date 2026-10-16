@@ -13,8 +13,9 @@ Situational pools, used when configured: ``template_position_win`` and
 ``template_position_podium``. ``template_fuel`` may use ``{fuel}`` (used, as a
 percentage of the tank) or ``{fuel_left}``.
 
-Timed races never reach FINISHED (GT7 reports no lap total), so they get no
-summary yet; that needs a timed-race recording to settle what the end looks like.
+Timed races never reach FINISHED (GT7 reports no lap total). The engine works
+out their finish from what GT7 does at the line instead and calls
+``on_finish`` with the crossing frame.
 
 A solo session (time trial, practice, solo laps) has no flag either. Leaving
 it, with at least ``quit_min_laps`` laps done, gets ``template_quit``: laps done
@@ -60,11 +61,18 @@ class RaceSummaryRule(Rule):
             self.laps_done += 1
             if self.best_any_ms <= 0 or state.last_lap_ms < self.best_any_ms:
                 self.best_any_ms = state.last_lap_ms
-            if not (state.has_lap_count and prev is not None and prev.current_lap <= 1) and (
+            if not (_start_lap(prev, state)) and (
                 self.best_ms <= 0 or state.last_lap_ms < self.best_ms
             ):
                 self.best_ms = state.last_lap_ms
-        if self.announced or state.phase is not Phase.FINISHED:
+        if state.phase is not Phase.FINISHED:
+            return []
+        return self.on_finish(state)
+
+    def on_finish(self, state: RaceState) -> list[Callout]:
+        """The race is over: the flag frame of a lap race, or the line crossing that
+        ended a timed race (see the engine). Spoken once."""
+        if self.announced:
             return []
         self.announced = True
 
@@ -113,3 +121,12 @@ class RaceSummaryRule(Rule):
             laps=laps_text[:1].upper() + laps_text[1:], best=best
         )
         return [self.callout(tidy_sentence(text), state)]
+
+
+def _start_lap(prev: RaceState | None, state: RaceState) -> bool:
+    """Lap 1 that GT7 itself leaves out of its best: it posts the time and keeps its
+    best blank (a grid ahead of the line, Suzuka East lap and timed races). A lap
+    1 GT7 does count (qualifying from the pits, SUGO's rolling start) is a lap."""
+    if prev is None or prev.current_lap > 1:
+        return False
+    return state.has_lap_count or state.best_lap_ms <= 0

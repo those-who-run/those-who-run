@@ -38,7 +38,7 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 | `position` | a place is gained or lost (races only), after a 3 s settle, at most every 10 s, quiet for the first 15 s | "Up to sixth." |
 | `temps` | a tyre stays over 120 °C for five seconds (corners already over join it in one phrase); water or oil high; cold tyres at the start | "Rear tyres hot." |
 | `telemetry` | packets stop for 3 s mid-race or mid-pause, and when they return | "Lost telemetry." / "Telemetry back." |
-| `race_summary` | the chequered flag (kept for 30 s, so it waits behind the final lap time) | "Chequered flag. Finished sixth. Best lap fifty-three point one. Fuel used thirty-eight percent." |
+| `race_summary` | the chequered flag, or the end of a timed race (kept for 30 s, so it waits behind the final lap time) | "Chequered flag. Finished sixth. Best lap fifty-three point one. Fuel used thirty-eight percent." |
 | `race_summary` | leaving a time trial, practice or solo run, which have no flag (`quit_kinds`) | "Session done. Seven laps. Best lap forty-nine point seven." |
 
 The telemetry callout is the one thing not driven by frames: the live
@@ -393,6 +393,17 @@ Learned from recordings, and encoded in `state.py`:
   East). The engineer follows GT7, so lap 2 has no delta and the summary's best
   lap is GT7's. Timed races and time trials do count lap 1, and so does a race
   with a rolling start, where lap 1 begins on the line (SUGO, 2026-10-15).
+  The rule that holds everywhere: when GT7 posts lap 1 and keeps its best
+  blank, it has left lap 1 out (a grid ahead of the line, qualifying's out
+  lap), and so does the engineer.
+- A timed race never reports FINISHED (there is no lap total to exceed). Its
+  end is the first crossing after the clock runs out, and GT7 shows it the way
+  it shows the flag: it takes the car over, throttle and brake at 0 while it
+  coasts, then the results. The engineer calls the race finished after 3 s of
+  that following a crossing, in a timed race with a field; drivers never coast
+  hands-off that long at racing speed (1.8 s at most in every recorded race).
+- After the results GT7 replays the race's last frames from the track screen,
+  with the finished race's lap counter. They are not a new race.
 - Laps within 50 ms of the best are "equal to best"; time-trial laps can repeat
   to a few milliseconds.
 - Driving into the pits, the car crosses the line inside the pit cut-scene, so

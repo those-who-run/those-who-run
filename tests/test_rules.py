@@ -220,8 +220,10 @@ def test_lap_time_counts_lap_one_without_a_lap_total(sim):
     ]
     from dataclasses import replace
 
+    # GT7 posting lap 1 and keeping its best blank leaves it out (a start from a grid
+    # ahead of the line, Suzuka East timed race 2026-10-16): no reference for lap 2.
     no_gt7 = [replace(f, best_lap_ms=-1) for f in frames]
-    assert run_rule(LapTimeRule(), no_gt7)[1].endswith("one point zero over best.")
+    assert run_rule(LapTimeRule(), no_gt7)[1] == "Lap two. one forty-one point three."
 
 
 def test_lap_time_within_a_twentieth_is_equal_not_a_new_best(sim):

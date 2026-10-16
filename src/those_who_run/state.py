@@ -258,12 +258,18 @@ def lap_time_posted(prev: RaceState | None, state: RaceState) -> bool:
 
 def race_started(prev: RaceState | None, state: RaceState) -> bool:
     """First driving frame of a session. Loading screens and pauses are not starts,
-    and neither are the replayed frames GT7 shows after the results screen."""
+    and neither are the replayed frames GT7 shows after the results screen: those
+    come from the track screen carrying the finished race's lap counter (lap 6
+    after a five-lap timed race, 2026-10-16), while a real start is on lap 1."""
     if not state.in_race:
         return False
     if prev is None:
         return True
-    return prev.phase in (Phase.MENU, Phase.AT_TRACK) and prev.current_lap < 1
+    return (
+        prev.phase in (Phase.MENU, Phase.AT_TRACK)
+        and prev.current_lap < 1
+        and state.current_lap <= 1
+    )
 
 
 def race_ended(prev: RaceState | None, state: RaceState) -> bool:

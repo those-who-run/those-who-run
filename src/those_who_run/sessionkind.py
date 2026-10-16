@@ -21,6 +21,15 @@ has no tank, and turns on again if a drop comes later. **Cars on track** is
 GT7's flag as reported; it was never set in the sessions between 18:50 and
 19:17 on 2026-10-15, a mode still to be named.
 
+The **start** is read from the fastest the car goes in the first
+``start_window_secs`` of racing: a grid start is near standstill, anything
+else is moving. A moving start is rolling in a lap race (80 to 238 km/h in the
+recordings, the field behind the pace until green) and flying otherwise (out
+of the pits onto a timed lap, 37 to 250 km/h). The window is short because the
+first racing frame after a loading screen can read 0 km/h (Nordschleife,
+2026-10-15), and no car reaches ``grid_kph`` from a standstill inside it. No
+grid start has been recorded yet.
+
 ``total_cars`` is -1 in the frames GT7 replays around the results screen and
 for the whole of a time trial, so -1 says nothing about the field. GT7 can also
 post the lap total a moment after the race starts, so the verdict is kept up to
@@ -35,6 +44,7 @@ from typing import Literal
 from those_who_run.state import Phase, RaceState
 
 Kind = Literal["unknown", "lap_race", "solo_laps", "timed_field", "solo_timed"]
+Start = Literal["unknown", "grid", "rolling", "flying"]
 
 LABELS: dict[str, str] = {
     "unknown": "unknown",
@@ -53,11 +63,12 @@ class SessionKind:
     fuel_use: bool | None  # None until known
     cars_on_track: bool  # GT7's flag, as last reported
     evidence: str
+    start: Start = "unknown"
 
     @property
-    def decision(self) -> tuple[str, bool | None, bool]:
+    def decision(self) -> tuple[str, bool | None, bool, str]:
         """What callers act on. Evidence wording changes; these do not, often."""
-        return (self.kind, self.fuel_use, self.cars_on_track)
+        return (self.kind, self.fuel_use, self.cars_on_track, self.start)
 
     @property
     def label(self) -> str:
@@ -71,6 +82,7 @@ class SessionKind:
             "field": self.field,
             "fuel_use": self.fuel_use,
             "cars_on_track": self.cars_on_track,
+            "start": self.start,
             "evidence": self.evidence,
         }
 
@@ -85,11 +97,15 @@ class SessionDetector:
         fuel_drop: float = 0.05,
         moving_kph: float = 20.0,
         max_step_secs: float = 1.0,
+        start_window_secs: float = 0.3,
+        grid_kph: float = 30.0,
     ) -> None:
         self.fuel_settle = fuel_settle_secs
         self.fuel_drop = fuel_drop
         self.moving_kph = moving_kph
         self.max_step = max_step_secs  # a pause or a gap is not driving time
+        self.start_window = start_window_secs
+        self.grid_kph = grid_kph
         self.reset()
 
     def reset(self) -> None:
@@ -103,6 +119,9 @@ class SessionDetector:
         self._top_fuel: float | None = None
         self._last_t: float | None = None
         self._driving_secs = 0.0
+        self._start_t: float | None = None
+        self._start_kph = 0.0
+        self._start_known = False
         self._kind: SessionKind = UNKNOWN
 
     @property
@@ -124,8 +143,9 @@ class SessionDetector:
             if self._cars >= 3 or (position is not None and position > 1):
                 self._field = True
         self._observe_fuel(state)
+        self._observe_start(state)
         new = self._decide()
-        changed = new.decision != self._kind.decision or new.kind != self._kind.kind
+        changed = new.decision != self._kind.decision
         self._kind = new
         return new if changed else None
 
@@ -146,6 +166,15 @@ class SessionDetector:
         if self._driving_secs >= self.fuel_settle:
             self._fuel_use = False
 
+    def _observe_start(self, state: RaceState) -> None:
+        if self._start_known:
+            return
+        if self._start_t is None:
+            self._start_t = state.t
+        self._start_kph = max(self._start_kph, state.speed_kph)
+        if state.t - self._start_t >= self.start_window:
+            self._start_known = True
+
     def _decide(self) -> SessionKind:
         if not self._valid:
             return UNKNOWN
@@ -162,5 +191,12 @@ class SessionDetector:
             why += "; fuel use not known yet"
         else:
             why += "; fuel use " + ("on" if self._fuel_use else "off")
+        start: Start = "unknown"
+        if self._start_known:
+            if self._start_kph < self.grid_kph:
+                start = "grid"
+            else:
+                start = "rolling" if kind == "lap_race" else "flying"
+            why += f"; {start} start at {self._start_kph:.0f} km/h"
         field = kind in ("lap_race", "timed_field")
-        return SessionKind(kind, self._laps, field, self._fuel_use, self._cars_on_track, why)
+        return SessionKind(kind, self._laps, field, self._fuel_use, self._cars_on_track, why, start)

@@ -231,6 +231,7 @@ class SessionStore:
         _ensure_column(self._db, "sessions", "track_confidence", "TEXT")
         _ensure_column(self._db, "sessions", "session_kind", "TEXT")
         _ensure_column(self._db, "sessions", "fuel_use", "INTEGER")
+        _ensure_column(self._db, "sessions", "start_type", "TEXT")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
         self._pending: list[Future[float]] = []
@@ -322,8 +323,8 @@ class SessionStore:
         s.kind = kind.record()
         fuel = None if kind.fuel_use is None else int(kind.fuel_use)
         self._db.execute(
-            "UPDATE sessions SET session_kind = ?, fuel_use = ? WHERE id = ?",
-            (kind.kind, fuel, s.session_id),
+            "UPDATE sessions SET session_kind = ?, fuel_use = ?, start_type = ? WHERE id = ?",
+            (kind.kind, fuel, kind.start, s.session_id),
         )
         self._db.commit()
 

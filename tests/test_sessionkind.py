@@ -117,31 +117,58 @@ def test_a_refuel_raises_the_mark_and_no_tank_means_off():
     assert det.kind.fuel_use is False
 
 
+# start type
+
+
+def test_start_type_from_the_speed_in_the_first_moments():
+    def start(speeds, **over):
+        det = SessionDetector()
+        feed(det, [frame(i / 60, speed_kph=v, **over) for i, v in enumerate(speeds)])
+        return det.kind.start
+
+    stationary = [0.0] * 30 + [5.0, 10.0, 15.0]
+    assert start(stationary) == "grid"
+    assert start(stationary, total_laps=0, total_cars=1) == "grid"
+    leftover = [0.0, 0.0, 0.0] + [100.0] * 30  # a loading-screen frame, then the pace
+    assert start(leftover) == "rolling"
+    assert start([190.0] * 30, total_laps=0, total_cars=1) == "flying"
+    assert start([190.0] * 5) == "unknown", "the window has not closed yet"
+
+
 # real recordings (2026-10-14 and 2026-10-15)
 
 
 @pytest.mark.parametrize(
-    ("fixture", "kind", "fuel_use", "cars_on_track"),
+    ("fixture", "kind", "fuel_use", "cars_on_track", "start"),
     [
-        ("real-nuc-suzuka-no-stop-2026-10-15.jsonl", "lap_race", True, True),
-        ("real-nuc-suzuka-pit-stop-2026-10-15.jsonl", "lap_race", True, True),
-        ("real-nuc-suzuka-east-2026-10-15.jsonl", "solo_laps", True, True),
-        ("real-nuc-fuji-timed-2026-10-15.jsonl", "solo_timed", False, True),
-        ("real-nuc-sugo-timed-2026-10-15.jsonl", "solo_timed", False, True),
-        ("real-n24h-race-lap1-positions-2026-10-14.jsonl", "lap_race", True, True),
+        ("real-nuc-suzuka-no-stop-2026-10-15.jsonl", "lap_race", True, True, "rolling"),
+        ("real-nuc-suzuka-pit-stop-2026-10-15.jsonl", "lap_race", True, True, "rolling"),
+        ("real-nuc-suzuka-east-2026-10-15.jsonl", "solo_laps", True, True, "flying"),
+        ("real-nuc-fuji-timed-2026-10-15.jsonl", "solo_timed", False, True, "flying"),
+        ("real-nuc-sugo-timed-2026-10-15.jsonl", "solo_timed", False, True, "flying"),
+        ("real-n24h-race-lap1-positions-2026-10-14.jsonl", "lap_race", True, True, "rolling"),
         # the unnamed mode: no cars-on-track flag, no fuel use (see #63)
-        ("real-nuc-tokyo-east-race-2026-10-15.jsonl", "lap_race", False, False),
-        ("real-nuc-laguna-seca-race-2026-10-15.jsonl", "lap_race", False, False),
-        ("real-nuc-tsukuba-brz-drift-2026-10-15.jsonl", "solo_laps", False, False),
+        ("real-nuc-tokyo-east-race-2026-10-15.jsonl", "lap_race", False, False, "rolling"),
+        ("real-nuc-laguna-seca-race-2026-10-15.jsonl", "lap_race", False, False, "rolling"),
+        ("real-nuc-tsukuba-brz-drift-2026-10-15.jsonl", "solo_laps", False, False, "flying"),
+        # 0 km/h on the first racing frames after loading, then 100 behind the pace
+        (
+            "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl",
+            "lap_race",
+            False,
+            False,
+            "rolling",
+        ),
     ],
 )
-def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track):
+def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track, start):
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
     for s in read_recording(FIXTURES / fixture):
         engine.process(s)
     assert engine.kind.kind == kind
     assert engine.kind.fuel_use is fuel_use
     assert engine.kind.cars_on_track is cars_on_track
+    assert engine.kind.start == start
 
 
 def test_real_qualifying_is_a_timed_field():
@@ -177,10 +204,12 @@ def test_engine_records_the_kind_in_the_session_metrics_and_rules(tmp_path):
     fixture = FIXTURES / "real-nuc-suzuka-no-stop-2026-10-15.jsonl"
     asyncio.run(replay(read_recording(fixture), engine, ConsolePlayer()))
     store.close()
-    assert spy.seen == [("lap_race", None), ("lap_race", True)]
+    assert spy.seen[-1] == ("lap_race", True)
     db = sqlite3.connect(tmp_path / "index.sqlite")
-    assert db.execute("SELECT session_kind, fuel_use FROM sessions").fetchall() == [("lap_race", 1)]
+    rows = db.execute("SELECT session_kind, fuel_use, start_type FROM sessions").fetchall()
+    assert rows == [("lap_race", 1, "rolling")]
     summary = json.loads(next((tmp_path / "sessions").glob("*/summary.json")).read_text())
     assert summary["session_kind"]["kind"] == "lap_race"
     assert summary["session_kind"]["fuel_use"] is True
-    assert b'gt7_session_info{fuel_use="on",kind="lap_race"} 1.0' in metrics.render()
+    labels = b'fuel_use="on",kind="lap_race",start="rolling"'
+    assert b"gt7_session_info{" + labels + b"} 1.0" in metrics.render()

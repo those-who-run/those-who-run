@@ -248,11 +248,14 @@ by what telemetry does show (`src/those_who_run/sessionkind.py`):
 
 It also records whether **fuel use** is on (the level has dropped while racing;
 off after 20 s of driving without a drop) and GT7's **cars on track** flag,
-which a whole group of sessions never set (a mode still to be named). The
-kind is logged, stored with the session (`session_kind` and `fuel_use` in the
-index, a `session_kind` block in `summary.json`), exported as
-`gt7_session_info{kind,fuel_use}` and shown by `/healthz`. Rules receive it
-through `on_session`, ready for callouts shaped by what you are doing.
+which a whole group of sessions never set (a mode still to be named), and the
+**start**: `grid` when the car is near standstill in the first 0.3 s of racing,
+otherwise `rolling` in a lap race and `flying` in anything else (out of the
+pits onto a timed lap). The kind is logged, stored with the session
+(`session_kind`, `fuel_use` and `start_type` in the index, a `session_kind`
+block in `summary.json`), exported as `gt7_session_info{kind,fuel_use,start}`
+and shown by `/healthz`. Rules receive it through `on_session`, ready for
+callouts shaped by what you are doing.
 
 ## Data
 
@@ -282,7 +285,7 @@ Metric names keep the `gt7_` prefix because they describe GT7 telemetry:
 `gt7_current_lap`, `gt7_total_laps`, `gt7_fuel_level`, `gt7_fuel_capacity`,
 `gt7_fuel_laps_remaining`, `gt7_last_lap_seconds`, `gt7_best_lap_seconds`,
 `gt7_speed_kph`, `gt7_speech_seconds`, `gt7_track_id`, `gt7_track_info`,
-`gt7_session_info{kind,fuel_use}`.
+`gt7_session_info{kind,fuel_use,start}`.
 
 `GET /healthz` returns JSON with telemetry and voice connection state, the
 detected track and the session kind.

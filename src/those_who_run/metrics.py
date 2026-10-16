@@ -52,8 +52,8 @@ class Metrics:
         self.track_id = Gauge("gt7_track_id", "Detected track id (0 = unknown)", registry=r)
         self.session_info = Gauge(
             "gt7_session_info",
-            "Detected session kind, 1 with kind and fuel use as labels",
-            ["kind", "fuel_use"],
+            "Detected session kind, 1 with kind, fuel use and start type as labels",
+            ["kind", "fuel_use", "start"],
             registry=r,
         )
         self.track_info = Gauge(
@@ -91,7 +91,7 @@ class Metrics:
     def set_session(self, kind: SessionKind) -> None:
         fuel = "unknown" if kind.fuel_use is None else ("on" if kind.fuel_use else "off")
         self.session_info.clear()
-        self.session_info.labels(kind.kind, fuel).set(1)
+        self.session_info.labels(kind.kind, fuel, kind.start).set(1)
 
     def observe_dropped(self, dropped_total: int) -> None:
         delta = dropped_total - self._dropped_seen

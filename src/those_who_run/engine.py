@@ -8,6 +8,7 @@ from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.metrics import Metrics
 from those_who_run.rules.base import Rule
 from those_who_run.rules.fuel import FuelRule
+from those_who_run.sessionkind import SessionDetector, SessionKind
 from those_who_run.state import (
     Phase,
     RaceState,
@@ -38,6 +39,7 @@ class Engine:
         self.races_started = 0
         self.tracks = TrackDetector()
         self.track: TrackMatch | None = None  # best match applied to the open session
+        self.kinds = SessionDetector()
         self.last_driving: RaceState | None = None  # last IN_RACE frame of this race
 
     def process(self, state: RaceState) -> list[Callout]:
@@ -62,6 +64,7 @@ class Engine:
                 self.tracks.reset()  # the car was teleported back to the grid
             self.track = None
             self.last_driving = None
+            self.kinds.reset()
             if self.recorder is not None:
                 self.recorder.start_session(state)
             # A rolling start crosses the finish line before lap 1, so the
@@ -104,6 +107,9 @@ class Engine:
         match = self.tracks.observe(state)
         if match is not None and self.session_open:
             self._apply_track(match)
+        kind = self.kinds.observe(state)
+        if kind is not None and self.session_open:
+            self._apply_kind(kind)
 
         if self.recorder is not None:
             self.recorder.observe(seen, state)
@@ -131,6 +137,22 @@ class Engine:
     @property
     def session_open(self) -> bool:
         return self.recorder is None or self.recorder.session is not None
+
+    @property
+    def kind(self) -> SessionKind:
+        return self.kinds.kind
+
+    def _apply_kind(self, kind: SessionKind) -> None:
+        log.info("session %s: %s", kind.kind, kind.evidence)
+        if self.recorder is not None and self.recorder.session is not None:
+            self.recorder.set_kind(kind)
+        if self.metrics is not None:
+            self.metrics.set_session(kind)
+        for rule in self.rules:
+            try:
+                rule.on_session(kind)
+            except Exception:  # noqa: BLE001
+                log.exception("rule %s failed on session update", rule.name)
 
     def _apply_track(self, match: TrackMatch) -> None:
         """Keep the best answer the session has had; never downgrade on a blip. A

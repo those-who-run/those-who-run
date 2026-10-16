@@ -234,6 +234,26 @@ the printed row to `src/those_who_run/data/tracks.csv`. Learned rows use ids
 from 100001 up, since GT7's own ids are not visible in telemetry. Sportsland
 SUGO (100001) was added this way from its first lap on 2026-10-15.
 
+## Session kind
+
+GT7 does not say what mode it is in either. The engineer sorts every session
+by what telemetry does show (`src/those_who_run/sessionkind.py`):
+
+| Kind | Telemetry |
+|---|---|
+| `lap_race` | a lap total and two or more cars |
+| `solo_laps` | a lap total and one car |
+| `timed_field` | no lap total and three or more cars: qualifying or a timed race, which GT7 reports the same way |
+| `solo_timed` | no lap total and one car: time trial or practice. A ghost can add a second car; two cars only count as a field once you are not first |
+
+It also records whether **fuel use** is on (the level has dropped while racing;
+off after 20 s of driving without a drop) and GT7's **cars on track** flag,
+which a whole group of sessions never set (a mode still to be named). The
+kind is logged, stored with the session (`session_kind` and `fuel_use` in the
+index, a `session_kind` block in `summary.json`), exported as
+`gt7_session_info{kind,fuel_use}` and shown by `/healthz`. Rules receive it
+through `on_session`, ready for callouts shaped by what you are doing.
+
 ## Data
 
 Every frame of every lap is kept, so the pit wall (milestone 2.0) can show
@@ -261,9 +281,11 @@ Metric names keep the `gt7_` prefix because they describe GT7 telemetry:
 `gt7_in_race`, `gt7_callouts_total{rule}`, `gt7_callouts_dropped_total`,
 `gt7_current_lap`, `gt7_total_laps`, `gt7_fuel_level`, `gt7_fuel_capacity`,
 `gt7_fuel_laps_remaining`, `gt7_last_lap_seconds`, `gt7_best_lap_seconds`,
-`gt7_speed_kph`, `gt7_speech_seconds`.
+`gt7_speed_kph`, `gt7_speech_seconds`, `gt7_track_id`, `gt7_track_info`,
+`gt7_session_info{kind,fuel_use}`.
 
-`GET /healthz` returns JSON with telemetry and voice connection state.
+`GET /healthz` returns JSON with telemetry and voice connection state, the
+detected track and the session kind.
 
 ## Livery
 

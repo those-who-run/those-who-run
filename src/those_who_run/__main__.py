@@ -283,6 +283,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
             "packets": telem.packets,
             "races_started": engine.races_started,
             "queue": len(queue),
+            "session": engine.kind.record(),
             "track": None
             if engine.track is None
             else {

@@ -8,6 +8,7 @@ from typing import Any
 
 from those_who_run.callouts import Callout
 from those_who_run.phrasing import Phrasebook
+from those_who_run.sessionkind import SessionKind
 from those_who_run.state import Phase, RaceState
 from those_who_run.trackdetect import TrackMatch
 from those_who_run.verbalise import tidy_sentence
@@ -31,6 +32,10 @@ class Rule(ABC):
 
     def on_track(self, match: TrackMatch) -> None:
         """The engine's track verdict changed (never downgraded within a session)."""
+        return None
+
+    def on_session(self, kind: SessionKind) -> None:
+        """The engine's session verdict changed: kind, fuel use or the cars-on-track flag."""
         return None
 
     def on_bridge(self, phase: Phase) -> None:

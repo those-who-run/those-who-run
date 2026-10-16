@@ -12,6 +12,7 @@ from typing import Any
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
+from those_who_run.sessionkind import SessionKind
 from those_who_run.state import RaceState
 from those_who_run.trackdetect import TrackMatch
 
@@ -49,6 +50,12 @@ class Metrics:
         self.best_lap_seconds = Gauge("gt7_best_lap_seconds", "Best lap time", registry=r)
         self.speed_kph = Gauge("gt7_speed_kph", "Speed", registry=r)
         self.track_id = Gauge("gt7_track_id", "Detected track id (0 = unknown)", registry=r)
+        self.session_info = Gauge(
+            "gt7_session_info",
+            "Detected session kind, 1 with kind and fuel use as labels",
+            ["kind", "fuel_use"],
+            registry=r,
+        )
         self.track_info = Gauge(
             "gt7_track_info",
             "Detected track, 1 with name and confidence as labels",
@@ -80,6 +87,11 @@ class Metrics:
         self.track_info.labels(
             str(match.track_id or 0), match.name or "unknown", match.confidence
         ).set(1)
+
+    def set_session(self, kind: SessionKind) -> None:
+        fuel = "unknown" if kind.fuel_use is None else ("on" if kind.fuel_use else "off")
+        self.session_info.clear()
+        self.session_info.labels(kind.kind, fuel).set(1)
 
     def observe_dropped(self, dropped_total: int) -> None:
         delta = dropped_total - self._dropped_seen

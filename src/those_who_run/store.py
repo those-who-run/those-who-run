@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from those_who_run.sessionkind import SessionKind
 from those_who_run.state import RaceState, lap_completed, racing_frame
 from those_who_run.trackdetect import TrackMatch
 
@@ -216,6 +217,7 @@ class Session:
     buffer: list[tuple[Any, ...]] = field(default_factory=list)
     laps: list[dict[str, Any]] = field(default_factory=list)
     track: dict[str, Any] | None = None  # detector verdict, see SessionStore.set_track
+    kind: dict[str, Any] | None = None  # session kind, see SessionStore.set_kind
 
 
 class SessionStore:
@@ -227,6 +229,8 @@ class SessionStore:
         self._db = sqlite3.connect(self.data_dir / "index.sqlite", check_same_thread=False)
         self._db.executescript(_SCHEMA)
         _ensure_column(self._db, "sessions", "track_confidence", "TEXT")
+        _ensure_column(self._db, "sessions", "session_kind", "TEXT")
+        _ensure_column(self._db, "sessions", "fuel_use", "INTEGER")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
         self._pending: list[Future[float]] = []
@@ -310,6 +314,19 @@ class SessionStore:
         )
         self._db.commit()
 
+    def set_kind(self, kind: SessionKind) -> None:
+        """Record the session kind for the open session."""
+        s = self.session
+        if s is None:
+            return
+        s.kind = kind.record()
+        fuel = None if kind.fuel_use is None else int(kind.fuel_use)
+        self._db.execute(
+            "UPDATE sessions SET session_kind = ?, fuel_use = ? WHERE id = ?",
+            (kind.kind, fuel, s.session_id),
+        )
+        self._db.commit()
+
     def observe(self, prev: RaceState | None, state: RaceState) -> None:
         s = self.session
         if s is None:
@@ -389,6 +406,7 @@ class SessionStore:
             "ended_at": self.clock(),
             "track_id": s.track_id,
             "track": s.track,
+            "session_kind": s.kind,
             "car_code": s.car_code,
             "total_laps": s.total_laps,
             "laps_completed": len(completed),

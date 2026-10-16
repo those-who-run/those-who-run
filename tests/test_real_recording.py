@@ -15,7 +15,7 @@ from those_who_run.config import DEFAULT_RULES
 from those_who_run.engine import Engine
 from those_who_run.replay import read_recording, replay
 from those_who_run.rules import build_rules
-from those_who_run.state import Phase
+from those_who_run.state import Phase, race_ended, race_restarted, race_started
 from those_who_run.store import SessionStore
 
 FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
@@ -93,6 +93,24 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
     assert sessions == [(1, 506429, 1), (2, 500204, 1)]
     laps = db.execute("SELECT lap, complete FROM laps ORDER BY session_id, lap").fetchall()
     assert laps == [(1, 1), (2, 0), (1, 1), (2, 1), (3, 0)]
+
+
+def test_real_pause_and_resume_is_neither_a_start_nor_an_end():
+    """The qualifying fixture pauses and resumes three times mid-lap (2026-10-14),
+    once after the restart. A pause keeps the race: no start, no end, no restart,
+    and the paused lap is one lap."""
+    states = list(read_recording(QUALI))
+    resumes = [
+        (prev, cur)
+        for prev, cur in zip(states, states[1:], strict=False)
+        if prev.phase is Phase.PAUSED and cur.phase is Phase.IN_RACE
+    ]
+    assert len(resumes) == 3
+    for prev, cur in resumes:
+        assert cur.current_lap == prev.current_lap and cur.fuel_level == prev.fuel_level
+        assert not race_started(prev, cur)
+        assert not race_restarted(prev, cur)
+        assert not race_ended(prev, cur)
 
 
 async def _replay_with_store(path, tmp_path):

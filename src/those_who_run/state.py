@@ -78,6 +78,17 @@ class RaceState:
     vel_x: float = 0.0
     vel_y: float = 0.0
     vel_z: float = 0.0
+    # Body rotation and spin, raw from the packet (kept from 0.3 for drift
+    # detection, #65). rot_* are GT7's rotation components and orientation its
+    # heading-like value; which combination gives the car's heading is settled
+    # from recordings. ang_vel_* in radians per second; ang_vel_y is yaw rate.
+    rot_x: float = 0.0
+    rot_y: float = 0.0
+    rot_z: float = 0.0
+    orientation: float = 0.0
+    ang_vel_x: float = 0.0
+    ang_vel_y: float = 0.0
+    ang_vel_z: float = 0.0
     throttle: int = 0
     brake: int = 0
     current_gear: int = 0
@@ -153,6 +164,13 @@ class RaceState:
             vel_x=float(tel.velocity_x),
             vel_y=float(tel.velocity_y),
             vel_z=float(tel.velocity_z),
+            rot_x=float(tel.rotation_x),
+            rot_y=float(tel.rotation_y),
+            rot_z=float(tel.rotation_z),
+            orientation=float(tel.orientation),
+            ang_vel_x=float(tel.ang_vel_x),
+            ang_vel_y=float(tel.ang_vel_y),
+            ang_vel_z=float(tel.ang_vel_z),
             throttle=int(tel.throttle),
             brake=int(tel.brake),
             current_gear=int(tel.current_gear),

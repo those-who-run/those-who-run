@@ -285,7 +285,9 @@ held up by disk. A partial lap at the end of a session is written with
 `complete = 0`. Restarting from the pause menu closes the session and opens a
 new one; quitting closes it; Ctrl-C closes whatever is open. Budget roughly
 10 MB per hour of driving. Parquet is written and read with DuckDB; any
-Parquet-aware tool can read the files.
+Parquet-aware tool can read the files. From 0.3 frames also carry the body
+rotation (`rot_x`, `rot_y`, `rot_z`, `orientation`) and spin (`ang_vel_*`),
+raw from the packet, for drift detection; older laps lack those columns.
 
 ## Metrics
 

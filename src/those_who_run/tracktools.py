@@ -54,7 +54,8 @@ def session_points(session_dir: Path) -> Iterator[tuple[float, int, str, float, 
     try:
         file_list = ", ".join(f"'{f}'" for f in files)
         rows = con.execute(
-            f"SELECT t, lap, phase, pos_x, pos_z FROM read_parquet([{file_list}]) ORDER BY t"
+            "SELECT t, lap, phase, pos_x, pos_z"
+            f" FROM read_parquet([{file_list}], union_by_name = true) ORDER BY t"
         ).fetchall()
     finally:
         con.close()

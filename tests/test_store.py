@@ -50,6 +50,7 @@ async def test_store_writes_parquet_and_index(tmp_path, sim):
         for r in con.execute(f"DESCRIBE SELECT * FROM '{session_dir}/lap-01.parquet'").fetchall()
     }
     assert {"pos_x", "throttle", "brake", "tire_fl_radius", "car_code", "position"} <= cols
+    assert {"rot_y", "orientation", "ang_vel_y"} <= cols  # for drift detection, #65
 
     db = sqlite3.connect(tmp_path / "index.sqlite")
     sess = db.execute(

@@ -80,6 +80,13 @@ FRAME_COLUMNS: tuple[tuple[str, str], ...] = (
     ("time_of_day_ms", "BIGINT"),
     ("car_code", "INTEGER"),
     ("track_id", "INTEGER"),
+    ("rot_x", "DOUBLE"),
+    ("rot_y", "DOUBLE"),
+    ("rot_z", "DOUBLE"),
+    ("orientation", "DOUBLE"),
+    ("ang_vel_x", "DOUBLE"),
+    ("ang_vel_y", "DOUBLE"),
+    ("ang_vel_z", "DOUBLE"),
 )
 
 _SCHEMA = """
@@ -146,6 +153,13 @@ def frame_row(state: RaceState) -> tuple[Any, ...]:
         state.time_of_day_ms,
         state.car_code,
         state.track_id,
+        state.rot_x,
+        state.rot_y,
+        state.rot_z,
+        state.orientation,
+        state.ang_vel_x,
+        state.ang_vel_y,
+        state.ang_vel_z,
     )
 
 

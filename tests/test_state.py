@@ -1,5 +1,6 @@
 from dataclasses import fields
 
+import pytest
 from gt_telem.models.telemetry import Telemetry
 from gt_telem.models.telemetry_packet import TelemetryPacket
 
@@ -80,6 +81,33 @@ def test_from_telemetry_uses_flag_bits():
     practice = make_telemetry(current_lap=7, total_laps=0, race_start_pos=-1, flags=0)
     ps = RaceState.from_telemetry(practice, 0)
     assert ps.phase is Phase.IN_RACE and not ps.is_race and ps.position is None
+
+
+def test_from_telemetry_keeps_rotation_and_spin():
+    """Kept raw for drift detection (#65): which components give the heading is
+    settled from recordings, so nothing is converted here."""
+    tel = make_telemetry(
+        current_lap=1,
+        rotation_x=0.01,
+        rotation_y=-0.7,
+        rotation_z=0.02,
+        orientation=0.25,
+        ang_vel_x=0.1,
+        ang_vel_y=1.5,
+        ang_vel_z=-0.2,
+    )
+    s = RaceState.from_telemetry(tel, t=0)
+    assert (s.rot_x, s.rot_y, s.rot_z) == pytest.approx((0.01, -0.7, 0.02))
+    assert s.orientation == pytest.approx(0.25)
+    assert (s.ang_vel_x, s.ang_vel_y, s.ang_vel_z) == pytest.approx((0.1, 1.5, -0.2))
+
+
+def test_recordings_from_before_rotation_still_load():
+    d = make_state(t=1.0).to_dict()
+    for k in ("rot_x", "rot_y", "rot_z", "orientation", "ang_vel_x", "ang_vel_y", "ang_vel_z"):
+        del d[k]
+    s = RaceState.from_dict(d)
+    assert s.ang_vel_y == 0.0 and s.orientation == 0.0
 
 
 def test_dict_roundtrip():

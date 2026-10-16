@@ -127,7 +127,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.2.5
+  muldoon/those-who-run:0.3.0
 ```
 
 From source:
@@ -329,7 +329,7 @@ https://github.com/those-who-run/those-who-run/milestones
 ```sh
 make lint test       # ruff + pytest
 make build           # podman build for linux/amd64
-make release VERSION=0.2.5   # build and push muldoon/those-who-run:0.2.5
+make release VERSION=0.3.0   # build and push muldoon/those-who-run:0.3.0
 ```
 
 Tags matching `v*` are built and pushed to Docker Hub by GitHub Actions. The

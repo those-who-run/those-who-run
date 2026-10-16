@@ -247,6 +247,20 @@ those-who-run cars find rx vision   # codes and names matching every word
 those-who-run cars name 3339        # Subaru BRZ Drift Car '17
 ```
 
+## What is in the recordings
+
+`those-who-run recordings` replays each outing recording in `GT7_RECORD_DIR`
+(or the files and directories given) and prints one line per session: when it
+started in the file, how long it ran, track and kind, the result, car, best
+lap, session kind and start, and how it ended (`flag`, `quit`, `restart`, or
+`open` if the recording stops mid-session). Handy for matching a night's
+drives to notes:
+
+```sh
+those-who-run recordings --last 5
+#   +0:28   8.5 min  Sportsland SUGO · 5-lap race  🚩 Finished P3 of 20 in 8:36.182 ...
+```
+
 ## Results channel
 
 Set `DISCORD_RESULTS_CHANNEL_ID` to a text channel and the bot posts a card for

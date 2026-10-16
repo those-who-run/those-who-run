@@ -82,6 +82,12 @@ def build_parser() -> argparse.ArgumentParser:
     cn = crs.add_parser("name", help="the name for one car code")
     cn.add_argument("code", type=int)
 
+    rl = sub.add_parser(
+        "recordings", help="one line per session in each outing recording (GT7_RECORD_DIR)"
+    )
+    rl.add_argument("paths", nargs="*", type=Path, help="recordings or directories")
+    rl.add_argument("--last", type=int, default=0, help="only the newest N recordings")
+
     po = sub.add_parser(
         "post", help="post a stored session's results card to DISCORD_RESULTS_CHANNEL_ID"
     )
@@ -113,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_tracks(settings, args)
         if args.command == "cars":
             return run_cars(args)
+        if args.command == "recordings":
+            return run_recordings(settings, args.paths, args.last)
         if args.command == "post":
             return asyncio.run(run_post(settings, args.session_id, args.dry_run))
     except ConfigError as exc:
@@ -156,6 +164,28 @@ async def run_post(settings: Settings, session_id: str, dry_run: bool) -> int:
     finally:
         await client.close()
     return 0 if ok else 1
+
+
+def run_recordings(settings: Settings, paths: list[Path], last: int) -> int:
+    from those_who_run.recordtools import list_recordings, summarise_recording
+
+    if not paths:
+        if settings.record_dir is None:
+            raise ConfigError("give recordings or a directory, or set GT7_RECORD_DIR")
+        paths = [settings.record_dir]
+    files: list[Path] = []
+    for p in paths:
+        files.extend(list_recordings(p) if p.is_dir() else [p])
+    if last:
+        files = files[-last:]
+    for f in files:
+        sessions, complete = summarise_recording(f)
+        print(f.name + ("" if complete else "  (still being written)"))
+        for s in sessions:
+            print("   " + s.line())
+        if not sessions:
+            print("   no session")
+    return 0
 
 
 def run_cars(args: argparse.Namespace) -> int:

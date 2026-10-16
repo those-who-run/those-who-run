@@ -15,6 +15,11 @@ percentage of the tank) or ``{fuel_left}``.
 
 Timed races never reach FINISHED (GT7 reports no lap total), so they get no
 summary yet; that needs a timed-race recording to settle what the end looks like.
+
+A solo session (time trial, practice, solo laps) has no flag either. Leaving
+it, with at least ``quit_min_laps`` laps done, gets ``template_quit``: laps done
+and the best lap. ``quit_kinds`` lists the session kinds that get it; a quit
+race is a retirement and stays quiet by default.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from those_who_run.rules.base import Rule
 from those_who_run.state import Phase, RaceState, lap_time_posted
 from those_who_run.verbalise import (
     lap_time_words,
+    laps_words,
     number_words,
     ordinal_words,
     percent_words,
@@ -40,24 +46,30 @@ class RaceSummaryRule(Rule):
         self.fuel_used = 0.0
         self.last_fuel: float | None = None
         self.best_ms = 0
+        self.best_any_ms = 0  # lap 1 included, for a solo run with nothing else
+        self.laps_done = 0
         self.announced = False
+        self.quit_kinds = set(self.cfg.get("quit_kinds", ["solo_timed", "solo_laps"]))
+        self.quit_min_laps = int(self.cfg.get("quit_min_laps", 1))
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if self.last_fuel is not None and state.fuel_level < self.last_fuel:
             self.fuel_used += self.last_fuel - state.fuel_level
         self.last_fuel = state.fuel_level
-        if (
-            lap_time_posted(prev, state)
-            and not (state.has_lap_count and prev is not None and prev.current_lap <= 1)
-            and (self.best_ms <= 0 or state.last_lap_ms < self.best_ms)
-        ):
-            self.best_ms = state.last_lap_ms
+        if lap_time_posted(prev, state):
+            self.laps_done += 1
+            if self.best_any_ms <= 0 or state.last_lap_ms < self.best_any_ms:
+                self.best_any_ms = state.last_lap_ms
+            if not (state.has_lap_count and prev is not None and prev.current_lap <= 1) and (
+                self.best_ms <= 0 or state.last_lap_ms < self.best_ms
+            ):
+                self.best_ms = state.last_lap_ms
         if self.announced or state.phase is not Phase.FINISHED:
             return []
         self.announced = True
 
         position = ""
-        if state.is_race and state.total_cars > 1 and state.position is not None:
+        if self.has_field(state) and state.position is not None:
             keys = ["template_position"]
             if state.position == 1:
                 keys.insert(0, "template_position_win")
@@ -80,5 +92,24 @@ class RaceSummaryRule(Rule):
             )
         text = self.template("template", "Chequered flag. {position} {best} {fuel}").format(
             position=position, best=best, fuel=fuel
+        )
+        return [self.callout(tidy_sentence(text), state)]
+
+    def on_end(self, last: RaceState, state: RaceState) -> list[Callout]:
+        kind = self.session.kind if self.session is not None else "unknown"
+        # GT7's counter knows laps the engineer joined too late to see.
+        laps = max(self.laps_done, last.current_lap - 1)
+        if self.announced or kind not in self.quit_kinds or laps < self.quit_min_laps:
+            return []
+        self.announced = True
+        best_ms = last.best_lap_ms if last.best_lap_ms > 0 else self.best_ms or self.best_any_ms
+        best = ""
+        if best_ms > 0:
+            best = self.template("template_best", "Best lap {time}.").format(
+                time=lap_time_words(best_ms)
+            )
+        laps_text = laps_words(laps)
+        text = self.template("template_quit", "Session done. {laps}. {best}").format(
+            laps=laps_text[:1].upper() + laps_text[1:], best=best
         )
         return [self.callout(tidy_sentence(text), state)]

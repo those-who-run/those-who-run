@@ -59,6 +59,7 @@ class Engine:
             )
             for rule in self.rules:
                 rule.reset()
+                rule.session = None
             self.queue.clear()
             if restarted:
                 self.tracks.reset()  # the car was teleported back to the grid
@@ -98,6 +99,16 @@ class Engine:
                     callouts.extend(rule.evaluate(seen, state))
                 except Exception:  # noqa: BLE001
                     log.exception("rule %s failed", rule.name)
+        if (
+            race_ended(prev, state)
+            and state.phase is not Phase.FINISHED
+            and self.last_driving is not None
+        ):
+            for rule in self.rules:
+                try:
+                    callouts.extend(rule.on_end(self.last_driving, state))
+                except Exception:  # noqa: BLE001
+                    log.exception("rule %s failed at the end", rule.name)
         for c in callouts:
             self.queue.push(c)
             log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)

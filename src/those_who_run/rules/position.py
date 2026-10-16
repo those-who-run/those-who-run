@@ -8,6 +8,9 @@ brief has just given the grid slot, and the field shuffles for a while (nine
 calls in the first minute at Suzuka East, 2026-10-15). The first call after the
 grace compares with the grid slot.
 
+Only spoken when other cars are racing for position (the session kind): never
+in a time trial, where a ghost can count as a second car.
+
 Situational pools, used when configured: ``template_gained_lead`` (into first),
 ``template_gained_podium`` (into second or third), ``template_lost_lead``.
 """
@@ -34,7 +37,7 @@ class PositionRule(Rule):
         self.last_spoken_at: float | None = None
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
-        if not state.in_race or not state.is_race:
+        if not state.in_race or not self.has_field(state):
             return []
         pos = state.position
         if pos is None:

@@ -39,6 +39,7 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 | `temps` | a tyre stays over 120 °C for five seconds (corners already over join it in one phrase); water or oil high; cold tyres at the start | "Rear tyres hot." |
 | `telemetry` | packets stop for 3 s mid-race or mid-pause, and when they return | "Lost telemetry." / "Telemetry back." |
 | `race_summary` | the chequered flag (kept for 30 s, so it waits behind the final lap time) | "Chequered flag. Finished sixth. Best lap fifty-three point one. Fuel used thirty-eight percent." |
+| `race_summary` | leaving a time trial, practice or solo run, which have no flag (`quit_kinds`) | "Session done. Seven laps. Best lap forty-nine point seven." |
 
 The telemetry callout is the one thing not driven by frames: the live
 watchdog (`GT7_TELEMETRY_TIMEOUT_SECS`, 3 s) raises it, so a quiet headset is
@@ -254,8 +255,18 @@ otherwise `rolling` in a lap race and `flying` in anything else (out of the
 pits onto a timed lap). The kind is logged, stored with the session
 (`session_kind`, `fuel_use` and `start_type` in the index, a `session_kind`
 block in `summary.json`), exported as `gt7_session_info{kind,fuel_use,start}`
-and shown by `/healthz`. Rules receive it through `on_session`, ready for
-callouts shaped by what you are doing.
+and shown by `/healthz`. Rules receive it through `on_session`, and it shapes
+what is said:
+
+- Grid slot, places gained and lost, and the finishing position are only
+  spoken when we are sure other cars are racing for position: GT7 flags cars
+  on track and the session has a field. Never in a time trial (where the ghost
+  can count as a second car), and not in the races GT7 does not flag either,
+  until we know what mode those are.
+- Fuel calls need measured consumption, so a session with fuel use off is
+  quiet about fuel already.
+- Leaving a time trial, practice or solo run gets a short summary, since those
+  never show a flag.
 
 ## Data
 

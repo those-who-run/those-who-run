@@ -38,6 +38,8 @@ async def test_real_session_callouts_and_sessions(tmp_path):
     assert texts == [
         # practice session: the engineer started mid-session on lap 7, no brief
         "Lap seven. forty-nine point seven.",
+        # leaving practice: no flag, so a short summary (GT7's counter, best lap)
+        "Session done. Seven laps. Best lap forty-nine point seven.",
         # the race: P10 on the grid (the track was unknown: standing start, lap 1 only)
         "Two laps. P ten of twenty.",
         "Up to ninth.",

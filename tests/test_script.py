@@ -68,6 +68,7 @@ PLACEHOLDERS = {
         "template_position_podium": {"position", "p"},
         "template_best": {"time"},
         "template_fuel": {"fuel", "fuel_left"},
+        "template_quit": {"laps", "best"},
     },
     "temps": {
         "template_tyre_hot": {"corners"},

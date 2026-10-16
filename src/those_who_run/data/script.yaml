@@ -159,6 +159,11 @@ rules:
       - "Quickest lap {time}."
       - "Your best time was {time}."
       - "Fastest lap was {time}."
+    template_quit:             # leaving a time trial or practice; {laps} is "Six laps", {best} the best-lap phrase
+      - "Session done. {laps}. {best}"
+      - "That is the session. {laps}. {best}"
+      - "Good session. {laps} in the bag. {best}"
+      - "Calling it there. {laps}. {best}"
     template_fuel:             # {fuel} is fuel used, {fuel_left} what is in the tank, both as a percentage
       - "Fuel used {fuel}."
       - "Used {fuel} of the tank."

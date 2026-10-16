@@ -96,11 +96,11 @@ class StartBriefRule(Rule):
                         laps=laps_words(state.laps_left)
                     )
                 )
-        elif _has_field(state):
+        elif self.has_field(state):
             # No lap total and other cars: a timed race (or qualifying, which GT7
             # reports the same way). A lone car with no lap total is practice.
             parts.append(self.template("template_timed", "Timed race."))
-        if _has_field(state) and state.position is not None:
+        if self.has_field(state) and state.position is not None:
             parts.append(
                 self.template("template_position", "P {p} of {total}.").format(
                     p=number_words(state.position),
@@ -116,10 +116,6 @@ class StartBriefRule(Rule):
         return tidy_sentence(
             self.template("template_track", "{track}.").format(track=track_words(name))
         )
-
-
-def _has_field(state: RaceState) -> bool:
-    return state.is_race and state.total_cars > 1
 
 
 def _sentences(parts: list[str]) -> str:

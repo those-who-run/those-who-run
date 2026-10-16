@@ -306,6 +306,23 @@ def test_start_brief_speaks_a_track_learned_later_once_per_track(sim):
     assert run_rule(quiet, s.drive(2).frames[-2:]) == []
 
 
+def test_start_brief_names_the_circuit_when_only_its_layouts_are_left(sim):
+    """Fuji and Fuji Short share a line and a box in the table: say Fuji."""
+    rule = StartBriefRule()
+    rule.on_track(
+        TrackMatch(
+            837,
+            "Fuji International Speedway (Short)",
+            "ambiguous",
+            (),
+            "test",
+            "Fuji International Speedway",
+        )
+    )
+    frames = sim(total_laps=3).race([100000] * 3).frames
+    assert run_rule(rule, frames) == ["Fuji International Speedway. Three laps. P five of sixteen."]
+
+
 def test_start_brief_once_per_race_and_again_after_reset(sim):
     rule = StartBriefRule()
     frames = sim(total_laps=2).race([100000] * 2).frames

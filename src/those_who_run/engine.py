@@ -133,9 +133,12 @@ class Engine:
         return self.recorder is None or self.recorder.session is not None
 
     def _apply_track(self, match: TrackMatch) -> None:
-        """Keep the best answer the session has had; never downgrade on a blip."""
-        if self.track is not None and (
-            CONFIDENCE_RANK[match.confidence] < CONFIDENCE_RANK[self.track.confidence]
+        """Keep the best answer the session has had; never downgrade on a blip. A
+        layout the detector has ruled out is not a blip: the answer was wrong."""
+        if (
+            self.track is not None
+            and CONFIDENCE_RANK[match.confidence] < CONFIDENCE_RANK[self.track.confidence]
+            and (self.track.track_id is None or self.tracks.is_alive(self.track.track_id))
         ):
             return
         if self.track is not None and match.decision == self.track.decision:

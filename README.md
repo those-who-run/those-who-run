@@ -191,7 +191,12 @@ gt7telemetry) and four independent facts:
    GT7's own lap counter (when it ticks, the car is on the line, whatever the
    table says) and the car's path cutting the table's segment, widened to span
    the track because the recorded segments are only a car's width. This is the
-   only thing that tells a reverse layout from its twin.
+   only thing that tells a reverse layout from its twin. The lap counter wins:
+   other layouts' lines lie all over a circuit (Fuji's pit exit runs through
+   Tokyo East's line; a lap of Tokyo East cuts Suzuka's), so a path crossing
+   counts only while racing and only until the lap counter has shown where the
+   line is, and at a lap boundary a line much further away than the nearest
+   one is another circuit's.
 4. **A completed lap fits the layout.** Once the lap counter has closed a lap,
    the driven box is the lap's box and the distance is its length. A layout
    the lap fills poorly, or whose known length is off, is ruled out. This is
@@ -202,9 +207,13 @@ The verdict carries a confidence: `confirmed` (line crossed and a full lap
 fits, nothing else left), `probable` (line crossed but no full lap yet, or a
 single layout left), `ambiguous` (several still fit; no track is named unless
 a line was crossed) or `none` (nothing fits: a new track, or one the table has
-wrong). A race with a rolling start is probable before the lights and confirmed
+wrong). When the layouts still in the running all belong to one circuit (Fuji
+and Fuji Short are identical in the table), the start brief says the circuit's
+name. A race with a rolling start is probable before the lights and confirmed
 at the end of lap 1; a flying lap from the pits is probable within a minute and
-confirmed at the end of the lap; a one-lap race confirms at the flag.
+confirmed at the end of the lap; a one-lap race confirms at the flag. The
+verdict never drops on a blip, but a layout that has been ruled out is
+replaced, so a wrong early guess does not stick to the session.
 
 The verdict is logged, stored with the session (`track_id` and
 `track_confidence` in the index, a `track` block with the candidates in

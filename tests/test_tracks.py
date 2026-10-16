@@ -23,6 +23,7 @@ from those_who_run.trackdetect import (
     box_contains,
     box_iou,
     distance_to_segment,
+    family_name,
     segment_crosses,
     travel_direction,
     widen_segment,
@@ -33,10 +34,15 @@ from those_who_run.tracktools import backfill, detect_recording, detect_session,
 FIXTURE = Path(__file__).parent / "fixtures" / "real-n24h-race-lap1-positions-2026-10-14.jsonl"
 UNKNOWN_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-unknown-track-2026-10-15.jsonl"
 SUZUKA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-east-2026-10-15.jsonl"
+FUJI_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-fuji-timed-2026-10-15.jsonl"
+TOKYO_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-tokyo-east-race-2026-10-15.jsonl"
+LAGUNA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-laguna-seca-race-2026-10-15.jsonl"
+SUGO_TIMED_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-sugo-timed-2026-10-15.jsonl"
 N24H, GP, NORDSCHLEIFE, TOURIST = 348, 349, 95, 347
 SUGO = 100001  # learned 2026-10-15, the first row we added ourselves
 FUJI, FUJI_SHORT = 16, 837
 SUZUKA, SUZUKA_EAST = 10, 442
+TOKYO_EAST, LAGUNA_SECA = 361, 41
 
 
 # the table
@@ -228,6 +234,12 @@ def test_menu_or_loading_frame_starts_over_but_a_pause_does_not():
     assert det.distance_m == 0  # new venue: start over
 
 
+def test_family_name_drops_the_layout_part():
+    assert family_name("Fuji International Speedway (Short)") == "Fuji International Speedway"
+    assert family_name("Tokyo Expressway - East Clockwise") == "Tokyo Expressway"
+    assert family_name("Nurburgring 24h") == "Nurburgring 24h"
+
+
 def test_widen_segment_keeps_midpoint_and_direction():
     a, b = widen_segment((0.0, 0.0), (0.0, 20.0), 50.0)
     assert a == pytest.approx((0.0, -40.0)) and b == pytest.approx((0.0, 60.0))
@@ -303,10 +315,62 @@ def test_widened_segment_catches_a_crossing_beside_the_recorded_one():
     narrow = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500, line_half_width_m=5)
     wide = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500, line_half_width_m=50)
     for det in (narrow, wide):
-        det.observe_point(90, 30)
-        det.observe_point(110, 30)  # 30 m beside the 20 m recorded segment
+        det.observe_point(90, 30, lap=1)
+        det.observe_point(110, 30, lap=1)  # 30 m beside the 20 m recorded segment
     assert not narrow.match.candidates[0].line_crossed
     assert wide.match.candidates[0].line_crossed and wide.match.confidence == "probable"
+
+
+def test_a_path_crossing_outside_racing_does_not_count():
+    """Driving out of the pits before a session is not a lap: at Fuji the pit exit runs
+    through Tokyo East's line (2026-10-15)."""
+    tracks = (Track(1, "Here", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),)
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, [(90.0, 10.0), (110.0, 10.0)])  # no lap counter: pit lane, AT_TRACK
+    assert not det.match.candidates[0].line_crossed
+    _drive(det, [(90.0, 10.0), (110.0, 10.0)], lap=1)
+    assert det.match.candidates[0].line_crossed
+
+
+def test_lap_1_starting_on_a_line_settles_the_start_and_later_crossings_do_not_count():
+    """A rolling start ticks lap 1 on the finish line. Lines of other layouts crossed
+    before or after are elsewhere on the circuit: Suzuka's on a lap of Tokyo East,
+    Interlagos's on a lap of Laguna Seca (2026-10-15)."""
+    tracks = (
+        Track(1, "Here", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),
+        Track(2, "Other", "PX", ((300.0, 0.0), (300.0, 20.0)), (0, 0, 1000, 400)),
+    )
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, [(x, 10.0) for x in range(250, 360, 10)], lap=0)  # formation, crosses Other
+    assert det.match.track_id == 2 and det.match.confidence == "probable"
+    loop_back = [(350.0, z) for z in range(20, 400, 10)] + [(x, 390.0) for x in range(350, 50, -10)]
+    loop_back += [(50.0, z) for z in range(390, 0, -10)] + [(x, 10.0) for x in range(60, 100, 10)]
+    _drive(det, loop_back, lap=0)
+    _drive(det, [(x, 10.0) for x in range(100, 400, 10)], lap=1)  # lap 1 starts on Here's line
+    m = det.match
+    assert m.track_id == 1 and m.confidence == "probable"
+    assert [c.track.id for c in m.candidates if c.line_crossed] == [1]
+
+
+def test_lap_counter_drops_a_line_much_further_away_than_the_nearest():
+    tracks = (
+        Track(1, "Here", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),
+        Track(2, "Beside", "PX", ((100.0, 130.0), (100.0, 150.0)), (0, 0, 1000, 400)),
+    )
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, FULL_LAP, lap=1)
+    _drive(det, FULL_LAP[:3], lap=2)  # ticks on Here's line; Beside's is 120 m away
+    assert det.match.confidence == "confirmed" and det.match.candidate_ids == (1,)
+
+
+def test_lap_1_is_measured_from_the_lap_counter_not_from_the_pit_exit():
+    lap_length = 2 * (930 + 380)
+    tracks = (Track(1, "Here", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400), lap_length),)
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, FULL_LAP, lap=0)  # out lap of a timed session
+    _drive_laps(det, FULL_LAP, laps=2)
+    assert det.match.confidence == "confirmed" and det.match.track_id == 1
+    assert det.lap_length_m == pytest.approx(lap_length, abs=40)
 
 
 # the real thing: Nürburgring 24h race, 2026-10-14, from the pre-race screen to lap 2
@@ -366,6 +430,62 @@ def test_real_suzuka_east_is_confirmed_on_the_lap_counter():
     assert decided.lap == 2 and SUZUKA not in decided.match.candidate_ids
     on_lap_1 = [s for s in steps if s.lap == 1]
     assert on_lap_1 and all(s.match.confidence in ("ambiguous", "probable") for s in on_lap_1)
+
+
+# the real thing, from the NUC (2026-10-15 evening): layouts named after another
+# circuit's line, crossed from a pit lane or in the middle of a lap.
+
+
+def _named(steps) -> set[int]:
+    return {s.match.track_id for s in steps if s.match.track_id is not None}
+
+
+def test_real_fuji_from_the_pits_is_never_tokyo_east():
+    """A timed session at Fuji: the pit exit crosses Tokyo East's recorded line, 118 m
+    from Fuji's, and that was announced. Fuji and Fuji Short share a line and a box in
+    the table, so the honest answer is the ambiguous pair, named by the circuit."""
+    final, steps = detect_recording(FUJI_FIXTURE)
+    assert _named(steps) <= {FUJI, FUJI_SHORT}
+    assert final.confidence == "ambiguous" and final.track_id in (FUJI, FUJI_SHORT)
+    assert {c.track.id for c in final.candidates if c.line_crossed} == {FUJI, FUJI_SHORT}
+    assert final.family == "Fuji International Speedway"  # what the start brief says
+
+
+def test_real_tokyo_east_is_never_suzuka_mid_lap():
+    final, steps = detect_recording(TOKYO_FIXTURE)
+    assert _named(steps) == {TOKYO_EAST}
+    assert final.confidence == "confirmed" and final.track_id == TOKYO_EAST
+
+
+def test_real_laguna_seca_is_never_interlagos_mid_lap():
+    final, steps = detect_recording(LAGUNA_FIXTURE)
+    assert _named(steps) == {LAGUNA_SECA}
+    assert final.confidence == "confirmed" and final.track_id == LAGUNA_SECA
+
+
+def test_real_sugo_timed_session_from_the_pits_is_confirmed():
+    """The pit exit crossed Kyoto's line, and the out lap was counted into lap 1, which
+    failed SUGO's known length and left nothing."""
+    final, steps = detect_recording(SUGO_TIMED_FIXTURE)
+    assert _named(steps) == {SUGO}
+    assert final.confidence == "confirmed" and final.track_id == SUGO
+
+
+def test_engine_drops_a_track_the_detector_has_ruled_out():
+    """Confidence never drops on a blip, but a layout ruled out was simply wrong: the
+    session, the metrics and the start brief must not keep it."""
+    tracks = (Track(1, "Known", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),)
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
+    engine.tracks = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    said: list[str] = []
+    for i, x in enumerate(range(140, 1400, 10)):
+        state = make_state(t=i * 0.02, current_lap=1, track_id=None, pos_x=x, pos_z=10)
+        said += [c.text for c in engine.process(state)]
+        if x == 700:
+            assert engine.track is not None and engine.track.confidence == "probable"
+    assert engine.track is not None and engine.track.track_id is None
+    assert engine.track.confidence == "none"
+    assert not any("Known" in text for text in said)
 
 
 def test_learn_track_derives_a_row_from_the_unknown_lap():

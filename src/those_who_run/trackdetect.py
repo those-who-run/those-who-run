@@ -22,6 +22,11 @@ independent physical facts, each cheap to check on every frame:
    own lap counter (when it increments the car is on the line, whatever the
    table says) and the car's path cutting the table's segment, widened to
    span the track because the recorded segments are only a car's width.
+   The lap counter outranks the path. Lines of unrelated layouts lie all
+   over a circuit, so a path crossing counts only while racing and only
+   until the lap counter has shown where this circuit's line is: at Fuji the
+   pit exit runs through Tokyo East's line, and a lap of Tokyo East cuts
+   Suzuka's (2026-10-15).
 
 Ranking: layouts whose line has been crossed outrank the rest; among those,
 higher overlap between the driven box and the layout's box wins. Confidence
@@ -68,6 +73,9 @@ class TrackMatch:
     confidence: Confidence
     candidates: tuple[Candidate, ...]  # best first
     evidence: str
+    # Set when the layout is ambiguous but every crossed candidate is the same
+    # circuit (Fuji and Fuji Short share a line and a box in the table).
+    family: str | None = None
 
     @property
     def candidate_ids(self) -> tuple[int, ...]:
@@ -95,6 +103,7 @@ class TrackDetector:
         dominance: float = 0.05,
         line_radius_m: float = 150.0,
         line_half_width_m: float = 50.0,
+        tick_radius_m: float = 30.0,
         min_fit: float = 0.5,
         length_tolerance: float = 0.08,
     ) -> None:
@@ -105,6 +114,8 @@ class TrackDetector:
         self.min_distance = min_distance_m
         self.dominance = dominance
         self.line_radius = line_radius_m
+        self.line_slack = line_half_width_m
+        self.tick_radius = tick_radius_m
         self.min_fit = min_fit
         self.length_tolerance = length_tolerance
         # Table lines are two frames of one car's crossing, 7 to 68 m long, and
@@ -127,12 +138,17 @@ class TrackDetector:
         self._lap_complete = False  # a full lap has been driven: the box is the lap's box
         self._lap_length: float | None = None  # length of the last completed lap
         self._crossed: set[int] = set()
+        self._line_known = False  # the lap counter has put the car on a layout's line
         self._alive: set[int] = {t.id for t in self.tracks}
         self._match: TrackMatch = NO_MATCH
 
     @property
     def match(self) -> TrackMatch:
         return self._match
+
+    def is_alive(self, track_id: int | None) -> bool:
+        """Whether the layout still fits everything seen since the last reset."""
+        return track_id in self._alive
 
     @property
     def distance_m(self) -> float:
@@ -194,12 +210,16 @@ class TrackDetector:
                 moved = True
                 self._distance += step
                 self._lap_distance += step
-                self._note_crossings(self._prev, p)
+                if lap is not None and not self._line_known:
+                    self._note_crossings(self._prev, p)
             # else: reset to pits, restart, or a replayed results screen; the
             # segment is not a path the car drove.
         if lap is not None:
-            if self._last_lap is None and lap >= 1:
+            if (self._last_lap is None or self._last_lap < 1) and lap >= 1:
                 self._anchors.append(p)
+                if moved:
+                    assert self._prev is not None
+                    self._first_lap(self._prev, p)
             elif self._last_lap is not None and lap > self._last_lap >= 1 and moved:
                 assert self._prev is not None
                 self._lap_boundary(self._prev, p)
@@ -222,6 +242,29 @@ class TrackDetector:
             if direction == t.direction and segment_crosses(a, b, c, d):
                 self._crossed.add(t.id)
 
+    def _first_lap(self, a: Point, b: Point) -> None:
+        """The lap counter started lap 1 between a and b.
+
+        A flying or rolling start ticks on the finish line, which settles which
+        lines were real: layouts whose line is under the car are crossed, and
+        crossings of any other line were somewhere else on the circuit. A
+        standing start ticks on the grid, away from every line, and settles
+        nothing. Either way lap 1 starts here: driving to the line from the pit
+        or the formation lap is not part of it.
+        """
+        direction = travel_direction(a, b)
+        on_line = {
+            t.id
+            for t in self.tracks
+            if t.id in self._alive
+            and t.direction == direction
+            and distance_to_segment(b, *t.line) <= self.tick_radius  # type: ignore[misc]
+        }
+        if on_line:
+            self._crossed = on_line
+            self._line_known = True
+        self._lap_distance = 0.0
+
     def _lap_boundary(self, a: Point, b: Point) -> None:
         """GT7 incremented the lap counter between a and b: the car is on the finish line.
 
@@ -236,16 +279,25 @@ class TrackDetector:
         coordinate space, not the circuit: a new track's line often lands near
         a known one's, because most layouts sit near their own origin. A known
         lap length that is off rules a layout out the same way.
+
+        Lines can be up to ``line_radius`` off, but a line much further away
+        than the nearest one is another circuit's: Tokyo East's sits 118 m from
+        Fuji's, beside the pit lane.
         """
         direction = travel_direction(a, b)
         self._anchors.append(b)
         assert self._box is not None
+        dist = {
+            t.id: distance_to_segment(b, *t.line)  # type: ignore[misc]
+            for t in self.tracks
+            if t.id in self._alive and t.direction == direction
+        }
+        reach = min(self.line_radius, min(dist.values(), default=0.0) + self.line_slack)
         for t in self.tracks:
             if t.id not in self._alive:
                 continue
             assert t.line is not None and t.box is not None
-            near = distance_to_segment(b, *t.line) <= self.line_radius
-            if not (near and direction == t.direction):
+            if dist.get(t.id, math.inf) > reach:
                 self._alive.discard(t.id)
                 continue
             self._crossed.add(t.id)
@@ -255,6 +307,7 @@ class TrackDetector:
             ):
                 self._alive.discard(t.id)
         self._lap_complete = True
+        self._line_known = True
         self._lap_length = self._lap_distance
         self._lap_distance = 0.0
 
@@ -322,6 +375,13 @@ class TrackDetector:
                 conf = "ambiguous"
                 names = ", ".join(c.track.name for c in crossed[1:])
                 why = f"finish line shared with {names}; bounds do not separate them"
+                families = {family_name(c.track.name) for c in crossed}
+                if len(families) == 1:
+                    family = families.pop()
+                    why += f"; all {family}"
+                    return TrackMatch(
+                        best.track.id, best.track.name, conf, tuple(cands), why, family
+                    )
             return TrackMatch(best.track.id, best.track.name, conf, tuple(cands), why)
         if len(cands) == 1 and self._distance >= self.min_distance:
             km = self._distance / 1000
@@ -330,6 +390,15 @@ class TrackDetector:
         # Several layouts and no crossing: naming one would be a guess.
         why = f"{len(cands)} layouts near the start still fit, line not yet crossed"
         return TrackMatch(None, None, "ambiguous", tuple(cands[:MAX_REPORTED_CANDIDATES]), why)
+
+
+def family_name(name: str) -> str:
+    """The circuit a layout belongs to: the name without its layout part.
+
+    "Fuji International Speedway (Short)" and "Tokyo Expressway - East Clockwise"
+    give "Fuji International Speedway" and "Tokyo Expressway".
+    """
+    return name.split(" (")[0].split(" - ")[0].strip()
 
 
 # geometry

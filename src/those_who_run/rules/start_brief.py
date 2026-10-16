@@ -9,7 +9,9 @@ names a track, as long as the first lap is still being driven. Once the line
 is crossed the driver knows where they are, so a name that only became certain
 at the line (Suzuka East, 2026-10-15) is not read out a lap late. A changed
 verdict is spoken again under the same limit; a confidence upgrade for the same
-track is not. ``late_track_first_lap_only: false`` lifts the limit.
+track is not. ``late_track_first_lap_only: false`` lifts the limit. When the
+detector cannot pick between layouts of one circuit (Fuji and Fuji Short look
+the same in the table), the circuit's name is spoken.
 """
 
 from __future__ import annotations
@@ -40,17 +42,26 @@ class StartBriefRule(Rule):
         self.started_at: float | None = None
         self.start_lap = 0
         self.briefed = False
-        self.track: TrackMatch | None = None
-        self.track_spoken_id: int | None = None
-        self.pending_track: TrackMatch | None = None
+        self.track: str | None = None  # the name to speak
+        self.track_spoken: str | None = None
+        self.pending_track: str | None = None
 
     def on_track(self, match: TrackMatch) -> None:
-        if match.track_id is None or CONFIDENCE_RANK[match.confidence] < self.min_rank:
+        name = self._speakable(match)
+        if name is None:
+            # The engine only downgrades when the layout was ruled out: forget it.
+            self.track = None
+            self.pending_track = None
             return
-        self.track = match
-        if self.briefed and self.announce_track and match.track_id != self.track_spoken_id:
+        self.track = name
+        if self.briefed and self.announce_track and name != self.track_spoken:
             # A callout needs a frame time, so it is built on the next evaluated frame.
-            self.pending_track = match
+            self.pending_track = name
+
+    def _speakable(self, match: TrackMatch) -> str | None:
+        if match.track_id is not None and CONFIDENCE_RANK[match.confidence] >= self.min_rank:
+            return match.name or f"track {match.track_id}"
+        return match.family
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if self.started_at is None:
@@ -58,11 +69,11 @@ class StartBriefRule(Rule):
             self.start_lap = state.current_lap
         out: list[Callout] = []
         if self.pending_track is not None:
-            match, self.pending_track = self.pending_track, None
+            name, self.pending_track = self.pending_track, None
             too_late = self.first_lap_only and state.current_lap > max(self.start_lap, 1)
-            if match.track_id != self.track_spoken_id and not too_late:
-                self.track_spoken_id = match.track_id
-                out.append(self.callout(self._track_phrase(match), state))
+            if name != self.track_spoken and not too_late:
+                self.track_spoken = name
+                out.append(self.callout(self._track_phrase(name), state))
         if self.briefed or state.t - self.started_at < self.settle_secs:
             return out
 
@@ -70,7 +81,7 @@ class StartBriefRule(Rule):
         parts: list[str] = []
         if self.track is not None:
             parts.append(self._track_phrase(self.track))
-            self.track_spoken_id = self.track.track_id
+            self.track_spoken = self.track
         if state.has_lap_count:
             if self.start_lap <= 1:
                 parts.append(
@@ -101,9 +112,10 @@ class StartBriefRule(Rule):
             out.append(self.callout(_sentences(parts), state))
         return out
 
-    def _track_phrase(self, match: TrackMatch) -> str:
-        name = track_words(match.name or f"track {match.track_id}")
-        return tidy_sentence(self.template("template_track", "{track}.").format(track=name))
+    def _track_phrase(self, name: str) -> str:
+        return tidy_sentence(
+            self.template("template_track", "{track}.").format(track=track_words(name))
+        )
 
 
 def _has_field(state: RaceState) -> bool:

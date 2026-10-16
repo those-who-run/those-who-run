@@ -12,6 +12,11 @@ Situational pools, used when configured: ``delta_slower_small`` (under
 
 A lap that beats the best so far is a "new best" and gets its own template and
 priority; it replaces the plain lap-time phrase rather than adding a second one.
+
+After a rolling start GT7 does count lap 1 (it starts on the line), but lap 1 of
+a race is slowed by the start and the pack: lap 2 at SUGO was "new best by
+eleven point nine" (2026-10-15). In a lap-count race, lap 2 measured only
+against lap 1 gets no delta, like the first lap.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ class LapTimeRule(Rule):
         self.new_best_priority = int(self.cfg.get("new_best_priority", 11))
         self.last_announced_lap = 0
         self.own_best_ms = 0
+        self.lap1_ms = 0
         self.equal_ms = int(self.cfg.get("equal_ms", 50))
         self.small_delta_ms = int(self.cfg.get("small_delta_ms", 300))
         self.large_delta_ms = int(self.cfg.get("large_delta_ms", 2000))
@@ -53,7 +59,10 @@ class LapTimeRule(Rule):
         counts = not (state.has_lap_count and lap_no == 1)
         if counts and (self.own_best_ms <= 0 or state.last_lap_ms < self.own_best_ms):
             self.own_best_ms = state.last_lap_ms
-        if prev_best <= 0:
+        if lap_no == 1:
+            self.lap1_ms = state.last_lap_ms
+        only_lap_1 = state.has_lap_count and lap_no == 2 and prev_best == self.lap1_ms
+        if prev_best <= 0 or only_lap_1:
             delta = self.template("delta_first", "")
         else:
             diff = state.last_lap_ms - prev_best

@@ -12,7 +12,7 @@ rules:
       - "Lap {lap} completed. {time}. {delta}."
       - "Across the line for lap {lap}. {time}. {delta}."
       - "Lap {lap} done. {time}. {delta}."
-      - "Time was {time}. {delta}."
+      - "Lap {lap} time was {time}. {delta}."
     delta_slower:
       - "{delta} over best."
       - "{delta} off your best."
@@ -165,7 +165,7 @@ rules:
       - "Finished with {fuel_left} in the tank."
       - "{fuel_left} left in the tank."
   temps:
-    template_tyre_hot:         # {corners}: "Front left tyre", "Front left and rear left tyres", "All tyres"
+    template_tyre_hot:         # {corners}: "Front left tyre", "Rear tyres", "Front left and rear left tyres", "All tyres"
       - "{corners} hot."
       - "{corners} overheating."
       - "{corners} running hot."

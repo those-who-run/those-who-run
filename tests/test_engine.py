@@ -29,7 +29,7 @@ async def test_full_race_callouts_and_records(tmp_path, sim):
         "Three laps. P five of sixteen.",
         "Lap one. one forty point zero.",
         "Final lap.",  # final lap outranks the lap time posted on the same crossing
-        "Lap two. one thirty-nine point zero. New best by one point zero.",
+        "Lap two. one thirty-nine point zero.",  # lap 1 is the start: no delta
         "Lap three. one thirty-nine point five. zero point five over best.",
         "Chequered flag. Finished fifth. Best lap one thirty-nine point zero. "
         "Fuel used fifteen percent.",
@@ -80,7 +80,7 @@ async def test_restart_closes_session_and_starts_another(tmp_path, sim):
         "Three laps. P five of sixteen.",  # briefed again from the grid
         "Lap one. one thirty-nine point zero.",  # best is reset by the restart
         "Final lap.",
-        "Lap two. one thirty-eight point zero. New best by one point zero.",
+        "Lap two. one thirty-eight point zero.",
         "Lap three. one thirty-seven point zero. New best by one point zero.",
         "Chequered flag. Finished fifth. Best lap one thirty-seven point zero. "
         "Fuel used fifteen percent.",
@@ -158,7 +158,7 @@ async def test_post_results_blip_is_quiet(tmp_path, sim):
         "Two laps. P four of twelve.",
         "Final lap.",
         "Lap one. one forty point zero.",
-        "Lap two. one thirty-nine point zero. New best by one point zero.",
+        "Lap two. one thirty-nine point zero.",  # lap 1 is the start: no delta
         "Chequered flag. Finished fourth. Best lap one thirty-nine point zero. "
         "Fuel used ten percent.",
     ]

@@ -31,12 +31,12 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 | `start_brief` | two seconds into a race: track (if known), distance, grid slot | "Sportsland SUGO. Two laps. P ten of twenty." |
 | `start_brief` | the detector names the track after the brief, still on the first lap | "Nurburgring twenty-four hour." |
 | `lap_time` | every completed lap, including the in-lap to a pit stop | "Lap three. One forty-one point zero. One point five over best." |
-| `lap_time` | a lap beats the best so far (own template and priority) | "Lap two. One thirty-nine point zero. New best by one point zero." |
+| `lap_time` | a lap beats the best so far (own template and priority); in a lap-count race lap 2 is not measured against lap 1, the start | "Lap three. One thirty-nine point zero. New best by one point zero." |
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
 | `fuel` | the lap after this one cannot be completed, once per stint | "Pit this lap." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
 | `position` | a place is gained or lost (races only), after a 3 s settle, at most every 10 s, quiet for the first 15 s | "Up to sixth." |
-| `temps` | a tyre stays over 120 °C for five seconds; water or oil high; cold tyres at the start | "Front left tyre hot." |
+| `temps` | a tyre stays over 120 °C for five seconds (corners already over join it in one phrase); water or oil high; cold tyres at the start | "Rear tyres hot." |
 | `telemetry` | packets stop for 3 s mid-race or mid-pause, and when they return | "Lost telemetry." / "Telemetry back." |
 | `race_summary` | the chequered flag (kept for 30 s, so it waits behind the final lap time) | "Chequered flag. Finished sixth. Best lap fifty-three point one. Fuel used thirty-eight percent." |
 
@@ -308,7 +308,8 @@ Learned from recordings, and encoded in `state.py`:
 - GT7 does not count lap 1 of a lap-count race towards its best lap: the grid
   sits ahead of the line, so lap 1 is short (57.1 s against 60 s laps at Suzuka
   East). The engineer follows GT7, so lap 2 has no delta and the summary's best
-  lap is GT7's. Timed races and time trials do count lap 1.
+  lap is GT7's. Timed races and time trials do count lap 1, and so does a race
+  with a rolling start, where lap 1 begins on the line (SUGO, 2026-10-15).
 - Laps within 50 ms of the best are "equal to best"; time-trial laps can repeat
   to a few milliseconds.
 - Driving into the pits, the car crosses the line inside the pit cut-scene, so

@@ -6,6 +6,10 @@ once and only re-arms when the value has dropped ``hysteresis_c`` below the
 threshold, and never within ``cooldown_secs`` of the last warning. Paused
 frames are not evaluated, so a gap longer than the sustain window restarts it.
 
+Corners are reported together: when one tyre's alarm fires, every other tyre
+already over the threshold is included rather than reported a moment later on
+its own (the rears 0.3 s apart while drifting, 2026-10-15).
+
 Thresholds are starting points. Recordings so far show tyres from 21 °C on a
 cold start to 154 °C while sliding, and water and oil pinned at 85 and 110
 whatever happens; GT7 may only move those with engine damage.
@@ -55,6 +59,18 @@ class _Alarm:
         self.armed = False
         return True
 
+    def join(self, value: float, t: float) -> bool:
+        """Fire with another alarm that just fired: over the threshold, armed and past
+        the cooldown, without waiting out the sustain window."""
+        if self.threshold is None or value <= self.threshold or not self.armed:
+            return False
+        if self.fired_at is not None and t - self.fired_at < self.cooldown:
+            return False
+        self.fired_at = t
+        self.armed = False
+        self.above_since = self.above_since if self.above_since is not None else t
+        return True
+
 
 class TempsRule(Rule):
     name = "temps"
@@ -94,11 +110,13 @@ class TempsRule(Rule):
             if min(state.tire_temp) < self.tyre_cold:
                 out.append(self.callout(self.template("template_tyres_cold", "Tyres cold."), state))
 
-        hot = [
-            CORNERS[i]
-            for i, alarm in enumerate(self.tyres)
-            if alarm.update(state.tire_temp[i], state.t)
-        ]
+        fired = [alarm.update(state.tire_temp[i], state.t) for i, alarm in enumerate(self.tyres)]
+        if any(fired):
+            fired = [
+                fired[i] or alarm.join(state.tire_temp[i], state.t)
+                for i, alarm in enumerate(self.tyres)
+            ]
+        hot = [CORNERS[i] for i, f in enumerate(fired) if f]
         if hot:
             text = self.template("template_tyre_hot", "{corners} hot.").format(
                 corners=_corners_phrase(hot)
@@ -116,6 +134,10 @@ class TempsRule(Rule):
 def _corners_phrase(names: list[str]) -> str:
     if len(names) == len(CORNERS):
         return "All tyres"
+    if names == ["rear left", "rear right"]:
+        return "Rear tyres"
+    if names == ["front left", "front right"]:
+        return "Front tyres"
     if len(names) == 1:
         text = f"{names[0]} tyre"
     else:

@@ -57,6 +57,7 @@ def test_table_loads_with_names_and_geometry():
     assert track_name(SUGO) == "Sportsland SUGO"
     assert track_name(N24H) == "Nurburgring 24h"
     assert track_name(471) == "Tsukuba Circuit"
+    assert track_name(1225) == "Alsace - Test Course Reverse"  # was two names run together
     assert track_name(None) is None
     assert track_name(999999) == "track 999999"
     n24h = track_by_id()[N24H]

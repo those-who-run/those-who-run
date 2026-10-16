@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from tests.conftest import make_state
 from those_who_run.rules import build_rules
 from those_who_run.rules.final_lap import FinalLapRule
@@ -31,33 +33,51 @@ def _match(track_id, name, confidence):
 
 
 def test_lap_time_deltas(sim):
-    frames = sim(total_laps=3).menu().at_track().race([100000, 99500, 101000]).frames
+    frames = sim(total_laps=4).menu().at_track().race([104000, 100000, 99500, 101000]).frames
     assert run_rule(LapTimeRule(), frames) == [
-        "Lap one. one forty point zero.",
-        "Lap two. one thirty-nine point five. New best by zero point five.",
-        "Lap three. one forty-one point zero. one point five over best.",
+        "Lap one. one forty-four point zero.",
+        "Lap two. one forty point zero.",  # only lap 1, the start, to compare with
+        "Lap three. one thirty-nine point five. New best by zero point five.",
+        "Lap four. one forty-one point zero. one point five over best.",
     ]
+
+
+def test_lap_time_lap_2_of_a_race_is_not_measured_against_the_start(sim):
+    """SUGO, 2026-10-15: a rolling start at 80 km/h made lap 1 a 1:53 and lap 2
+    "new best by eleven point nine". In a timed session lap 1 is a real lap."""
+    race = sim(total_laps=5).race([113117, 101201, 106407], finish=False).frames
+    assert run_rule(LapTimeRule(), race)[:3] == [
+        "Lap one. one fifty-three point one.",
+        "Lap two. one forty-one point two.",
+        "Lap three. one forty-six point four. five point two over best.",
+    ]
+    timed = sim(total_laps=0).race([113117, 101201], finish=False).frames
+    assert run_rule(LapTimeRule(), timed)[1] == (
+        "Lap two. one forty-one point two. New best by eleven point nine."
+    )
 
 
 def test_lap_time_new_best_has_its_own_template_and_priority(sim):
-    frames = sim(total_laps=3).race([100000, 99000, 99000]).frames
+    frames = sim(total_laps=4).race([100000, 100000, 99000, 99000]).frames
     out = run_rule_callouts(LapTimeRule(), frames)
     assert [c.text for c in out] == [
         "Lap one. one forty point zero.",  # the first lap is not a "new best"
-        "Lap two. one thirty-nine point zero. New best by one point zero.",
-        "Lap three. one thirty-nine point zero. equal to best.",
+        "Lap two. one forty point zero.",
+        "Lap three. one thirty-nine point zero. New best by one point zero.",
+        "Lap four. one thirty-nine point zero. equal to best.",
     ]
-    assert [c.priority for c in out] == [20, 11, 20]
+    assert [c.priority for c in out] == [20, 20, 11, 20]
     rule = LapTimeRule({"template_new_best": "Best. {time}. {delta}", "new_best_priority": 3})
     out = run_rule_callouts(rule, frames)
-    assert out[1].text == "Best. one thirty-nine point zero. one point zero under best."
-    assert out[1].priority == 3
+    assert out[2].text == "Best. one thirty-nine point zero. one point zero under best."
+    assert out[2].priority == 3
 
 
 def test_lap_time_templates_are_configurable(sim):
-    frames = sim(total_laps=2).race([100000, 100000]).frames
+    frames = sim(total_laps=3).race([100000, 100000, 100000]).frames
     rule = LapTimeRule({"template": "{time}, {delta}", "delta_equal": "same as best"})
     assert run_rule(rule, frames) == [
+        "one forty point zero.",
         "one forty point zero.",
         "one forty point zero, same as best.",
     ]
@@ -424,6 +444,26 @@ def test_temps_corners_are_joined_into_one_phrase(sim):
     assert run_rule(TempsRule(), s.frames) == ["All tyres hot."]
     s = _stint(sim).drive(6, tire_temp=(125.0, 125.0, 125.0, 90.0))
     assert run_rule(TempsRule(), s.frames) == ["Front left, front right and rear left tyres hot."]
+
+
+def test_temps_a_corner_already_hot_joins_the_one_that_fires(sim):
+    """While drifting the rears crossed the threshold a few frames apart and were
+    reported 0.3 s apart (2026-10-15). Both rears are one phrase."""
+    s = _stint(sim).drive(1, tire_temp=(90.0, 90.0, 125.0, 90.0))
+    s.drive(6, tire_temp=(90.0, 90.0, 125.0, 125.0))
+    assert run_rule(TempsRule(), s.frames) == ["Rear tyres hot."]
+    s = _stint(sim).drive(6, tire_temp=(125.0, 125.0, 90.0, 90.0))
+    assert run_rule(TempsRule(), s.frames) == ["Front tyres hot."]
+
+
+def test_real_drift_rears_are_one_warning_each_time():
+    """BRZ Drift Car at Tsukuba (2026-10-15): rears at 177-188 °C while drifting."""
+    from those_who_run.replay import read_recording
+
+    frames = read_recording(
+        Path(__file__).parent / "fixtures" / "real-nuc-tsukuba-brz-drift-2026-10-15.jsonl"
+    )
+    assert run_rule(TempsRule(), frames) == ["Rear tyres hot."] * 3
 
 
 def test_temps_once_while_hot_then_again_after_cooling_and_cooldown(sim):

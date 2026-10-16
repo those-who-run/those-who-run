@@ -366,7 +366,9 @@ trackside glyphs are ⏱️ for times, ⛽ for fuel and 🚩 for the flag.
 
 ## Roadmap
 
-Planned work is tracked as GitHub milestones, one per release:
+[ROADMAP.md](ROADMAP.md) has the direction: principles, the streams that
+run in parallel, their order and the open decisions. Details live in the
+GitHub milestones and issues, each issue labelled with its stream:
 https://github.com/those-who-run/those-who-run/milestones
 
 ## Development

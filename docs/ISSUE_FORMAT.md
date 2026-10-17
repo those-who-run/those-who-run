@@ -22,6 +22,9 @@ build it without asking around first. The template is
 - **One issue, one deliverable.** Split anything that needs two PRs.
 - Keep **Dependencies** in both directions current, so the order of work can
   be read straight from the issues.
+- **Shared decisions go in an ADR.** When more than one issue depends on the
+  same decision, record it in `docs/adr/` (see its README) and link it from
+  each issue, rather than deciding it in each.
 - Size: **S** (an afternoon), **M** (a day or two), **L** (split it).
 
 ## Sections

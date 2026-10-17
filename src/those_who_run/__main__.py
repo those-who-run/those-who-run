@@ -51,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("recording", type=Path)
     rp.add_argument("--wav-out", type=Path, help="also synthesise each callout into this directory")
     rp.add_argument("--realtime", action="store_true", help="sleep to match the recording's timing")
+    rp.add_argument(
+        "--store",
+        type=Path,
+        help="keep the sessions found in this directory (default: a temporary one, thrown away;"
+        " never GT7_DATA_DIR unless named here)",
+    )
 
     rc = sub.add_parser("record", help="capture live telemetry to a JSONL file for later replay")
     rc.add_argument("output", type=Path)
@@ -180,7 +186,9 @@ def dispatch(args: argparse.Namespace, settings: Settings) -> int:
     if args.command == "say":
         return asyncio.run(run_say(settings, args.text))
     if args.command == "replay":
-        return asyncio.run(run_replay(settings, args.recording, args.wav_out, args.realtime))
+        return asyncio.run(
+            run_replay(settings, args.recording, args.wav_out, args.realtime, args.store)
+        )
     if args.command == "record":
         return asyncio.run(run_record(settings, args.output, args.ps5_ip, args.seconds))
     if args.command == "thin":
@@ -429,14 +437,23 @@ def run_tracks(settings: Settings, args: argparse.Namespace) -> int:
 
 
 async def run_replay(
-    settings: Settings, recording: Path, wav_out: Path | None, realtime: bool
+    settings: Settings,
+    recording: Path,
+    wav_out: Path | None,
+    realtime: bool,
+    store_dir: Path | None = None,
 ) -> int:
+    """Replay a recording. Sessions in it go to ``store_dir``, or to a temporary
+    directory thrown away afterwards: never into ``GT7_DATA_DIR`` (the pit wall
+    and the results history only ever see real drives) unless named here, and
+    then only while the engineer is stopped (the store's writer lock)."""
+    import tempfile
+
     from those_who_run.audio.player import ConsolePlayer, WavDirPlayer
     from those_who_run.replay import read_recording, replay, summarise
 
     rules_cfg = load_rules_config(settings.rules_file)
     queue = CalloutQueue(max_age=None)
-    engine = Engine(build_rules(rules_cfg["rules"]), queue, SessionStore(settings.data_dir))
     if wav_out is not None:
         from those_who_run.speech import PiperSpeech
 
@@ -444,8 +461,22 @@ async def run_replay(
         player: ConsolePlayer = WavDirPlayer(speech, wav_out)
     else:
         player = ConsolePlayer()
-    spoken = await replay(read_recording(recording), engine, player, realtime=realtime)
+    with tempfile.TemporaryDirectory(prefix="those-who-run-replay-") as tmp:
+        store = SessionStore(store_dir or Path(tmp))
+        engine = Engine(build_rules(rules_cfg["rules"]), queue, store)
+        try:
+            spoken = await replay(read_recording(recording), engine, player, realtime=realtime)
+        finally:
+            try:
+                # A session still open when the recording stops is ended, so the
+                # store is complete: every session has its summary.json.
+                if store.session is not None and engine.prev is not None:
+                    store.end_session(engine.prev)
+            finally:
+                store.close()
     log.info("replay summary: %s", summarise(spoken, queue))
+    if store_dir is not None:
+        log.info("sessions stored in %s", store_dir)
     return 0
 
 

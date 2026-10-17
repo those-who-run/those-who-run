@@ -163,7 +163,15 @@ those-who-run record session.jsonl --ps5-ip 192.0.2.108
 
 # run the rules over it, printing callouts; optionally write WAVs to listen to
 those-who-run replay session.jsonl --wav-out ./out
+
+# keep the sessions it finds, to look at them in the pit wall
+those-who-run replay session.jsonl --store ./replayed
+GT7_DATA_DIR=./replayed those-who-run web
 ```
+
+A replay never writes to `GT7_DATA_DIR`: the sessions it finds go to a
+temporary store that is thrown away afterwards, or to `--store DIR`. So the pit
+wall and the results history only ever show real drives.
 
 On the NUC the engineer records on its own: with `GT7_RECORD_DIR` set, every
 outing (from leaving the menu to returning to it) becomes one
@@ -348,9 +356,10 @@ raw from the packet, for drift detection; older laps lack those columns.
 The index is in SQLite's WAL mode, so the pit wall reading it never holds up
 the engineer's writes. There is one writer at a time (ADR 0001): `run` holds
 an exclusive lock on `engineer.lock` for as long as it is up, and every other
-command that writes the store (`tracks backfill`, `post`, `rebuild-best`)
-refuses with exit code 1 while it does. Use the pit wall, or stop the engineer
-first. The engineer likewise refuses to start while one of those is running.
+command that writes the store (`tracks backfill`, `post`, `rebuild-best`,
+`replay --store` into it) refuses with exit code 1 while it does. Use the pit
+wall, or stop the engineer first. The engineer likewise refuses to start while
+one of those is running.
 The pit wall only reads and never takes the lock.
 
 A session's `best_lap_ms` is the best lap the results card and the pit wall

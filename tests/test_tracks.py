@@ -38,8 +38,12 @@ FUJI_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-fuji-timed-2026-10
 TOKYO_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-tokyo-east-race-2026-10-15.jsonl"
 LAGUNA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-laguna-seca-race-2026-10-15.jsonl"
 SUGO_TIMED_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-sugo-timed-2026-10-15.jsonl"
+GILLES_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl"
+)
 N24H, GP, NORDSCHLEIFE, TOURIST = 348, 349, 95, 347
 SUGO = 100001  # learned 2026-10-15, the first row we added ourselves
+GILLES_VILLENEUVE = 100002  # learned 2026-10-17 from a daily race
 FUJI, FUJI_SHORT = 16, 837
 SUZUKA, SUZUKA_EAST = 10, 442
 TOKYO_EAST, LAGUNA_SECA = 361, 41
@@ -50,10 +54,10 @@ TOKYO_EAST, LAGUNA_SECA = 361, 41
 
 def test_table_loads_with_names_and_geometry():
     tracks = load_tracks()
-    assert len(tracks) == 107
-    assert sum(t.has_geometry for t in tracks) == 104
+    assert len(tracks) == 108
+    assert sum(t.has_geometry for t in tracks) == 105
     # gt-telem's rows carry no length; `tracks learn` fills it for tracks we add ourselves
-    assert [t.id for t in tracks if t.length_m is not None] == [SUGO]
+    assert [t.id for t in tracks if t.length_m is not None] == [SUGO, GILLES_VILLENEUVE]
     assert track_name(SUGO) == "Sportsland SUGO"
     assert track_name(N24H) == "Nurburgring 24h"
     assert track_name(471) == "Tsukuba Circuit"
@@ -404,6 +408,17 @@ def test_real_sugo_is_confirmed_from_its_learned_row():
     final, steps = detect_recording(UNKNOWN_FIXTURE)
     assert final.track_id == SUGO and final.confidence == "confirmed"
     assert final.candidates[0].fit > 0.95
+    decided = next(s for s in steps if s.match.confidence == "confirmed")
+    assert decided.lap == 2
+
+
+def test_real_gilles_villeneuve_race_is_confirmed_at_the_end_of_lap_1():
+    """Circuit Gilles Villeneuve was in the week's daily races (2026-10-17) and not in the
+    table, so the 12-lap race posted as an unknown track. Learned from that race: a
+    rolling start, probable once over the line, confirmed when lap 1 is complete."""
+    final, steps = detect_recording(GILLES_FIXTURE)
+    assert final.track_id == GILLES_VILLENEUVE and final.confidence == "confirmed"
+    assert track_name(GILLES_VILLENEUVE) == "Circuit Gilles Villeneuve"
     decided = next(s for s in steps if s.match.confidence == "confirmed")
     assert decided.lap == 2
 

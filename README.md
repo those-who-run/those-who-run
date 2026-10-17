@@ -234,7 +234,8 @@ those-who-run tracks learn data/sessions/<id> --id 100001 --name "New Track"
 When GT7 adds a track, drive a lap, run `tracks learn` on the session and add
 the printed row to `src/those_who_run/data/tracks.csv`. Learned rows use ids
 from 100001 up, since GT7's own ids are not visible in telemetry. Sportsland
-SUGO (100001) was added this way from its first lap on 2026-10-15.
+SUGO (100001) was added this way from its first lap on 2026-10-15, and Circuit
+Gilles Villeneuve (100002) from a daily race on 2026-10-17.
 
 ## Cars
 

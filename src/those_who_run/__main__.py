@@ -155,11 +155,13 @@ async def run_post(settings: Settings, session_id: str, dry_run: bool) -> int:
     if not path.exists():
         raise ConfigError(f"{path}: no such session summary")
     summary = json.loads(path.read_text(encoding="utf-8"))
-    card = build_card(summary)
+    card = build_card(summary, settings.pitwall_url)
     if card is None:
         print("no full lap: nothing to post")
         return 1
     print(card.title)
+    if card.url:
+        print(card.url)
     print(card.description)
     for name, value in card.fields:
         print(f"  {name}: {value}")
@@ -449,6 +451,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
             settings.results_channel_id,
             on_posted=recorder.mark_posted,
             on_result=lambda r: metrics.results_posts_total.labels(r).inc(),
+            pitwall_url=settings.pitwall_url,
         )
         recorder.on_end = poster.submit
         log.info("results cards go to channel %s", settings.results_channel_id)

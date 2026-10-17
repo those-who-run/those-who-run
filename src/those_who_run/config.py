@@ -136,6 +136,7 @@ class Settings:
     record_keep: int = 20
     results_channel_id: int | None = None  # a text channel for results cards; None is off
     web_port: int = 8501  # the pit wall, ``those-who-run web``
+    pitwall_url: str | None = None  # where the pit wall is served; results cards link there
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -156,6 +157,7 @@ class Settings:
             record_keep=int(e.get("GT7_RECORD_KEEP", "20")),
             results_channel_id=_int_or_none(e, "DISCORD_RESULTS_CHANNEL_ID") or None,
             web_port=int(e.get("GT7_WEB_PORT", "8501")),
+            pitwall_url=e.get("PITWALL_URL") or None,
         )
 
     def require_live(self) -> None:

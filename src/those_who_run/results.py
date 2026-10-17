@@ -9,7 +9,8 @@ reused: one login, no privileged intents. The bot needs View Channel, Send
 Messages and Embed Links on the results channel.
 
 Position is only shown where the engineer would say it: a field that GT7
-flags (see ``Rule.has_field``).
+flags (see ``Rule.has_field``). With a pit wall base URL (``PITWALL_URL``), the
+card's title links to that session's page (``session_link``).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 from those_who_run import brand
 
@@ -34,6 +36,16 @@ class Card:
     colour: int
     footer: str
     timestamp: datetime | None = None
+    url: str | None = None  # the title links here: the session on the pit wall
+
+
+def session_link(base: str | None, session_id: object) -> str | None:
+    """The pit wall page for a session, or None without a base URL or an id.
+    Every card links this way: ``("http://host/", "20261017-162118")`` ->
+    "http://host/?session=20261017-162118"."""
+    if not base or not session_id:
+        return None
+    return f"{base.rstrip('/')}/?session={quote(str(session_id), safe='')}"
 
 
 def race_time(ms: int) -> str:
@@ -48,8 +60,9 @@ def race_time(ms: int) -> str:
     return f"{minutes}:{seconds:02d}.{millis:03d}"
 
 
-def build_card(summary: dict[str, Any]) -> Card | None:
-    """The card for a session, or None when it is not worth posting (no full lap)."""
+def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card | None:
+    """The card for a session, or None when it is not worth posting (no full lap).
+    With ``pitwall_url``, the title links to the session on the pit wall."""
     laps = int(summary.get("laps_completed") or 0)
     if laps < 1:
         return None
@@ -100,6 +113,7 @@ def build_card(summary: dict[str, Any]) -> Card | None:
         # "Yesterday at", then the date). The session id stays in the logs.
         footer=f"{brand.NAME} {brand.KANJI}",
         timestamp=datetime.fromtimestamp(started, UTC) if started else None,
+        url=session_link(pitwall_url, summary.get("session_id")),
     )
 
 
@@ -160,6 +174,7 @@ def to_embed(card: Card) -> Any:
         description=card.description,
         colour=card.colour,
         timestamp=card.timestamp,
+        url=card.url,
     )
     for name, value in card.fields:
         embed.add_field(name=name, value=value, inline=True)
@@ -177,11 +192,12 @@ class ResultsPoster:
     on_result: Callable[[str], None] | None = None  # "ok", "failed" or "skipped"
     retries: int = 3
     backoff_secs: float = 2.0
+    pitwall_url: str | None = None  # base URL the card titles link to; None is no link
     _queue: asyncio.Queue[tuple[str, Card]] = field(default_factory=asyncio.Queue)
 
     def submit(self, summary: dict[str, Any]) -> None:
         """Queue the card for a finished session. Safe to call from the event loop."""
-        card = build_card(summary)
+        card = build_card(summary, self.pitwall_url)
         if card is None:
             log.info("results: session %s has no full lap, not posted", summary.get("session_id"))
             self._result("skipped")

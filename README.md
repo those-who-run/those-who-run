@@ -112,6 +112,7 @@ is unchanged by the rebrand.
 | `GT7_VOICE_MODEL` | `voices/en_GB-alba-medium.onnx` | Piper voice. |
 | `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
+| `PITWALL_URL` | unset | Pit wall base URL, e.g. `http://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
@@ -273,7 +274,9 @@ every session with at least one full lap: track and kind in the title
 car and fuel used. Position only appears where the engineer would say it (a
 field GT7 flags). Cards are queued and retried three times, so Discord never
 holds up the engineer; `gt7_results_posts_total{result}` counts ok, failed and
-skipped, and the index records `posted_at`. Unset, nothing is posted.
+skipped, and the index records `posted_at`. Unset, nothing is posted. With
+`PITWALL_URL` set, each card's title links to its session on the pit wall
+(`<PITWALL_URL>/?session=<id>`), and `--dry-run` prints that link.
 
 The voice bot posts them, so it needs View Channel, Send Messages and Embed
 Links on that channel. To post or re-post a stored session by hand:

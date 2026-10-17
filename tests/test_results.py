@@ -1,6 +1,7 @@
 """Results cards for the race-feed channel (#69)."""
 
 import asyncio
+import dataclasses
 import json
 import sqlite3
 from pathlib import Path
@@ -15,7 +16,7 @@ from those_who_run.callouts import CalloutQueue
 from those_who_run.config import DEFAULT_RULES, ConfigError, Settings
 from those_who_run.engine import Engine
 from those_who_run.replay import read_recording, replay
-from those_who_run.results import ResultsPoster, build_card, race_time
+from those_who_run.results import ResultsPoster, build_card, race_time, session_link, to_embed
 from those_who_run.rules import build_rules
 from those_who_run.store import SessionStore
 
@@ -93,6 +94,35 @@ def test_real_qualifying_quit_keeps_the_last_position(tmp_path):
     assert card_text(second)[1].startswith("2 laps, P")
 
 
+def test_real_race_links_to_the_pit_wall_only_when_set(tmp_path):
+    (s,) = summaries("real-nuc-gilles-villeneuve-race-2026-10-17", tmp_path)
+    plain = build_card(s)
+    assert card_text(s) == (
+        "Circuit Gilles Villeneuve · 12-lap race",
+        "Retired on lap 3 of 12, running P15",
+        {"Best lap": "1:37.524 (lap 1)", "Car": "Mazda RX-VISION GT3 EVO '26",
+         "Fuel used": "34%"},
+    )  # fmt: skip
+    assert plain.url is None
+    linked = build_card(s, "http://pitwall.nuc.home.arpa/")
+    assert linked.url == f"http://pitwall.nuc.home.arpa/?session={s['session_id']}"
+    assert linked == dataclasses.replace(plain, url=linked.url), "only the link changes"
+
+
+def test_session_link():
+    assert session_link(None, "20261017-162118") is None
+    assert session_link("", "20261017-162118") is None
+    assert session_link("http://pw", None) is None
+    assert session_link("http://pw", "20261017-162118") == "http://pw/?session=20261017-162118"
+    assert session_link("http://pw//", "a b&c/d") == "http://pw/?session=a%20b%26c%2Fd"
+
+
+def test_embed_title_links_to_the_card_url():
+    card = build_card(SUMMARY, "http://pw")
+    assert to_embed(card).url == "http://pw/?session=20261016-190000"
+    assert to_embed(build_card(SUMMARY)).url is None
+
+
 def test_no_card_without_a_full_lap():
     assert build_card({"laps_completed": 0, "session_id": "x"}) is None
 
@@ -156,6 +186,22 @@ def test_poster_sends_an_embed_and_reports():
     assert embed.title == "Unknown track · time trial" and embed.colour.value == 0xD21F1B
     assert [f.name for f in embed.fields] == ["Best lap"]
     assert posted == ["20261016-190000"] and results == ["skipped", "ok"]
+    assert embed.url is None
+
+
+def test_poster_links_cards_to_the_pit_wall():
+    channel = FakeChannel()
+    poster = ResultsPoster(FakeClient(channel), 1, backoff_secs=0, pitwall_url="http://pw/")
+
+    async def go():
+        poster.submit(SUMMARY)
+        task = asyncio.create_task(poster.run())
+        await asyncio.sleep(0.05)
+        task.cancel()
+
+    asyncio.run(go())
+    (embed,) = channel.sent
+    assert embed.url == "http://pw/?session=20261016-190000"
 
 
 def test_poster_retries_then_gives_up():
@@ -275,6 +321,13 @@ def test_results_channel_setting():
         Settings.from_env({"DISCORD_RESULTS_CHANNEL_ID": "abc"})
 
 
+def test_pitwall_url_setting():
+    assert Settings.from_env({}).pitwall_url is None
+    assert Settings.from_env({"PITWALL_URL": ""}).pitwall_url is None
+    url = "http://pitwall.nuc.home.arpa"
+    assert Settings.from_env({"PITWALL_URL": url}).pitwall_url == url
+
+
 def test_post_dry_run_prints_the_card(tmp_path, monkeypatch, capsys):
     (s,) = summaries("real-nuc-fuji-timed-2026-10-15", tmp_path)
     monkeypatch.setenv("GT7_DATA_DIR", str(tmp_path))
@@ -282,3 +335,13 @@ def test_post_dry_run_prints_the_card(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Fuji International Speedway · time trial" in out and "Best lap: 2:00.314" in out
     assert json.loads((tmp_path / "sessions" / s["session_id"] / "summary.json").read_text())
+    assert "?session=" not in out, "no link without PITWALL_URL"
+
+
+def test_post_dry_run_prints_the_link(tmp_path, monkeypatch, capsys):
+    (s,) = summaries("real-nuc-fuji-timed-2026-10-15", tmp_path)
+    monkeypatch.setenv("GT7_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PITWALL_URL", "http://pitwall.nuc.home.arpa/")
+    assert main(["post", s["session_id"], "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert f"http://pitwall.nuc.home.arpa/?session={s['session_id']}\n" in out

@@ -113,7 +113,7 @@ is unchanged by the rebrand.
 | `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
 | `PITWALL_URL` | unset | Pit wall base URL, e.g. `http://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
-| `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus. |
+| `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |

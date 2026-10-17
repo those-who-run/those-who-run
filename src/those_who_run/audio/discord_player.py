@@ -12,6 +12,9 @@ import asyncio
 import contextlib
 import logging
 import time
+import wave
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import discord
@@ -25,8 +28,19 @@ log = logging.getLogger(__name__)
 ACTIVE_PHASES = {Phase.AT_TRACK, Phase.IN_RACE, Phase.PAUSED}
 
 
+def wav_seconds(path: Path) -> float | None:
+    """Length of a WAV file, or None when it cannot be read."""
+    try:
+        with wave.open(str(path), "rb") as w:
+            return w.getnframes() / float(w.getframerate())
+    except (OSError, EOFError, wave.Error, ZeroDivisionError):
+        return None
+
+
 class DiscordPlayer:
     STALE_ATTEMPTS_BEFORE_RESET = 4  # x reconnect_backoff_secs = 60 s by default
+    PLAY_MARGIN_SECS = 5.0  # on top of the clip's length before playback is cut off
+    PLAY_UNKNOWN_SECS = 30.0  # the bound when the clip's length cannot be read
 
     def __init__(
         self,
@@ -37,7 +51,13 @@ class DiscordPlayer:
         reconnect_backoff_secs: float = 15.0,
         on_voice_state: Any | None = None,
         client: discord.Client | None = None,
+        max_age: float | None = None,
+        source_factory: Callable[[str], discord.AudioSource] | None = None,
     ) -> None:
+        """``max_age`` is the queue's staleness limit: a callout without its own
+        ``max_age`` that passes ``created_at + max_age`` while voice connects or
+        the clip is synthesised is dropped, not spoken. ``source_factory`` makes
+        the audio source from a WAV path (ffmpeg by default)."""
         self._token = token
         self._channel_id = channel_id
         self._speech = speech
@@ -55,8 +75,11 @@ class DiscordPlayer:
         self._connect_lock = asyncio.Lock()
         self._last_connect_attempt = 0.0
         self._stale_attempts = 0
-        self._idle_since: float | None = None
+        self._last_active: float | None = None
         self._play_lock = asyncio.Lock()
+        self._connect_task: asyncio.Task[None] | None = None
+        self._max_age = max_age
+        self._source_factory = source_factory or discord.FFmpegPCMAudio
 
     # lifecycle
 
@@ -72,6 +95,10 @@ class DiscordPlayer:
         log.info("discord ready as %s", self._client.user)
 
     async def close(self) -> None:
+        if self._connect_task is not None:
+            self._connect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._connect_task
         await self._disconnect()
         await self._client.close()
         if self._client_task is not None:
@@ -91,16 +118,39 @@ class DiscordPlayer:
     # phase driven join/leave
 
     async def on_phase(self, phase: Phase, now: float) -> None:
+        """Join when on track. Never waits for the join: telemetry ingest calls
+        this on every frame, and ``channel.connect`` can take a minute."""
         if phase in ACTIVE_PHASES:
-            self._idle_since = None
+            self._last_active = now
             if not self.connected:
-                await self._ensure_connected(now)
+                self._start_connect(now)
+
+    async def check_idle(self, now: float) -> None:
+        """Leave the channel once no frame has been on track for the idle period.
+        Driven by a timer, so it also fires when frames stop arriving."""
+        if self._last_active is None:
+            self._last_active = now  # joined without a frame (say): start counting
             return
-        if self._idle_since is None:
-            self._idle_since = now
-        elif self.connected and now - self._idle_since > self._idle_secs:
-            log.info("idle for %.0fs, leaving voice channel", now - self._idle_since)
+        if self.connected and now - self._last_active > self._idle_secs:
+            log.info("idle for %.0fs, leaving voice channel", now - self._last_active)
             await self._disconnect()
+
+    async def connect(self, now: float | None = None) -> bool:
+        """Join now and wait for the outcome. Returns whether voice is up."""
+        task = self._start_connect(time.monotonic() if now is None else now)
+        if task is not None:
+            await asyncio.shield(task)
+        return self.connected
+
+    def _start_connect(self, now: float) -> asyncio.Task[None] | None:
+        """The running join, or a new one in the background. None when voice is
+        up or the last attempt is within the backoff."""
+        if self._connect_task is not None and not self._connect_task.done():
+            return self._connect_task
+        if self.connected or now - self._last_connect_attempt < self._backoff:
+            return None
+        self._connect_task = asyncio.create_task(self._ensure_connected(now), name="voice-connect")
+        return self._connect_task
 
     async def _ensure_connected(self, now: float) -> None:
         if now - self._last_connect_attempt < self._backoff:
@@ -177,9 +227,27 @@ class DiscordPlayer:
 
     # playback
 
+    def _deadline(self, callout: Callout) -> float | None:
+        limit = self._max_age if callout.max_age is None else callout.max_age
+        return None if limit is None else callout.created_at + limit
+
+    def _stale(self, callout: Callout, deadline: float | None, stage: str) -> bool:
+        if deadline is not None and time.monotonic() > deadline:
+            log.warning("dropping callout, stale after %s: %s", stage, callout.text)
+            return True
+        return False
+
     async def play(self, callout: Callout) -> None:
+        deadline = self._deadline(callout)
         if not self.connected:
-            await self._ensure_connected(time.monotonic())
+            task = self._start_connect(time.monotonic())
+            if task is not None:
+                timeout = None if deadline is None else max(deadline - time.monotonic(), 0.0)
+                # shield: a callout giving up must not cancel the join itself
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(task), timeout)
+            if self._stale(callout, deadline, "connecting"):
+                return
             if not self.connected:
                 log.warning("dropping callout, not connected to voice: %s", callout.text)
                 return
@@ -188,17 +256,39 @@ class DiscordPlayer:
         if wav is None:
             log.info("nothing to say (%s): %r", callout.rule, callout.text)
             return
+        if self._stale(callout, deadline, "synthesis"):
+            return
         async with self._play_lock:
-            vc = self._vc
-            if vc is None:
+            if self._stale(callout, deadline, "waiting to speak"):
                 return
-            done = asyncio.Event()
+            vc = self._vc
+            if vc is None or not vc.is_connected():
+                log.warning("dropping callout, voice dropped before playing: %s", callout.text)
+                return
+            await self._play_wav(vc, wav, callout)
 
-            def _after(err: Exception | None) -> None:
-                if err is not None:
-                    log.error("playback error: %s", err)
-                loop.call_soon_threadsafe(done.set)
+    async def _play_wav(self, vc: Any, wav: Path, callout: Callout) -> None:
+        loop = asyncio.get_running_loop()
+        done = asyncio.Event()
 
+        def _after(err: Exception | None) -> None:
+            if err is not None:
+                log.error("playback error: %s", err)
+            loop.call_soon_threadsafe(done.set)
+
+        length = wav_seconds(wav)
+        bound = self.PLAY_UNKNOWN_SECS if length is None else length + self.PLAY_MARGIN_SECS
+        src = self._source_factory(str(wav))  # spawns ffmpeg
+        try:
             log.info("speaking (%s): %s", callout.rule, callout.text)
-            vc.play(discord.FFmpegPCMAudio(str(wav)), after=_after)
-            await done.wait()
+            vc.play(src, after=_after)
+        except BaseException:
+            src.cleanup()  # play never started: nothing else will reap ffmpeg
+            raise
+        try:
+            await asyncio.wait_for(done.wait(), bound)
+        except TimeoutError:
+            log.warning("playback did not finish within %.1fs, stopping: %s", bound, callout.text)
+            with contextlib.suppress(Exception):
+                vc.stop()
+            src.cleanup()

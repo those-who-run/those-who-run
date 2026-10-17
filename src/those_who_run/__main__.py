@@ -19,7 +19,7 @@ from those_who_run.config import ConfigError, Settings, load_rules_config
 from those_who_run.engine import Engine
 from those_who_run.metrics import HealthServer, Metrics
 from those_who_run.rules import build_rules
-from those_who_run.state import Phase, RaceState
+from those_who_run.state import RaceState
 from those_who_run.store import SessionStore, StoreBusy
 from those_who_run.supervise import Supervisor
 
@@ -406,8 +406,7 @@ async def run_say(settings: Settings, text: str) -> int:
     player = DiscordPlayer(settings.discord_token, settings.discord_channel_id, speech)
     await player.start()
     try:
-        await player.on_phase(Phase.AT_TRACK, time.monotonic())
-        if not player.connected:
+        if not await player.connect():
             log.error("could not join the voice channel, see errors above")
             return 1
         await player.play(Callout(text=text, priority=0, rule="say", created_at=time.monotonic()))
@@ -444,6 +443,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
         speech,
         idle_disconnect_secs=settings.idle_disconnect_secs,
         on_voice_state=lambda up: metrics.voice_connected.set(1 if up else 0),
+        max_age=queue.max_age,
     )
     loop = asyncio.get_running_loop()
     states: asyncio.Queue[RaceState] = asyncio.Queue(maxsize=600)
@@ -528,6 +528,7 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
                     queue.push(c)
                     metrics.callouts_total.labels(c.rule).inc()
                     log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
+                await player.check_idle(time.monotonic())
             except Exception:
                 errors.log()
             await asyncio.sleep(1)

@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.11", "types-PyYAML"]
 # The pit wall (`those-who-run web`). Heavy (pandas, pyarrow, altair): kept out of the
 # engineer's own install.
 web = ["streamlit>=1.50,<2"]
@@ -42,3 +42,22 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["those_who_run"]
+
+[tool.coverage.report]
+# The floor `make check` enforces. Raise it as coverage climbs; never lower it.
+fail_under = 85
+skip_covered = true
+show_missing = true
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# No type information shipped: gt-telem has no py.typed, pandas needs pandas-stubs.
+module = ["gt_telem", "gt_telem.*", "pandas", "pandas.*"]
+ignore_missing_imports = true

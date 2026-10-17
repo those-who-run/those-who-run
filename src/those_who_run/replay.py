@@ -9,7 +9,7 @@ import logging
 import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 
 from those_who_run.audio.player import Player
 from those_who_run.callouts import Callout, CalloutQueue
@@ -22,8 +22,8 @@ log = logging.getLogger(__name__)
 def _open(path: Path, mode: str) -> TextIO:
     """Text file, gzip-compressed when the name ends in .gz (60 Hz frames shrink ~10x)."""
     if str(path).endswith(".gz"):
-        return gzip.open(path, mode + "t", encoding="utf-8")  # type: ignore[return-value]
-    return open(path, mode, encoding="utf-8")  # noqa: SIM115
+        return cast(TextIO, gzip.open(path, mode + "t", encoding="utf-8"))
+    return cast(TextIO, open(path, mode, encoding="utf-8"))  # noqa: SIM115
 
 
 def write_recording(path: Path, states: Iterable[RaceState]) -> int:

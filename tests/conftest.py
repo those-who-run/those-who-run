@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
 import pytest
@@ -168,3 +169,16 @@ class RaceSim:
 @pytest.fixture
 def sim() -> type[RaceSim]:
     return RaceSim
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Under ``TWR_FAIL_ON_SKIP=1`` (``make check``, and so CI) a skipped test fails
+    the run: a missing extra must not quietly turn a test off."""
+    if os.environ.get("TWR_FAIL_ON_SKIP") != "1" or exitstatus != pytest.ExitCode.OK:
+        return
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    skipped = reporter.stats.get("skipped", []) if reporter else []
+    if skipped:
+        if reporter:
+            reporter.write_sep("=", f"TWR_FAIL_ON_SKIP: {len(skipped)} skipped", red=True)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED

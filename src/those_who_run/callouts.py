@@ -43,7 +43,7 @@ class CalloutQueue:
         while self._heap:
             _, _, _, callout = heapq.heappop(self._heap)
             limit = self.max_age if callout.max_age is None else callout.max_age
-            if self.max_age is not None and now - callout.created_at > limit:
+            if self.max_age is not None and limit is not None and now - callout.created_at > limit:
                 self.dropped += 1
                 continue
             return callout

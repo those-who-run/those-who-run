@@ -443,7 +443,8 @@ def lap_trace(data_dir: Path, session_id: str, lap: int, max_points: int = 1500)
         return None
     con = duckdb.connect()
     try:
-        (n,) = con.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()
+        row = con.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()
+        n = row[0] if row else 0
         step = max(1, math.ceil(n / max(1, max_points)))
         data = con.execute(
             "WITH f AS (SELECT *, row_number() OVER (ORDER BY t) - 1 AS rn,"

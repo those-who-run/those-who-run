@@ -6,6 +6,9 @@ dist/
 build/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 voices/*.onnx
 voices/*.onnx.json
 /data/

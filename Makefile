@@ -3,23 +3,26 @@ PLATFORM   := linux/amd64
 VERSION    ?= dev
 VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
-PY         := .venv/bin/python
+PYTHON     ?= python3
+PY         ?= .venv/bin/python
 
-.PHONY: help venv voice lint fmt test build release run replay web clean
+.PHONY: help venv voice lint fmt typecheck test check build release run replay web clean
 
 help:
 	@echo "venv     - create .venv and install with dev and web extras"
 	@echo "voice    - download the Piper voice into ./voices"
 	@echo "lint     - ruff check + format check"
 	@echo "fmt      - ruff format"
+	@echo "typecheck - mypy on src/"
 	@echo "test     - pytest"
+	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "release  - build and push with VERSION=x.y.z"
 	@echo "replay   - replay FILE=recording.jsonl"
 	@echo "web      - the pit wall on http://localhost:8501"
 
 venv:
-	python3 -m venv .venv
+	$(PYTHON) -m venv .venv
 	$(PY) -m pip install --upgrade pip
 	$(PY) -m pip install -e ".[dev,web]"
 
@@ -37,8 +40,16 @@ fmt:
 	$(PY) -m ruff format .
 	$(PY) -m ruff check --fix .
 
+typecheck:
+	$(PY) -m mypy
+
 test:
 	$(PY) -m pytest -q
+
+# The definition of green: CI runs exactly this. The coverage floor lives in
+# pyproject.toml ([tool.coverage.report] fail_under); a skipped test fails the run.
+check: lint typecheck
+	TWR_FAIL_ON_SKIP=1 $(PY) -m pytest -q -rs --cov --cov-report=term
 
 build:
 	podman build --platform $(PLATFORM) -t $(IMAGE_NAME):$(VERSION) .
@@ -56,4 +67,4 @@ web:
 	$(PY) -m those_who_run web
 
 clean:
-	rm -rf .venv .pytest_cache .ruff_cache dist build src/*.egg-info
+	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist build src/*.egg-info

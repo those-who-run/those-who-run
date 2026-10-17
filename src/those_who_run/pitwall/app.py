@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import tzinfo
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 import altair as alt
@@ -28,7 +29,7 @@ PAGE_SIZE = 25  # sessions shown before "Show more"
 # Lap A in the accent, lap B in white, on the deep black background.
 LAP_COLOURS = [brand.hex_colour(brand.ADVAN_RED), brand.hex_colour(brand.WHITE)]
 
-CHANNELS: tuple[tuple[str, str, str], ...] = (
+CHANNELS: tuple[tuple[str, str, Literal["linear", "step-after"]], ...] = (
     # (Trace attribute, axis title, interpolation)
     ("speed_kph", "Speed (km/h)", "linear"),
     ("throttle_pct", "Throttle (%)", "linear"),

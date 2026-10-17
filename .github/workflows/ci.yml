@@ -14,10 +14,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[dev,web]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest -q
+      - run: make venv
+      # The same command as locally: lint, mypy, and tests with the coverage floor.
+      - run: make check
 
   image:
     runs-on: ubuntu-latest

@@ -338,7 +338,7 @@ class TrackDetector:
         elif crossed_any:
             pool = crossed_any
         else:
-            cands = tuple(
+            top = tuple(
                 sorted(
                     (Candidate(t, False, box_iou(self._box, t.box)) for t in alive),  # type: ignore[arg-type]
                     key=lambda c: c.rank,
@@ -349,7 +349,7 @@ class TrackDetector:
                 f"no finish line within {self.start_radius:.0f} m of where the car has been"
                 f" and none crossed yet; {len(alive)} layouts contain the path"
             )
-            return TrackMatch(None, None, "ambiguous", cands, why)
+            return TrackMatch(None, None, "ambiguous", top, why)
         cands = sorted(
             (
                 Candidate(t, t.id in self._crossed, box_iou(self._box, t.box))  # type: ignore[arg-type]

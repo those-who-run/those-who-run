@@ -153,9 +153,7 @@ def learn_track(source: Path, half_width_m: float = 15.0) -> LearnedTrack:
         for i in range(1, len(lap_pts))
     )
     nearest = sorted(
-        (distance_to_segment(b, *t.line), t.id, t.name)
-        for t in load_tracks()
-        if t.line  # type: ignore[misc]
+        (distance_to_segment(b, *t.line), t.id, t.name) for t in load_tracks() if t.line
     )[:5]
     return LearnedTrack(
         line, direction, box, lap_len, len(boundaries), [(round(d), i, n) for d, i, n in nearest]

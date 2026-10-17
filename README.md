@@ -419,7 +419,8 @@ https://github.com/those-who-run/those-who-run/milestones
 ## Development
 
 ```sh
-make lint test       # ruff + pytest
+make check           # what CI runs: ruff, mypy, pytest with the coverage floor
+make lint test       # ruff + pytest only, quicker while iterating
 make build           # podman build for linux/amd64
 make release VERSION=0.4.0   # build and push muldoon/those-who-run:0.4.0
 ```

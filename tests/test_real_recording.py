@@ -204,7 +204,8 @@ async def test_real_pit_stop_race(tmp_path):
         "Lap five. fifty-nine point five. New best by one point zero.",
         "Lap six. one oh zero point three. zero point eight over best.",
         "Chequered flag. Finished first. Best lap fifty-nine point five. "
-        "Fuel used one hundred and thirty percent.",
+        # per stint, not the 130% they add up to: no figure is over a full tank
+        "Fuel used seventy-four percent, then fifty-seven percent.",
     ]
     assert engine.races_started == 1
     assert laps == [(1, 57109), (2, 60538), (3, 82544), (4, 69892), (5, 59541), (6, 60310)]

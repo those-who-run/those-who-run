@@ -169,6 +169,10 @@ rules:
       - "Used {fuel} of the tank."
       - "Finished with {fuel_left} in the tank."
       - "{fuel_left} left in the tank."
+    template_fuel_stints:      # after a pit stop; {stints} is each stint's use, "seventy percent, then sixty percent"
+      - "Fuel used {stints}."
+      - "Fuel by stint, {stints}."
+      - "Finished with {fuel_left} in the tank."
   temps:
     template_tyre_hot:         # {corners}: "Front left tyre", "Rear tyres", "Front left and rear left tyres", "All tyres"
       - "{corners} hot."

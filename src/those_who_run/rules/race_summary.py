@@ -6,12 +6,17 @@ gained in the final seconds that the position rule's settle window would have
 swallowed (recording 2026-10-14: "Up to sixth" was lost to the flag). The best
 lap is GT7's own from the flag frame; when GT7 has none (time trial) it is the
 best posted lap, skipping lap 1 of a lap-count race as GT7 does (lap 1 starts on
-the grid, ahead of the line, and is short). Fuel used sums the
-drops frame by frame, so a pit stop does not cancel the first stint.
+the grid, ahead of the line, and is short), and lap 1 itself when it is the only
+lap. Each lap counts once however many frames post its time. Fuel used sums the
+drops frame by frame, stint by stint: a pit stop the pit detector saw starts a
+new stint (see ``stints``; a fuel level going up is not enough), so a pit
+stop neither cancels the first stint nor adds up past a full tank. With
+a stop the summary gives each stint's use (``template_fuel_stints``).
 
 Situational pools, used when configured: ``template_position_win`` and
 ``template_position_podium``. ``template_fuel`` may use ``{fuel}`` (used, as a
-percentage of the tank) or ``{fuel_left}``.
+percentage of the tank) or ``{fuel_left}``; ``template_fuel_stints`` may use
+``{stints}`` ("seventy percent, then sixty percent") or ``{fuel_left}``.
 
 Timed races never reach FINISHED (GT7 reports no lap total). The engine works
 out their finish from what GT7 does at the line instead and calls
@@ -26,8 +31,10 @@ race is a retirement and stays quiet by default.
 from __future__ import annotations
 
 from those_who_run.callouts import Callout
+from those_who_run.pitstop import PitStatus
 from those_who_run.rules.base import Rule
-from those_who_run.state import Phase, RaceState, lap_time_posted
+from those_who_run.state import Phase, RaceState, lap_time_posted, posted_lap
+from those_who_run.stints import FuelStints
 from those_who_run.verbalise import (
     lap_time_words,
     laps_words,
@@ -44,8 +51,8 @@ class RaceSummaryRule(Rule):
 
     def reset(self) -> None:
         self.min_fuel = float(self.cfg.get("min_fuel", 1.0))
-        self.fuel_used = 0.0
-        self.last_fuel: float | None = None
+        self.fuel = FuelStints(self.min_fuel)  # per stint; a pit stop starts the next
+        self.last_lap_counted = 0
         self.best_ms = 0
         self.best_any_ms = 0  # lap 1 included, for a solo run with nothing else
         self.laps_done = 0
@@ -54,10 +61,8 @@ class RaceSummaryRule(Rule):
         self.quit_min_laps = int(self.cfg.get("quit_min_laps", 1))
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
-        if self.last_fuel is not None and state.fuel_level < self.last_fuel:
-            self.fuel_used += self.last_fuel - state.fuel_level
-        self.last_fuel = state.fuel_level
-        if lap_time_posted(prev, state):
+        self.fuel.observe(state.fuel_level)
+        if lap_time_posted(prev, state) and self._new_lap(state):
             self.laps_done += 1
             if self.best_any_ms <= 0 or state.last_lap_ms < self.best_any_ms:
                 self.best_any_ms = state.last_lap_ms
@@ -86,18 +91,8 @@ class RaceSummaryRule(Rule):
             position = self.first_template(keys, "Finished {position}.").format(
                 position=ordinal_words(state.position), p=number_words(state.position)
             )
-        best = ""
-        best_ms = state.best_lap_ms if state.best_lap_ms > 0 else self.best_ms
-        if best_ms > 0:
-            best = self.template("template_best", "Best lap {time}.").format(
-                time=lap_time_words(best_ms)
-            )
-        fuel = ""
-        if state.fuel_capacity > 0 and self.fuel_used >= self.min_fuel:
-            fuel = self.template("template_fuel", "Fuel used {fuel}.").format(
-                fuel=percent_words(100.0 * self.fuel_used / state.fuel_capacity),
-                fuel_left=percent_words(100.0 * max(state.fuel_level, 0.0) / state.fuel_capacity),
-            )
+        best = self._best_words(state)
+        fuel = self._fuel_words(state)
         text = self.template("template", "Chequered flag. {position} {best} {fuel}").format(
             position=position, best=best, fuel=fuel
         )
@@ -110,17 +105,52 @@ class RaceSummaryRule(Rule):
         if self.announced or kind not in self.quit_kinds or laps < self.quit_min_laps:
             return []
         self.announced = True
-        best_ms = last.best_lap_ms if last.best_lap_ms > 0 else self.best_ms or self.best_any_ms
-        best = ""
-        if best_ms > 0:
-            best = self.template("template_best", "Best lap {time}.").format(
-                time=lap_time_words(best_ms)
-            )
+        best = self._best_words(last)
         laps_text = laps_words(laps)
         text = self.template("template_quit", "Session done. {laps}. {best}").format(
             laps=laps_text[:1].upper() + laps_text[1:], best=best
         )
         return [self.callout(tidy_sentence(text), state)]
+
+    def on_pit(self, status: PitStatus) -> None:
+        super().on_pit(status)
+        self.fuel.on_pit(status)
+
+    def _new_lap(self, state: RaceState) -> bool:
+        """The posted time is for a lap not counted yet (``lap_time_posted`` can fire
+        on more than one frame for a lap: the first post counts, see ``posted_lap``)."""
+        lap_no = posted_lap(state)
+        if lap_no <= self.last_lap_counted:
+            return False
+        self.last_lap_counted = lap_no
+        return True
+
+    def _best_words(self, state: RaceState) -> str:
+        """GT7's best when it has one, else the best counted lap, else any lap (a
+        session whose only lap is lap 1). The flag and a quit choose alike."""
+        best_ms = state.best_lap_ms if state.best_lap_ms > 0 else self.best_ms or self.best_any_ms
+        if best_ms <= 0:
+            return ""
+        return self.template("template_best", "Best lap {time}.").format(
+            time=lap_time_words(best_ms)
+        )
+
+    def _fuel_words(self, state: RaceState) -> str:
+        """Fuel used, as a percentage of the tank, stint by stint: one figure without a
+        stop, one per stint with them, so no figure is over a full tank."""
+        capacity = state.fuel_capacity
+        stints = self.fuel.used()
+        if capacity <= 0 or sum(stints) < self.min_fuel:
+            return ""
+        fuel_left = percent_words(100.0 * max(state.fuel_level, 0.0) / capacity)
+        if len(stints) == 1:
+            return self.template("template_fuel", "Fuel used {fuel}.").format(
+                fuel=percent_words(100.0 * stints[0] / capacity), fuel_left=fuel_left
+            )
+        words = [percent_words(min(100.0 * used / capacity, 100.0)) for used in stints]
+        return self.template("template_fuel_stints", "Fuel used {stints}.").format(
+            stints=", then ".join(words), fuel_left=fuel_left
+        )
 
 
 def _start_lap(prev: RaceState | None, state: RaceState) -> bool:

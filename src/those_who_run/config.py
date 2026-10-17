@@ -83,6 +83,7 @@ DEFAULT_RULES: dict[str, Any] = {
             "template_position": "Finished {position}.",
             "template_best": "Best lap {time}.",
             "template_fuel": "Fuel used {fuel}.",
+            "template_fuel_stints": "Fuel used {stints}.",
             "quit_kinds": ["solo_timed", "solo_laps"],
             "quit_min_laps": 1,
             "template_quit": "Session done. {laps}. {best}",

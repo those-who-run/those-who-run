@@ -256,6 +256,15 @@ def lap_time_posted(prev: RaceState | None, state: RaceState) -> bool:
     return state.last_lap_ms != prev.last_lap_ms or lap_completed(prev, state)
 
 
+def posted_lap(state: RaceState) -> int:
+    """The lap a posted time (``lap_time_posted``) belongs to: the last completed
+    lap, one behind the counter. GT7 bumps the counter on the frame it posts the
+    time (every real recording, 2026-10-17), so a time that changes on a later
+    frame without a bump is a second post for that same lap, not a time for the
+    lap in progress. Rules dedupe on this number: each lap counts once."""
+    return max(state.current_lap - 1, 1)
+
+
 def race_started(prev: RaceState | None, state: RaceState) -> bool:
     """First driving frame of a session. Loading screens and pauses are not starts,
     and neither are the replayed frames GT7 shows after the results screen: those

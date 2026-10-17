@@ -58,6 +58,7 @@ from those_who_run.pitstop import NO_STOPS, PitStatus
 from those_who_run.results import best_lap
 from those_who_run.sessionkind import SessionKind
 from those_who_run.state import Phase, RaceState, lap_completed, racing_frame
+from those_who_run.stints import FuelStints
 from those_who_run.trackdetect import TrackMatch
 
 log = logging.getLogger(__name__)
@@ -398,6 +399,7 @@ class Session:
     track: dict[str, Any] | None = None  # detector verdict, see SessionStore.set_track
     kind: dict[str, Any] | None = None  # session kind, see SessionStore.set_kind
     fuel_burned: float = 0.0  # every drop added up, so a refuel does not cancel a stint
+    fuel_stints: FuelStints = field(default_factory=FuelStints)  # the drops per stint
     last_fuel: float | None = None
     last_position: int | None = None  # a quit's last frame has no position
     last_cars: int | None = None  # nor a car count
@@ -541,6 +543,7 @@ class SessionStore:
         if s is None:
             return
         s.pits = status
+        s.fuel_stints.on_pit(status)
         self._write(
             "UPDATE sessions SET pit_stops = ? WHERE id = ?", (len(status.stops), s.session_id)
         )
@@ -551,8 +554,7 @@ class SessionStore:
             return
         if state.in_race or racing_frame(prev, state):
             s.buffer.append(frame_row(state))
-            if s.last_fuel is not None and state.fuel_level < s.last_fuel:
-                s.fuel_burned += s.last_fuel - state.fuel_level
+            s.fuel_burned += s.fuel_stints.observe(state.fuel_level)
             s.last_fuel = state.fuel_level
             if state.position is not None:
                 s.last_position = state.position
@@ -693,6 +695,7 @@ class SessionStore:
             "final_position": state.position or s.last_position,
             "total_cars": state.total_cars if state.total_cars > 0 else s.last_cars,
             "fuel_burned": round(s.fuel_burned, 3),
+            "fuel_burned_by_stint": [round(x, 3) for x in s.fuel_stints.used()],
             "gt7_best_lap_ms": gt7_best,
             "fuel_capacity": state.fuel_capacity,
             "fuel_at_start": s.fuel_at_start,

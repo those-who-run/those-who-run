@@ -374,16 +374,129 @@ def test_race_summary_at_the_flag(sim):
     ]
 
 
+def _stop_done(in_lap: int) -> PitStatus:
+    stop = PitStop(1, in_lap, in_lap + 1, 0.0, 1.0, 5.0, 10.0, 50.0, False, 60.0, 5, 5, "test")
+    return PitStatus(False, (stop,))
+
+
+def _run_with_stop(rule, frames, after_lap: int):
+    """run_rule, with the pit detector reporting a stop done on the frame the sim
+    refuels (its lap ``after_lap`` crossing)."""
+    out, prev, told = [], None, False
+    for s in frames:
+        if not told and s.current_lap > after_lap:
+            rule.on_pit(_stop_done(after_lap))
+            told = True
+        if s.phase is Phase.IN_RACE or racing_frame(prev, s):
+            out.extend(c.text for c in rule.evaluate(prev, s))
+        prev = s
+    return out
+
+
 def test_race_summary_counts_fuel_from_both_stints(sim):
     frames = (
         sim(total_laps=4, fuel=50, burn=10)
         .race([100000] * 4, refuel_after_lap=2, refuel_to=50)
         .frames
     )
-    (text,) = run_rule(RaceSummaryRule(), frames)
+    (text,) = _run_with_stop(RaceSummaryRule(), frames, after_lap=2)
     # 50 -> 30 before the stop, 50 -> 30 after; the sim refuels on the lap-2 crossing
-    # frame, which hides that frame's 5 units, so 35 of the 40 burnt are visible.
-    assert text.endswith("Fuel used thirty-five percent.")
+    # frame, which hides that frame's 5 units, so 15 and 20 of the 40 burnt are seen.
+    assert text.endswith("Fuel used fifteen percent, then twenty percent.")
+
+
+def test_race_summary_never_reports_more_than_a_tank(sim):
+    # 80 of a 100 tank in each stint: 160 in all, which is not a figure to read out
+    frames = (
+        sim(total_laps=4, fuel=100, burn=40)
+        .race([100000] * 4, refuel_after_lap=2, refuel_to=100)
+        .frames
+    )
+    rule = RaceSummaryRule({"template_fuel_stints": "{stints}"})
+    (text,) = _run_with_stop(rule, frames, after_lap=2)
+    assert text == "Chequered flag. Finished fifth. Best lap one forty point zero. " + (
+        "sixty percent, then eighty percent."
+    )
+    assert "hundred" not in text
+
+
+def test_race_summary_a_fuel_rise_without_a_stop_is_one_stint(sim):
+    """A restart the session detector does not see refills the tank on the restart
+    frame (qualifying, 2026-10-14: 75 -> 100, #157), and GT7's level can settle
+    up a fraction at the start. Neither is a stop: one figure, no "then"."""
+    from dataclasses import replace
+
+    frames = (
+        sim(total_laps=4, fuel=100, burn=25)
+        .race([100000] * 4, refuel_after_lap=1, refuel_to=100)
+        .frames
+    )
+    i = next(i for i, f in enumerate(frames) if f.fuel_level < 100)
+    frames[i:i] = [replace(frames[i], fuel_level=99.6), replace(frames[i], fuel_level=99.9)]
+    (text,) = run_rule(RaceSummaryRule(), frames)
+    assert "then" not in text and text.endswith("percent.")
+
+
+def test_fuel_stints_follow_the_pit_detector():
+    from those_who_run.stints import FuelStints
+
+    f = FuelStints()
+    for level in (100, 90, 90.5, 89, 70, 100, 95):  # a rise alone splits nothing
+        f.observe(level)
+    assert [round(x, 1) for x in f.used()] == [35.5]
+    f.on_pit(_stop_done(3))
+    for level in (100, 80):  # the refuel itself, then the second stint
+        f.observe(level)
+    assert [round(x, 1) for x in f.used()] == [35.5, 20.0]
+    assert round(f.total, 1) == 55.5
+
+    short = FuelStints(min_fuel=1.0)
+    for level in (100, 99.6):
+        short.observe(level)
+    short.on_pit(_stop_done(1))
+    for level in (100, 70):
+        short.observe(level)
+    assert short.used() == [30.0]  # the 0.4 before the stop is not a stint to give
+    assert round(short.total, 1) == 30.4
+
+
+def test_race_summary_counts_a_lap_posted_twice_once(sim):
+    from dataclasses import replace
+
+    frames = sim(total_laps=3).race([100000, 99000, 99500]).frames
+    # GT7 posts lap 1's time, then a second one a frame later, the counter already
+    # on lap 2: still lap 1's, so lap 2's 1:39.000 counts and is the best
+    i = next(i for i, f in enumerate(frames) if f.last_lap_ms == 100000)
+    frames.insert(i + 1, replace(frames[i], last_lap_ms=100400))
+    rule = RaceSummaryRule()
+    run_rule(rule, frames)
+    assert rule.laps_done == 3
+    assert rule.best_ms == 99000
+    assert rule.last_lap_counted == 3
+
+
+def test_lap_time_a_lap_posted_twice_is_announced_once(sim):
+    from dataclasses import replace
+
+    frames = sim(total_laps=3).race([100000, 99000, 99500]).frames
+    i = next(i for i, f in enumerate(frames) if f.last_lap_ms == 100000)
+    frames.insert(i + 1, replace(frames[i], last_lap_ms=100400))
+    assert [t.split(".")[0] for t in run_rule(LapTimeRule(), frames)] == [
+        "Lap one",
+        "Lap two",
+        "Lap three",
+    ]
+    assert "Lap two. one thirty-nine point zero." in run_rule(LapTimeRule(), frames)[1]
+
+
+def test_race_summary_best_lap_is_chosen_alike_at_the_flag_and_on_a_quit(sim):
+    from dataclasses import replace
+
+    # a one-lap race GT7 gives no best for: lap 1 is all there is, at the flag too
+    frames = sim(total_laps=1).race([100000]).frames
+    no_gt7 = [replace(f, best_lap_ms=-1) for f in frames]
+    (text,) = run_rule(RaceSummaryRule(), no_gt7)
+    assert "Best lap one forty point zero." in text
 
 
 def test_race_summary_without_position_or_fuel(sim):

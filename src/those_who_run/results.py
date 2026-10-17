@@ -101,7 +101,11 @@ def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card 
     used = summary.get("fuel_burned", summary.get("fuel_used")) or 0
     capacity = summary.get("fuel_capacity") or 0
     if kind_rec.get("fuel_use") and used > 0 and capacity > 0:
-        fields.append(("Fuel used", f"{round(100 * used / capacity)}%"))
+        # one figure per stint, as the engineer says it: never more than a tank
+        stints = summary.get("fuel_burned_by_stint") or [used]
+        fields.append(
+            ("Fuel used", ", then ".join(f"{round(100 * x / capacity)}%" for x in stints))
+        )
 
     started = summary.get("started_at")
     return Card(

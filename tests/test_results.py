@@ -68,7 +68,8 @@ def test_real_race_with_a_pit_stop_counts_both_stints(tmp_path):
     (s,) = summaries("real-nuc-suzuka-pit-stop-2026-10-15", tmp_path)
     title, description, fields = card_text(s)
     assert description == "🚩 Finished P1 of 2 in 6:29.934"
-    assert fields["Fuel used"] == "130%", "the refuel does not cancel the first stint"
+    # each stint, not the 130% they add up to; the refuel does not cancel the first
+    assert fields["Fuel used"] == "74%, then 57%"
     assert fields["Best lap"] == "59.541 (lap 5)"
 
 

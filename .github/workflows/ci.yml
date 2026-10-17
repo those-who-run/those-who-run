@@ -10,10 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # uv installs the Python in .python-version and the packages in uv.lock.
+      - uses: astral-sh/setup-uv@v10.3.0 # no moving major tag; #164 pins the SHA
         with:
-          python-version: "3.12"
-          cache: pip
+          version: "0.11.23"
+          enable-cache: true
       - run: make venv
       # The same command as locally: lint, mypy, and tests with the coverage floor.
       - run: make check

@@ -1,9 +1,11 @@
-.venv
-.git
-.github
-tests
-data
-*.jsonl
-*.wav
-.pytest_cache
-.ruff_cache
+# An allowlist: only what the image build reads goes into the context.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!rules.example.yaml
+!src/
+!voices/SHA256SUMS
+**/__pycache__
+**/*.pyc

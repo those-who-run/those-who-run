@@ -137,8 +137,8 @@ podman run --rm \
 From source:
 
 ```sh
-make venv            # creates .venv and installs with the dev and web extras
-make voice           # downloads the Piper voice into ./voices
+make venv            # needs uv: .venv from uv.lock, with the dev and web extras
+make voice           # downloads the Piper voice into ./voices, sha256-checked
 GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/those-who-run run
 ```
 
@@ -379,8 +379,9 @@ podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.4.0 web
 ```
 
 It listens on all addresses and has no login: keep it on the LAN. The image's
-health check probes the engineer's `/healthz` on 9850; for the pit wall use
-`/_stcore/health` on 8501 instead.
+health check is `those-who-run healthcheck`: it probes the engineer's `/healthz`
+on `GT7_METRICS_PORT` for `run`, and the pit wall's `/_stcore/health` on
+`GT7_WEB_PORT` (or `--port`) for `web`.
 
 ### Pit wall on the NUC
 
@@ -461,6 +462,7 @@ https://github.com/those-who-run/those-who-run/milestones
 ```sh
 make check           # what CI runs: ruff, mypy, pytest with the coverage floor
 make lint test       # ruff + pytest only, quicker while iterating
+make lock            # after changing dependencies in pyproject.toml: re-resolve uv.lock
 make build           # podman build for linux/amd64
 make release VERSION=0.4.0   # build and push muldoon/those-who-run:0.4.0
 ```

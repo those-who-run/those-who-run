@@ -1,4 +1,4 @@
-"""Command line entry point: run, say, replay, record, thin, tracks, web."""
+"""Command line entry point: run, say, replay, record, thin, tracks, web, healthcheck."""
 
 from __future__ import annotations
 
@@ -104,6 +104,17 @@ def build_parser() -> argparse.ArgumentParser:
     wb.add_argument(
         "--address", default="0.0.0.0", help="address to listen on (default all, for a container)"
     )
+
+    hc = sub.add_parser(
+        "healthcheck", help="exit 0 when the engineer or pit wall in this container answers"
+    )
+    hc.add_argument(
+        "--mode",
+        choices=["run", "web"],
+        default=None,
+        help="which to probe (default: the mode of PID 1, or either)",
+    )
+    hc.add_argument("--timeout", type=float, default=2.0, help="seconds per probe (default 2)")
     return p
 
 
@@ -136,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(run_post(settings, args.session_id, args.dry_run))
         if args.command == "web":
             return run_web(settings, args.port or settings.web_port, args.address)
+        if args.command == "healthcheck":
+            from those_who_run.healthcheck import run_healthcheck
+
+            return run_healthcheck(settings, args.mode, args.timeout)
     except ConfigError as exc:
         log.error("configuration error: %s", exc)
         return 2

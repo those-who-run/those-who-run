@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # The base images in the Dockerfile are pinned by digest; this bumps them.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

@@ -2286,7 +2286,6 @@ wheels = [
 
 [[package]]
 name = "those-who-run"
-version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "discord-py", extra = ["voice"] },

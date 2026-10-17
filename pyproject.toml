@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "those-who-run"
-version = "0.4.0"
+# The version is __version__ in src/those_who_run/__init__.py, its one home.
+dynamic = ["version"]
 description = "Those Who Run (走り屋): self-hosted voice race engineer for Gran Turismo 7. PS5 telemetry in, rule-based callouts, Piper TTS, Discord voice out"
 readme = "README.md"
 license = { text = "GPL-3.0-only" }
@@ -27,6 +28,9 @@ web = ["streamlit>=1.50,<2"]
 
 [project.scripts]
 those-who-run = "those_who_run.__main__:main"
+
+[tool.hatch.version]
+path = "src/those_who_run/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/those_who_run"]

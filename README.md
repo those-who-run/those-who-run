@@ -486,12 +486,24 @@ https://github.com/those-who-run/those-who-run/milestones
 make check           # what CI runs: ruff, mypy, pytest with the coverage floor
 make lint test       # ruff + pytest only, quicker while iterating
 make lock            # after changing dependencies in pyproject.toml: re-resolve uv.lock
-make build           # podman build for linux/amd64
-make release VERSION=0.4.0   # build and push muldoon/those-who-run:0.4.0
+make build           # podman build for linux/amd64, local only
 ```
 
-Tags matching `v*` are built and pushed to Docker Hub by GitHub Actions. The
-workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
+### Releasing
+
+The only way to publish an image is to push a `v*` tag; GitHub Actions does the
+rest (`.github/workflows/release.yml`):
+
+1. Set `__version__` in `src/those_who_run/__init__.py`, the version's one home
+   (`pyproject.toml` reads it), and merge that.
+2. Tag the merge commit and push the tag: `git tag v0.5.0 && git push origin v0.5.0`.
+3. The workflow runs `make check`, fails unless the tag is `v` plus that version
+   (`v0.5.0-rc1` matches `0.5.0rc1`), builds the image, runs `--version` and
+   `web --help` in it, then pushes `muldoon/those-who-run:<tag without v>`.
+   `latest` moves only for a final release, never for an `-rc`, alpha, beta or
+   dev tag.
+
+The workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
 
 ## What GT7 actually reports
 

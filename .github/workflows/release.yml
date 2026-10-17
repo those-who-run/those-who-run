@@ -1,5 +1,7 @@
 name: Release
 
+# The one way an image is published: a v* tag. It must pass make check, match the
+# package version and run, before anything is pushed.
 on:
   push:
     tags: ["v*"]
@@ -17,27 +19,64 @@ concurrency:
 # Actions are pinned by commit SHA (the tag in the comment): this job holds the
 # Docker Hub credentials, so a moved tag must not run with them. Dependabot bumps them.
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      latest: ${{ steps.v.outputs.latest }}
+      package: ${{ steps.v.outputs.package }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.23"
+          enable-cache: false # a release does not read caches other runs wrote
+      - run: make venv
+      # Fails unless the tag is v + __version__; says whether `latest` moves.
+      - name: Tag matches the package version
+        id: v
+        run: .venv/bin/python scripts/release_version.py "$GITHUB_REF_NAME"
+      - run: make check
+
   publish:
     runs-on: ubuntu-latest
+    needs: check
+    env:
+      IMAGE: muldoon/those-who-run
+      VERSION: ${{ needs.check.outputs.version }}
+      PACKAGE: ${{ needs.check.outputs.package }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: those-who-run:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the image
+        run: |
+          docker run --rm those-who-run:smoke --version | tee /dev/stderr | grep -F " $PACKAGE"
+          docker run --rm those-who-run:smoke web --help > /dev/null
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Version from tag
-        id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+      # The same build again, from the cache, pushed. `latest` only for a final release.
+      - name: Push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64
           push: true
           tags: |
-            muldoon/those-who-run:${{ steps.v.outputs.version }}
-            muldoon/those-who-run:latest
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ needs.check.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max

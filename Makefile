@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test check build release replay web clean
+.PHONY: help venv lock voice lint fmt typecheck test check build replay web clean
 
 help:
 	@echo "help     - this list"
@@ -18,7 +18,6 @@ help:
 	@echo "test     - pytest"
 	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
-	@echo "release  - build and push with VERSION=x.y.z"
 	@echo "replay   - replay FILE=recording.jsonl"
 	@echo "web      - the pit wall on http://localhost:8501"
 	@echo "clean    - remove .venv, caches, coverage and build output"
@@ -64,11 +63,8 @@ check: lint typecheck
 build:
 	podman build --format docker --platform $(PLATFORM) -t $(IMAGE_NAME):$(VERSION) .
 
-release:
-	@test "$(VERSION)" != "dev" || (echo "set VERSION=x.y.z" && exit 1)
-	podman build --format docker --platform $(PLATFORM) -t $(IMAGE_NAME):$(VERSION) .
-	podman push $(IMAGE_NAME):$(VERSION)
-	@echo "Released $(IMAGE_NAME):$(VERSION)"
+# No release target: images are published only by .github/workflows/release.yml,
+# from a v* tag, after make check passes (see README, Releasing).
 
 replay:
 	$(PY) -m those_who_run replay $(FILE)

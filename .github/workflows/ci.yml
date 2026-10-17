@@ -45,6 +45,12 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          load: true
           tags: muldoon/those-who-run:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # The image starts and both of its modes parse: what the release checks too.
+      - name: Smoke test the image
+        run: |
+          docker run --rm muldoon/those-who-run:ci --version
+          docker run --rm muldoon/those-who-run:ci web --help > /dev/null

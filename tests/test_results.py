@@ -4,7 +4,9 @@ import asyncio
 import json
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
+import discord
 import pytest
 
 from those_who_run.__main__ import main
@@ -166,6 +168,80 @@ def test_poster_retries_then_gives_up():
                            backoff_secs=0)  # fmt: skip
     assert asyncio.run(broken.post("b", card)) is False
     assert results == ["ok", "failed"]
+
+
+def _run_queue(poster: ResultsPoster, *summaries: dict) -> None:
+    async def go():
+        for s in summaries:
+            poster.submit(s)
+        task = asyncio.create_task(poster.run())
+        await asyncio.sleep(0.05)
+        assert not task.done()  # still running for the next card
+        task.cancel()
+
+    asyncio.run(go())
+
+
+def test_poster_carries_on_when_recording_the_post_fails():
+    """``on_posted`` is ``store.mark_posted``, a SQLite commit that can raise
+    "database is locked" (#146): the next card is still posted."""
+    channel = FakeChannel()
+    tried: list[str] = []
+
+    def locked(session_id):
+        tried.append(session_id)
+        raise sqlite3.OperationalError("database is locked")
+
+    poster = ResultsPoster(FakeClient(channel), 1, on_posted=locked, backoff_secs=0)
+    _run_queue(poster, SUMMARY, {**SUMMARY, "session_id": "next"})
+    assert len(channel.sent) == 2 and tried == ["20261016-190000", "next"]
+
+
+def test_poster_carries_on_when_the_result_hook_fails():
+    channel = FakeChannel()
+
+    def broken(result):
+        raise RuntimeError("metrics are down")
+
+    poster = ResultsPoster(FakeClient(channel), 1, on_result=broken, backoff_secs=0)
+    _run_queue(poster, {"session_id": "empty", "laps_completed": 0}, SUMMARY, SUMMARY)
+    assert len(channel.sent) == 2
+
+
+def test_poster_carries_on_after_an_unexpected_error(monkeypatch):
+    """Anything escaping one post (a bug, say) is logged; the next card goes out."""
+    channel = FakeChannel()
+    poster = ResultsPoster(FakeClient(channel), 1, backoff_secs=0)
+    real_post = poster.post
+
+    async def post(session_id, card):
+        if session_id == "bad":
+            raise RuntimeError("a bug")
+        return await real_post(session_id, card)
+
+    monkeypatch.setattr(poster, "post", post)
+    _run_queue(poster, {**SUMMARY, "session_id": "bad"}, SUMMARY)
+    assert len(channel.sent) == 1
+
+
+class ForbiddenChannel(FakeChannel):
+    def __init__(self, exc_type):
+        super().__init__()
+        self.exc_type = exc_type
+        self.attempts = 0
+
+    async def send(self, embed):
+        self.attempts += 1
+        raise self.exc_type(SimpleNamespace(status=403, reason="Forbidden"), "Missing Access")
+
+
+@pytest.mark.parametrize("exc_type", [discord.Forbidden, discord.NotFound])
+def test_poster_does_not_retry_a_permanent_failure(exc_type):
+    channel = ForbiddenChannel(exc_type)
+    results: list[str] = []
+    poster = ResultsPoster(FakeClient(channel), 1, on_result=results.append, backoff_secs=0)
+    assert asyncio.run(poster.post("a", build_card(SUMMARY))) is False
+    assert channel.attempts == 1 and results == ["failed"]
 
 
 # plumbing

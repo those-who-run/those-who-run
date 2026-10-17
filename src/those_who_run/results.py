@@ -3,9 +3,10 @@
 ``build_card`` turns a session summary (``summary.json``) into a ``Card``; it is
 pure and decides everything that ends up on screen. ``ResultsPoster`` sends
 cards to a text channel from a queue, so the engine never waits on Discord,
-retrying a few times before giving up. The voice bot's client is reused: one
-login, no privileged intents. The bot needs View Channel, Send Messages and
-Embed Links on the results channel.
+retrying a few times before giving up (a missing channel or permission is
+tried once), and one bad card never stops the next. The voice bot's client is
+reused: one login, no privileged intents. The bot needs View Channel, Send
+Messages and Embed Links on the results channel.
 
 Position is only shown where the engineer would say it: a field that GT7
 flags (see ``Rule.has_field``).
@@ -188,11 +189,23 @@ class ResultsPoster:
         self._queue.put_nowait((str(summary.get("session_id")), card))
 
     async def run(self) -> None:
+        """Post queued cards for the life of the process. A card that fails in an
+        unexpected way is logged and dropped; the next one is still posted."""
         while True:
             session_id, card = await self._queue.get()
-            await self.post(session_id, card)
+            try:
+                await self.post(session_id, card)
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001
+                log.exception("results: post for %s failed", session_id)
 
     async def post(self, session_id: str, card: Card) -> bool:
+        """Send one card, retrying with backoff. A missing channel or a missing
+        permission (``discord.NotFound``, ``discord.Forbidden``) will not change
+        on a retry, so it is tried once."""
+        import discord
+
         delay = self.backoff_secs
         for attempt in range(1, self.retries + 1):
             try:
@@ -200,6 +213,14 @@ class ResultsPoster:
                 if channel is None:
                     channel = await self.client.fetch_channel(self.channel_id)
                 await channel.send(embed=to_embed(card))
+            except (discord.Forbidden, discord.NotFound) as exc:
+                log.error(
+                    "results: post for %s failed, not retried (check the channel id and the"
+                    " bot's permissions): %s",
+                    session_id,
+                    exc,
+                )
+                break
             except Exception:  # noqa: BLE001
                 log.exception(
                     "results: post for %s failed (attempt %d/%d)", session_id, attempt, self.retries
@@ -211,11 +232,17 @@ class ResultsPoster:
             log.info("results: posted %s: %s", session_id, card.title)
             self._result("ok")
             if self.on_posted is not None:
-                self.on_posted(session_id)
+                try:
+                    self.on_posted(session_id)
+                except Exception:  # noqa: BLE001
+                    log.exception("results: recording the post for %s failed", session_id)
             return True
         self._result("failed")
         return False
 
     def _result(self, result: str) -> None:
         if self.on_result is not None:
-            self.on_result(result)
+            try:
+                self.on_result(result)
+            except Exception:  # noqa: BLE001
+                log.exception("results: result hook failed for %r", result)

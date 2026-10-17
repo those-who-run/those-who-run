@@ -116,6 +116,7 @@ is unchanged by the rebrand.
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
+| `GT7_WEB_PORT` | `8501` | The pit wall (`those-who-run web`). |
 | `LOG_LEVEL` | `INFO` | |
 
 ## 🚩 Running
@@ -336,6 +337,48 @@ Parquet-aware tool can read the files. From 0.3 frames also carry the body
 rotation (`rot_x`, `rot_y`, `rot_z`, `orientation`) and spin (`ang_vel_*`),
 raw from the packet, for drift detection; older laps lack those columns.
 
+## Pit wall
+
+`those-who-run web` serves the pit wall, a Streamlit app over the session
+store, on port 8501 (`--port` or `GT7_WEB_PORT`). Phase 1 (#33) shows what is
+stored today:
+
+- **Sessions:** newest first, each with its results card (title, result, best
+  lap, car, fuel used) and the date in your browser's time zone. Filter by
+  track, car, session kind and dates. A session still being driven is listed
+  too, from the index.
+- **Laps:** time, gap to the best lap, fuel used and left, position (only in a
+  field GT7 flags, as on the card), top speed and flags: **pit** and **out** for
+  the in-lap and out-lap the pit-stop detector stored (tyre-only stops
+  included; sessions stored before it fall back to a rise in fuel), **partial**
+  for the lap the session ended in. GT7 does not report track limits.
+- **Lap compare:** speed, throttle, brake, gear and RPM of two laps over time
+  from each lap's start, from the same session or another at the same track.
+  Drag a chart to zoom. Distance replaces time once #15 lands.
+
+Each session has its own link, `?session=<id>`. The pit wall only reads: the
+index is opened read-only and nothing under `GT7_DATA_DIR` is written. One
+column, so it works on a phone straight after a race.
+
+Streamlit is an optional extra, so the engineer's own install stays lean:
+
+```sh
+pip install -e ".[web]"          # make venv installs it too
+GT7_DATA_DIR=./data those-who-run web        # http://localhost:8501
+```
+
+The image includes the extra (about 300 MB of Streamlit, pandas and pyarrow;
+see #26), so the same image runs it with a different command, sharing the
+data volume with the engineer:
+
+```sh
+podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.3.2 web
+```
+
+It listens on all addresses and has no login: keep it on the LAN. The image's
+health check probes the engineer's `/healthz` on 9850; for the pit wall use
+`/_stcore/health` on 8501 instead.
+
 ## Metrics
 
 Metric names keep the `gt7_` prefix because they describe GT7 telemetry:
@@ -353,8 +396,8 @@ detected track and the session kind.
 ## Livery
 
 The palette lives in `those_who_run/brand.py` and is the only place a colour
-should come from. Nothing in this release draws a UI; the values are there for
-the pit wall and any Discord embeds that follow.
+should come from. The results cards and the pit wall's theme and lap colours
+read it.
 
 | Name | Hex | Use |
 |---|---|---|

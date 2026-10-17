@@ -1,13 +1,9 @@
 """Brand constants for Those Who Run (走り屋).
 
 Everything user-facing that carries the name or the colours reads it from
-here, so a future Discord embed, pit wall page or dashboard uses the same
+here, so the results cards, the pit wall and any dashboard use the same
 palette as the README. The palette is a 90s Japanese track-day shop: Advan
 red on black, carbon grey for secondary panels, white type.
-
-There is no UI in this release. The voice path has nothing to colour, so the
-values below are only consumed by the CLI banner and the tests until the pit
-wall (milestone 2.0) or a Discord text channel lands.
 """
 
 from __future__ import annotations

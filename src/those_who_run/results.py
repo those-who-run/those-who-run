@@ -55,12 +55,11 @@ def build_card(summary: dict[str, Any]) -> Card | None:
     kind_rec = summary.get("session_kind") or {}
     kind = kind_rec.get("kind") or "unknown"
     total_laps = int(summary.get("total_laps") or 0)
-    flagged_field = bool(kind_rec.get("field")) and bool(kind_rec.get("cars_on_track"))
-    position = summary.get("final_position") if flagged_field else None
+    position = summary.get("final_position") if position_shown(kind_rec) else None
     cars = summary.get("total_cars")
     finished = bool(summary.get("finished"))
 
-    title = f"{_track(summary.get('track'))} · {_kind_label(kind, total_laps, summary)}"
+    title = f"{track_label(summary.get('track'))} · {kind_label(kind, total_laps, summary)}"
 
     of_cars = f" of {cars}" if cars else ""
     if finished:
@@ -78,11 +77,9 @@ def build_card(summary: dict[str, Any]) -> Card | None:
             result += f", P{position}{of_cars}"
 
     fields: list[tuple[str, str]] = []
-    best_lap = _best_lap(
-        summary.get("laps", []), kind == "lap_race", summary.get("gt7_best_lap_ms")
-    )
-    if best_lap is not None:
-        lap_no, best = best_lap
+    quickest = best_lap(summary.get("laps", []), kind == "lap_race", summary.get("gt7_best_lap_ms"))
+    if quickest is not None:
+        lap_no, best = quickest
         fields.append(("Best lap", f"{race_time(best)} (lap {lap_no})"))
     car = summary.get("car_name")
     if car:
@@ -105,7 +102,13 @@ def build_card(summary: dict[str, Any]) -> Card | None:
     )
 
 
-def _best_lap(
+def position_shown(kind_rec: dict[str, Any] | None) -> bool:
+    """Whether a position means anything: a field GT7 flags, as the engineer says it."""
+    rec = kind_rec or {}
+    return bool(rec.get("field")) and bool(rec.get("cars_on_track"))
+
+
+def best_lap(
     laps: list[dict[str, Any]], skip_lap_1: bool, gt7_best: int | None = None
 ) -> tuple[int, int] | None:
     """(lap, time) of the quickest lap. GT7's own best wins when the session has
@@ -124,7 +127,7 @@ def _best_lap(
     return min(timed, key=lambda x: x[1]) if timed else None
 
 
-def _track(rec: dict[str, Any] | None) -> str:
+def track_label(rec: dict[str, Any] | None) -> str:
     if not rec:
         return "Unknown track"
     if rec.get("confidence") in ("probable", "confirmed") and rec.get("name"):
@@ -134,7 +137,7 @@ def _track(rec: dict[str, Any] | None) -> str:
     return "Unknown track"
 
 
-def _kind_label(kind: str, total_laps: int, summary: dict[str, Any]) -> str:
+def kind_label(kind: str, total_laps: int, summary: dict[str, Any]) -> str:
     if kind == "lap_race":
         return f"{total_laps}-lap race"
     if kind == "timed_field":

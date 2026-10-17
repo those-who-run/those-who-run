@@ -5,10 +5,10 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         := .venv/bin/python
 
-.PHONY: help venv voice lint fmt test build release run replay clean
+.PHONY: help venv voice lint fmt test build release run replay web clean
 
 help:
-	@echo "venv     - create .venv and install with dev extras"
+	@echo "venv     - create .venv and install with dev and web extras"
 	@echo "voice    - download the Piper voice into ./voices"
 	@echo "lint     - ruff check + format check"
 	@echo "fmt      - ruff format"
@@ -16,11 +16,12 @@ help:
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "release  - build and push with VERSION=x.y.z"
 	@echo "replay   - replay FILE=recording.jsonl"
+	@echo "web      - the pit wall on http://localhost:8501"
 
 venv:
 	python3 -m venv .venv
 	$(PY) -m pip install --upgrade pip
-	$(PY) -m pip install -e ".[dev]"
+	$(PY) -m pip install -e ".[dev,web]"
 
 voice: voices/$(VOICE).onnx voices/$(VOICE).onnx.json
 
@@ -50,6 +51,9 @@ release:
 
 replay:
 	$(PY) -m those_who_run replay $(FILE)
+
+web:
+	$(PY) -m those_who_run web
 
 clean:
 	rm -rf .venv .pytest_cache .ruff_cache dist build src/*.egg-info

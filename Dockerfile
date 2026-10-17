@@ -19,7 +19,9 @@ RUN mkdir -p /app/voices \
 
 COPY pyproject.toml README.md LICENSE rules.example.yaml ./
 COPY src ./src
-RUN pip install --no-cache-dir . \
+# The web extra is the pit wall (`those-who-run web`), so one image runs both. It
+# adds Streamlit, pandas and pyarrow, roughly 300 MB unpacked (#26).
+RUN pip install --no-cache-dir ".[web]" \
     && useradd --uid 1000 --user-group --home-dir /app --no-create-home engineer \
     && mkdir -p /data /tmp/those-who-run \
     && chown -R engineer:engineer /data /tmp/those-who-run
@@ -27,10 +29,11 @@ RUN pip install --no-cache-dir . \
 ENV GT7_VOICE_MODEL=/app/voices/en_GB-alba-medium.onnx \
     GT7_DATA_DIR=/data \
     GT7_METRICS_PORT=9850 \
+    GT7_WEB_PORT=8501 \
     PYTHONUNBUFFERED=1
 
 USER 1000:1000
-EXPOSE 33740/udp 9850/tcp
+EXPOSE 33740/udp 9850/tcp 8501/tcp
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \

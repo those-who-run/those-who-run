@@ -21,6 +21,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+# The pit wall (`those-who-run web`). Heavy (pandas, pyarrow, altair): kept out of the
+# engineer's own install.
+web = ["streamlit>=1.50,<2"]
 
 [project.scripts]
 those-who-run = "those_who_run.__main__:main"

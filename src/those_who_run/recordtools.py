@@ -4,11 +4,19 @@ Each outing recording (``GT7_RECORD_DIR``) is replayed through the engine and a
 throwaway session store, so the answer is exactly what the live engineer would
 have stored: session kind, track, car, laps, best lap and how it ended (the
 flag, a quit, a restart, or still open when the recording stops).
+
+Frames carry the PS5 link's own clock, which is not the time of day (it reads
+as March 1970), so the throwaway store is given wall-clock time instead: the
+outing's start from the file name, plus the time since the first frame after
+the menu (the frame the recorder named the file on). Session ids, start times
+and cards then match the ones the live engineer stored.
 """
 
 from __future__ import annotations
 
+import calendar
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,7 +27,7 @@ from those_who_run.engine import Engine
 from those_who_run.replay import read_recording
 from those_who_run.results import build_card
 from those_who_run.rules import build_rules
-from those_who_run.state import RaceState, race_restarted
+from those_who_run.state import Phase, RaceState, race_restarted
 from those_who_run.store import SessionStore
 
 
@@ -40,7 +48,9 @@ class RecordedSession:
         best_field = dict(card.fields).get("Best lap") if card else None
         best = f"best {best_field}" if best_field else ""
         mins, secs = divmod(int(self.offset_secs), 60)
+        started = s.get("started_at")
         parts = [
+            time.strftime("%H:%M", time.localtime(started)) if started else "",
             f"+{mins:d}:{secs:02d}",
             f"{self.minutes:4.1f} min",
             what,
@@ -53,12 +63,26 @@ class RecordedSession:
         return "  ".join(p for p in parts if p)
 
 
+def recording_started_at(path: Path) -> float:
+    """Wall-clock time the outing began. ``OutingRecorder`` names each file after it,
+    in UTC (``20261017-162118.jsonl.gz``; the NUC's container clock is UTC, so files
+    from before the recorder said so are UTC too); any other file falls back to its
+    modification time, which is close enough to date a card."""
+    stamp = path.name.split(".", 1)[0]
+    try:
+        return calendar.timegm(time.strptime(stamp, "%Y%m%d-%H%M%S"))
+    except ValueError:
+        return path.stat().st_mtime
+
+
 def summarise_recording(path: Path) -> tuple[list[RecordedSession], bool]:
     """The sessions in a recording, and whether the file ended cleanly."""
     out: list[RecordedSession] = []
     pending: list[dict[str, Any]] = []
     first_t: float | None = None
-    clock_t = [0.0]
+    anchor_t: float | None = None  # the first frame after the menu: the file's start
+    started_at = recording_started_at(path)
+    clock_t = [started_at]
     complete = True
     with tempfile.TemporaryDirectory() as tmp:
         store = SessionStore(Path(tmp), clock=lambda: clock_t[0], on_end=pending.append)
@@ -75,7 +99,9 @@ def summarise_recording(path: Path) -> tuple[list[RecordedSession], bool]:
         try:
             for state in read_recording(path):
                 first_t = state.t if first_t is None else first_t
-                clock_t[0] = state.t
+                if anchor_t is None and state.phase is not Phase.MENU:
+                    anchor_t = state.t
+                clock_t[0] = started_at + state.t - (anchor_t if anchor_t is not None else state.t)
                 had_session = store.session is not None
                 engine.process(state)
                 if pending:

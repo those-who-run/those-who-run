@@ -1,7 +1,11 @@
+import calendar
+import os
+import time
 from pathlib import Path
 
 from those_who_run.__main__ import main
-from those_who_run.recordtools import summarise_recording
+from those_who_run.recordtools import recording_started_at, summarise_recording
+from those_who_run.results import build_card
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -34,3 +38,26 @@ def test_recordings_cli(tmp_path, capsys, monkeypatch):
     assert main(["recordings", "--last", "1"]) == 0
     out = capsys.readouterr().out.splitlines()
     assert out[0] == "20261016-190000.jsonl" and "time trial" in out[1]
+
+
+def test_sessions_get_the_outings_wall_clock_not_the_ps5_clock(tmp_path):
+    """Frames carry the PS5 link's clock (March 1970); a session rebuilt from an outing
+    recording is dated from the file name, so its id and card match the live ones."""
+    rec = tmp_path / "20261016-190000.jsonl"
+    rec.write_bytes((FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl").read_bytes())
+    (s,), _ = summarise_recording(rec)
+    outing = calendar.timegm((2026, 10, 16, 19, 0, 0))
+    started = s.summary["started_at"]
+    assert outing <= started < outing + 120
+    card = build_card(s.summary)
+    assert card is not None and card.timestamp is not None and card.timestamp.year == 2026
+    assert s.line().startswith(time.strftime("%H:%M", time.localtime(started)) + "  +")
+
+
+def test_a_recording_not_named_by_the_recorder_is_dated_by_its_file(tmp_path):
+    rec = tmp_path / "fuji.jsonl"
+    rec.write_bytes((FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl").read_bytes())
+    os.utime(rec, (1_790_000_000, 1_790_000_000))
+    assert recording_started_at(rec) == 1_790_000_000
+    (s,), _ = summarise_recording(rec)
+    assert 1_790_000_000 <= s.summary["started_at"] < 1_790_000_000 + 600

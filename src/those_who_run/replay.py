@@ -94,7 +94,7 @@ class OutingRecorder:
 
     def _start(self) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
-        stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self.clock()))
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime(self.clock()))  # UTC, like session ids
         self.path = self.directory / f"{stamp}.jsonl.gz"
         self._writer = RecordingWriter(self.path)
         self.outings += 1

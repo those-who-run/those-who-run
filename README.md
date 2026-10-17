@@ -162,7 +162,7 @@ those-who-run replay session.jsonl --wav-out ./out
 
 On the NUC the engineer records on its own: with `GT7_RECORD_DIR` set, every
 outing (from leaving the menu to returning to it) becomes one
-`<dir>/<YYYYMMDD-HHMMSS>.jsonl.gz`, about 20 MB an hour, and only the newest
+`<dir>/<YYYYMMDD-HHMMSS>.jsonl.gz` (UTC), about 20 MB an hour, and only the newest
 `GT7_RECORD_KEEP` (20) files are kept. Cut a recording down to a test fixture
 with `thin`: it keeps every frame where a phase, lap, lap time, position or car
 count changed, the frames either side, and one frame per half second.
@@ -252,14 +252,14 @@ those-who-run cars name 3339        # Subaru BRZ Drift Car '17
 
 `those-who-run recordings` replays each outing recording in `GT7_RECORD_DIR`
 (or the files and directories given) and prints one line per session: when it
-started in the file, how long it ran, track and kind, the result, car, best
+started (local time, and how far into the file), how long it ran, track and kind, the result, car, best
 lap, session kind and start, and how it ended (`flag`, `quit`, `restart`, or
 `open` if the recording stops mid-session). Handy for matching a night's
 drives to notes:
 
 ```sh
 those-who-run recordings --last 5
-#   +0:28   8.5 min  Sportsland SUGO · 5-lap race  🚩 Finished P3 of 20 in 8:36.182 ...
+#   19:31  +0:28   8.5 min  Sportsland SUGO · 5-lap race  🚩 Finished P3 of 20 in 8:36.182 ...
 ```
 
 ## Results channel

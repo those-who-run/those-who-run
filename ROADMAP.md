@@ -103,7 +103,6 @@ flowchart LR
   image or two.
 - Settings on the NUC (#135, #191): does the environment always win, and which
   keys move from the ConfigMap to the pit wall?
-- Where to archive the recordings specs rely on (#197).
 - Speech to text in the engineer's process or as a separate server (#22,
   #190).
 - One corner table per track, with stable ids, rather than one per reference

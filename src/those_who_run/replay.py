@@ -10,7 +10,8 @@ import logging
 import re
 import time
 import zlib
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO, cast
 
@@ -154,30 +155,68 @@ TRACKED_FIELDS = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class Window:
+    """A stretch of a recording ``thin`` keeps at full rate: seconds from the first
+    frame, or laps (``current_lap``), both ends included."""
+
+    start: float
+    end: float
+    laps: bool = False
+
+    @classmethod
+    def parse(cls, text: str) -> Window:
+        """``120:180`` (seconds) or ``lap3:lap5`` (laps 3 to 5)."""
+        a, sep, b = text.partition(":")
+        laps = a.startswith("lap") and b.startswith("lap")
+        try:
+            lo, hi = (float(v.removeprefix("lap")) for v in (a, b)) if sep else (None, None)
+        except ValueError:
+            lo = hi = None
+        if lo is None or hi is None or hi < lo:
+            raise ValueError(f"window {text!r}: expected START:END in seconds or lapN:lapM")
+        return cls(lo, hi, laps)
+
+    def covers(self, state: RaceState, offset: float) -> bool:
+        value = state.current_lap if self.laps else offset
+        return self.start <= value <= self.end
+
+
 def thin(
     states: Iterable[RaceState],
     every: float = 0.5,
     start: float | None = None,
     end: float | None = None,
     tracked: tuple[str, ...] = TRACKED_FIELDS,
+    windows: Sequence[Window] = (),
+    stride: int = 0,
 ) -> Iterator[RaceState]:
     """Cut a 60 Hz recording down to a fixture: every frame where a tracked field
-    changed, the frame before and after it, and one frame per ``every`` seconds.
-    ``start`` and ``end`` are offsets in seconds from the first frame."""
+    changed, the frame before and after it, and one frame per ``every`` seconds
+    (or, with ``stride``, every ``stride``-th frame). Inside any of ``windows``
+    every frame is kept. ``start`` and ``end`` are offsets in seconds from the
+    first frame."""
     prev: RaceState | None = None
     prev_kept = False
     keep_next = False
     last_kept_t: float | None = None
     t0: float | None = None
-    for state in states:
+    for i, state in enumerate(states):
         if t0 is None:
             t0 = state.t
         offset = state.t - t0
         if end is not None and offset > end:
             break
         changed = prev is not None and any(getattr(prev, f) != getattr(state, f) for f in tracked)
+        periodic = (
+            i % stride == 0 if stride > 0 else last_kept_t is None or state.t - last_kept_t >= every
+        )
         keep = (start is None or offset >= start) and (
-            changed or keep_next or last_kept_t is None or state.t - last_kept_t >= every
+            changed
+            or keep_next
+            or last_kept_t is None
+            or periodic
+            or any(w.covers(state, offset) for w in windows)
         )
         if keep and changed and prev is not None and not prev_kept:  # noqa: SIM102
             if start is None or prev.t - t0 >= start:

@@ -182,11 +182,25 @@ count changed, the frames either side, and one frame per half second. It
 writes gzip unless given `--plain`, and adds `.gz` to the name if it is missing.
 Every fixture gets an entry in `tests/fixtures/FIXTURES.yaml`: track, car,
 session kind, date, outing and the behaviours it pins (a test fails on a fixture
-that isn't listed).
+that isn't listed). `--window 120:180` (seconds) or `--window lap3:lap5` keeps
+every frame in that stretch, for physics work that needs 60 Hz; `--stride N`
+keeps every Nth frame in place of one per half second.
 
 ```sh
 kubectl -n those-who-run cp those-who-run-xxxx:/data/recordings/20261016-193001.jsonl.gz ./outing.jsonl.gz
 those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl.gz --start 120 --end 600
+```
+
+Outings that specs and tests rely on go in the archive before the NUC prunes
+them ([ADR 0002](docs/adr/0002-outing-archive.md)): the `outings` release of
+this repository, mirrored in `GT7_ARCHIVE_DIR` (default
+`~/.cache/those-who-run/outings`).
+
+```sh
+those-who-run recordings archive 20261017-162118 --note "Gilles 12-lap race, one stop" --issue 15
+those-who-run recordings archive          # list it: id, track, car, kind, issues, note
+make archive-push                         # upload to the release (needs gh)
+make archive-pull                         # download what is missing
 ```
 
 Recordings are one `RaceState` JSON object per line, version-tagged, and do not

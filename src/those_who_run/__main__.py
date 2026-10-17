@@ -74,6 +74,16 @@ def build_parser() -> argparse.ArgumentParser:
     th.add_argument(
         "--every", type=float, default=0.5, help="keep one frame per this many seconds (0.5)"
     )
+    th.add_argument(
+        "--window",
+        action="append",
+        default=[],
+        metavar="START:END",
+        help="keep every frame in this stretch: seconds (120:180) or laps (lap3:lap5); repeatable",
+    )
+    th.add_argument(
+        "--stride", type=int, default=0, help="outside windows, keep every Nth frame, not --every"
+    )
 
     tr = sub.add_parser("tracks", help="track detection: list the table, test it, backfill data")
     trs = tr.add_subparsers(dest="tracks_command", required=True)
@@ -104,8 +114,18 @@ def build_parser() -> argparse.ArgumentParser:
     rl = sub.add_parser(
         "recordings", help="one line per session in each outing recording (GT7_RECORD_DIR)"
     )
-    rl.add_argument("paths", nargs="*", type=Path, help="recordings or directories")
+    rl.add_argument(
+        "paths",
+        nargs="*",
+        type=Path,
+        help="recordings or directories; or `archive [OUTING ...]` to archive outings "
+        "(ids in GT7_RECORD_DIR, or paths) or, with none, list the archive",
+    )
     rl.add_argument("--last", type=int, default=0, help="only the newest N recordings")
+    rl.add_argument("--note", default="", help="archive: what the outing shows")
+    rl.add_argument(
+        "--issue", type=int, action="append", default=[], help="archive: an issue citing it"
+    )
 
     po = sub.add_parser(
         "post", help="post a stored session's results card to DISCORD_RESULTS_CHANNEL_ID"
@@ -195,12 +215,23 @@ def dispatch(args: argparse.Namespace, settings: Settings) -> int:
     if args.command == "record":
         return asyncio.run(run_record(settings, args.output, args.ps5_ip, args.seconds))
     if args.command == "thin":
-        return run_thin(args.source, args.output, args.start, args.end, args.every, args.plain)
+        return run_thin(
+            args.source,
+            args.output,
+            args.start,
+            args.end,
+            args.every,
+            args.plain,
+            windows=args.window,
+            stride=args.stride,
+        )
     if args.command == "tracks":
         return run_tracks(settings, args)
     if args.command == "cars":
         return run_cars(args)
     if args.command == "recordings":
+        if args.paths[:1] == [Path("archive")]:
+            return run_archive(settings, args.paths[1:], args.note, args.issue)
         return run_recordings(settings, args.paths, args.last)
     if args.command == "post":
         return asyncio.run(run_post(settings, args.session_id, args.dry_run))
@@ -374,6 +405,33 @@ def run_recordings(settings: Settings, paths: list[Path], last: int) -> int:
     return 0
 
 
+def run_archive(settings: Settings, refs: list[Path], note: str, issues: list[int]) -> int:
+    """``recordings archive``: copy outings into GT7_ARCHIVE_DIR, or list it."""
+    from those_who_run.archive import archive_dir, archive_outing, find_outing, list_archive
+
+    directory = archive_dir()
+    if not refs:
+        entries = list_archive(directory)
+        for e in entries:
+            print(e.line())
+            if e.note:
+                print("   " + e.note)
+        if not entries:
+            print(f"nothing archived in {directory}")
+        return 0
+    for ref in refs:
+        try:
+            source = find_outing(ref, settings.record_dir)
+            entry = archive_outing(source, directory, note=note, issues=issues)
+        except (FileNotFoundError, ValueError) as exc:
+            raise ConfigError(str(exc)) from exc
+        print(f"archived {entry.line()}")
+        for line in entry.sessions:
+            print("   " + line)
+    print(f"in {directory}; `make archive-push` uploads it")
+    return 0
+
+
 def run_cars(args: argparse.Namespace) -> int:
     from those_who_run.cars import car_name, find_cars, load_cars
 
@@ -490,13 +548,22 @@ def run_thin(
     end: float | None,
     every: float,
     plain: bool = False,
+    windows: list[str] | None = None,
+    stride: int = 0,
 ) -> int:
-    from those_who_run.replay import read_recording, thin, write_recording
+    from those_who_run.replay import Window, read_recording, thin, write_recording
 
+    try:
+        cuts = [Window.parse(w) for w in windows or []]
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
     if not plain and output.suffix != ".gz":
         output = output.with_name(output.name + ".gz")
     frames = list(read_recording(source))
-    kept = write_recording(output, thin(frames, every=every, start=start, end=end))
+    kept = write_recording(
+        output,
+        thin(frames, every=every, start=start, end=end, windows=cuts, stride=stride),
+    )
     print(f"{kept} of {len(frames)} frames kept in {output}")
     return 0
 

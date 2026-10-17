@@ -11,9 +11,13 @@ build it without asking around first. The template is
   recording it came from (outing file name or fixture, and date) and the
   numbers seen. Anything not checked against a recording says
   **Unverified:** in front of it.
-- **Recordings are pruned.** The NUC keeps the newest 20 outings. Copy a
-  recording the issue relies on into `tests/fixtures/` with `thin` (or note it
-  is needed) before it goes, and list it in `tests/fixtures/FIXTURES.yaml`.
+- **Recordings are pruned.** The NUC keeps the newest 20 outings. Archive an
+  outing the issue relies on before it goes (`those-who-run recordings archive
+  <id> --note "…" --issue N`, then `make archive-push`; see
+  [ADR 0002](adr/0002-outing-archive.md)), and cite it by that id, marked
+  *archived*. Cut what a test needs into `tests/fixtures/` with `thin`
+  (`--window` keeps a stretch at full rate) and list it in
+  `tests/fixtures/FIXTURES.yaml`.
 - **Requirements are numbered** (R1, R2, …) and say MUST or SHOULD. Acceptance
   criteria are checkboxes, each one testable, and say which fixture pins it
   ([ROADMAP.md](../ROADMAP.md) principle 5: a behaviour ships with a fixture

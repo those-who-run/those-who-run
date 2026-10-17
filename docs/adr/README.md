@@ -34,3 +34,4 @@ Signs it is time:
 | ADR | Decision |
 |---|---|
 | [0001](0001-data-and-network.md) | Who writes `/data`, how readers open it, what the LAN can reach, where secrets live, one image or two, how data gets to Postgres. |
+| [0002](0002-outing-archive.md) | The outing archive: the `outings` release of this repository, a directory as its working copy, tests fetching outings by id. |

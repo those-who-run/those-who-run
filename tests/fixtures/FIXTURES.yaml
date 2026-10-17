@@ -15,6 +15,13 @@
 #   source    where it came from and which part was kept
 #   pins      the behaviours the tests check against it
 #   tests     the test modules that read it
+#
+# `outings` lists the whole outings kept in the archive (docs/adr/0002): the
+# `outings` release of this repository, one <id>.jsonl.gz and <id>.json sidecar
+# each. `tests/archive.py` fetches one by id (`archived_outing("20261017-162118")`)
+# and skips with the reason when it can't. A fixture's `outing` must be listed
+# there. `lost` lists outings specs cite that were pruned before they could be
+# archived.
 
 fixtures:
   - file: real-race-2laps-2026-10-14.jsonl.gz
@@ -250,3 +257,151 @@ fixtures:
         the stop.
       - An open stop marks every lap from the in lap.
     tests: [test_pitstop, test_real_recording]
+
+outings:
+  - id: "20261016-183946"
+    date: 2026-10-16
+    track: [High Speed Ring]
+    car: [Xiaomi VGT]
+    kind: [solo_timed (flying)]
+    frames: 22469
+    sha256: 2002d18026cd9ffd968d69f8afe0c499226b169237799056194c9b359f4475c7
+    note: >-
+      High Speed Ring time trial in the Xiaomi VGT EV, five laps, best
+      1:02.302 on lap 5. Cited for tyre temperatures and max RPM (22,714),
+      cars-on-track true while racing, and a time trial with fuel off.
+    cited_by: [15, 19, 23, 62, 63, 66, 90, 92, 93, 97, 104, 115, 119, 129]
+
+  - id: "20261016-184621"
+    date: 2026-10-16
+    track: [High Speed Ring]
+    car: ["Aston Martin Valkyrie '21"]
+    kind: [solo_timed (flying)]
+    frames: 8353
+    sha256: 2c49bcabb67a1d31e010eb9738af98066fbcf8cd18d6613353ca786803837752
+    note: >-
+      High Speed Ring time trial in the Aston Martin Valkyrie, one timed lap
+      of 1:01.367: a one-lap session whose best is its only lap.
+    cited_by: [66, 103, 129]
+
+  - id: "20261016-184854"
+    date: 2026-10-16
+    track: [High Speed Ring]
+    car: ["Mazda RX-VISION GT3 EVO '26"]
+    kind: [solo_timed (flying)]
+    frames: 6190
+    sha256: fb8ad716435a93560c5f1b361465ddb7b23f0d92d63ef80af6bf57e6314ac84e
+    note: >-
+      High Speed Ring time trial in the Mazda RX-VISION GT3 EVO, one lap of
+      1:09.839: the 'too short' case for coaching notes and the PB ledger.
+    cited_by: [1, 66, 103, 129]
+
+  - id: "20261017-102342"
+    date: 2026-10-17
+    track: [Sportsland SUGO]
+    car: ["Suzuki Carry KC '12"]
+    kind: [lap_race (rolling)]
+    frames: 38689
+    sha256: c70b176d47d77ee6dc6faffbbdd27c1285d83bfb7bbf53b561fde8cc3016b5e6
+    note: >-
+      SUGO 4-lap race in the Suzuki Carry, P4 of 20 in 7:18.724, best 1:45.998
+      on lap 4. Cited for tyre temperatures, the lap model and coaching
+      fixtures.
+    cited_by: [1, 15, 23, 62, 65, 66, 87, 89, 90, 92, 94, 97, 98, 119]
+
+  - id: "20261017-103458"
+    date: 2026-10-17
+    track: [Sportsland SUGO]
+    car: ["Nissan Silvia Q's (S13) '88"]
+    kind: [solo_timed (flying)]
+    frames: 23400
+    sha256: 08871d83f4f3a0cb1fd3bf6e9470344bb5e5052dfcde32c16cb9b8d98c6a518d
+    note: >-
+      SUGO time trial in the Nissan Silvia S13, two laps, best 2:07.550: the
+      drift session (29 slides of 25 degrees or more), used for drift
+      detection and the drift card.
+    cited_by: [1, 15, 62, 63, 65, 66, 86, 87, 90, 92, 93, 97, 98, 119, 129, 131]
+
+  - id: "20261017-140635"
+    date: 2026-10-17
+    track: ["Willow Springs International Raceway: Big Willow"]
+    car: [Toyota 86 Gr.B Rally Car]
+    kind: [lap_race (rolling)]
+    frames: 32006
+    sha256: 5a9e3d4d7b0168e5f53cbe91e12f42ec2b235607ccdad0696b9e85c74859f2b9
+    note: >-
+      Willow Springs Big Willow 10-lap race in the Toyota 86 Gr.B, quit on lap
+      5 running P11, best 1:19.724 on lap 3. A Willow reference lap (#16 AC1)
+      and a PB ledger point.
+    cited_by: [1, 16, 19, 34, 36, 62, 63, 66, 96, 98, 103, 105, 118]
+
+  - id: "20261017-141530"
+    date: 2026-10-17
+    track: ["Willow Springs International Raceway: Big Willow"]
+    car: [Toyota 86 Gr.B Rally Car]
+    kind: [lap_race (rolling)]
+    frames: 54539
+    sha256: 181f6ebf8a27f1267cdf3909bd888c3e9c126d556e7a60f6dface3bf973c5970
+    note: >-
+      Willow Springs Big Willow 10-lap race in the Toyota 86 Gr.B, won P1 of
+      12 in 14:04.860, best 1:19.943 on lap 4, a pit stop at the end of lap 6.
+      Source of real-nuc-willow-springs-pit-stop-2026-10-17.
+    cited_by: [1, 15, 16, 17, 18, 19, 23, 34, 36, 62, 65, 66, 89, 90, 92, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 115, 117, 118, 119, 134]
+
+  - id: "20261017-143142"
+    date: 2026-10-17
+    track: [Circuit Gilles Villeneuve]
+    car: ["Mazda RX-VISION GT3 EVO '26"]
+    kind: [solo_timed (flying)]
+    frames: 15849
+    sha256: 9f360c7d2e2fc8d9222f851853925987c8f6b02cb0eb2c772a47dcd7b61af289
+    note: >-
+      Circuit Gilles Villeneuve time trial in the Mazda RX-VISION GT3 EVO, two
+      laps, best 1:41.015; telemetry stops after about 4 minutes of a
+      105-minute outing. The Gilles time trial for the lap model (#15).
+    cited_by: [1, 15, 16, 23, 62, 63, 65, 66, 90, 93, 103, 106, 107, 115, 118, 119, 129]
+
+  - id: "20261017-162118"
+    date: 2026-10-17
+    track: [Circuit Gilles Villeneuve]
+    car: ["Mazda RX-VISION GT3 EVO '26"]
+    kind: [lap_race (rolling)]
+    frames: 76974
+    sha256: 00ce53f57fdc021ae8f800cd30cc475b17a92c0e957d5abcafad2fc47f294e74
+    note: >-
+      Circuit Gilles Villeneuve 12-lap daily race in the Mazda RX-VISION GT3
+      EVO, P2 of 20 in 20:02.559, best 1:37.380 on lap 9, one pit stop. Source
+      of both real-nuc-gilles-villeneuve fixtures.
+    cited_by: [1, 15, 16, 17, 18, 19, 23, 28, 34, 36, 62, 65, 66, 87, 89, 90, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 107, 115, 117, 118, 119, 134]
+
+  - id: "20261017-205541"
+    date: 2026-10-17
+    track: []
+    car: [Honda Civic Type R (EK) Touring Car]
+    kind: [timed_field (flying)]
+    frames: 214316
+    sha256: 4ea021c7adaf02424f830a12ce5709932a5de07a83c1372656c8695afe0bb26e
+    note: >-
+      Timed race in the Honda Civic Type R (EK) Touring Car, 16 cars, paused
+      for most of an hour (session 20261017-205613): the paused-race case in
+      #229.
+    cited_by: [229]
+
+lost:
+  - id: "20261016-180243"
+    note: >-
+      Willow Springs Big Willow race in the Toyota 86 Gr.B, P4 of 12, best
+      1:21.559. Pruned before the archive was made (2026-10-17). Its sessions
+      20261016-180258 and 20261016-180407 are still in /data/sessions on the NUC.
+    cited_by: [1, 16, 19, 34, 36, 62, 65, 66, 86, 87, 92, 95, 96, 98, 103, 104, 105, 118, 119, 134]
+  - id: "20261016-165416"
+    note: >-
+      High Speed Ring time trial in the Toyota Supra RZ '97. Pruned; session
+      20261016-165455, which began 39 s into it, is still in /data/sessions.
+    cited_by: [1, 23, 62, 63, 65, 66, 90, 92, 93, 103, 106, 107, 119, 129]
+  - id: "20261015-173031"
+    note: Pruned before it was archived.
+    cited_by: [103, 115]
+  - id: "20261014-174346"
+    note: Pruned before it was archived.
+    cited_by: [36]

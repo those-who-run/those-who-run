@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test check build replay web clean
+.PHONY: help venv lock voice lint fmt typecheck test check build replay web archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
@@ -20,6 +20,8 @@ help:
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "replay   - replay FILE=recording.jsonl"
 	@echo "web      - the pit wall on http://localhost:8501"
+	@echo "archive-push - upload GT7_ARCHIVE_DIR to the outings release (ADR 0002)"
+	@echo "archive-pull - download the outings release into GT7_ARCHIVE_DIR"
 	@echo "clean    - remove .venv, caches, coverage and build output"
 
 # Python version from .python-version, packages from uv.lock: the same set CI and
@@ -71,6 +73,20 @@ replay:
 
 web:
 	$(PY) -m those_who_run web
+
+# The outing archive (docs/adr/0002-outing-archive.md): `recordings archive` fills
+# the directory, these mirror it to and from the repository's `outings` release.
+ARCHIVE ?= $(or $(GT7_ARCHIVE_DIR),$(HOME)/.cache/those-who-run/outings)
+
+archive-push:
+	gh release view outings >/dev/null 2>&1 || gh release create outings --prerelease \
+		--title "Outing archive" \
+		--notes "Outings specs and tests rely on: <id>.jsonl.gz and its <id>.json sidecar. See docs/adr/0002-outing-archive.md."
+	gh release upload outings $(ARCHIVE)/*.jsonl.gz $(ARCHIVE)/*.json --clobber
+
+archive-pull:
+	mkdir -p $(ARCHIVE)
+	gh release download outings -D $(ARCHIVE) --skip-existing
 
 clean:
 	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist build

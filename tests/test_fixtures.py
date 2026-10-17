@@ -98,3 +98,48 @@ def test_tracks_detect_reads_a_gzipped_recording(capsys):
     src = FIXTURES / "real-nuc-suzuka-east-2026-10-15.jsonl.gz"
     assert main(["tracks", "detect", str(src)]) == 0
     assert "result: confirmed Suzuka Circuit East Course" in capsys.readouterr().out
+
+
+OUTING_FIELDS = ("id", "date", "track", "car", "kind", "frames", "sha256", "note", "cited_by")
+
+
+def outing_problems(index: dict[str, Any]) -> list[str]:
+    """The archive part of the index (#197): each archived outing described, every
+    fixture's outing archived, and no id both archived and lost."""
+    outings = index.get("outings") or []
+    ids = [str(o.get("id")) for o in outings]
+    lost = {str(o.get("id")) for o in index.get("lost") or []}
+    problems = [f"outing {i}: listed twice" for i in set(ids) if ids.count(i) > 1]
+    for o in outings:
+        oid = str(o.get("id"))
+        if not OUTING.match(oid):
+            problems.append(f"outing {oid!r}: not a YYYYMMDD-HHMMSS id")
+        problems += [f"outing {oid}: no {f}" for f in OUTING_FIELDS if f not in o]
+        if not o.get("note"):
+            problems.append(f"outing {oid}: no note")
+    problems += [f"outing {i}: both archived and lost" for i in sorted(lost & set(ids))]
+    problems += [
+        f"{e['file']}: outing {e['outing']} is not archived"
+        for e in index["fixtures"]
+        if e.get("outing") is not None and str(e["outing"]) not in ids
+    ]
+    return problems
+
+
+def test_archived_outings_are_indexed():
+    index = yaml.safe_load(INDEX.read_text(encoding="utf-8"))
+    assert outing_problems(index) == []
+    # The outings #197 names as cited by the open specs: archived, or noted as lost.
+    cited = {"20261016-180243", "20261017-140635", "20261017-141530", "20261017-103458"}
+    cited |= {"20261017-143142", "20261017-162118"}
+    known = {str(o["id"]) for o in index["outings"]} | {str(o["id"]) for o in index["lost"]}
+    assert cited <= known
+
+
+def test_a_fixture_outing_that_is_not_archived_fails():
+    index = yaml.safe_load(INDEX.read_text(encoding="utf-8"))
+    index["outings"] = [o for o in index["outings"] if o["id"] != "20261017-141530"]
+    assert outing_problems(index) == [
+        "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz: outing 20261017-141530 "
+        "is not archived"
+    ]

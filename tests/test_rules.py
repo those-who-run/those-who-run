@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -547,6 +548,36 @@ def test_position_quiet_through_the_start_then_compares_with_the_grid():
     assert run_rule(rule, shuffle) == [], "the field sorts itself out after the lights"
     after = [frame(15.0, 12), frame(16.0, 12), frame(17.5, 12)]
     assert run_rule(rule, after) == ["Down to twelfth."], "ten on the grid, twelfth now"
+
+
+def test_position_quiet_in_the_pit_lane_then_one_call_for_the_net_change():
+    rule = PositionRule({"settle_secs": 2.0, "min_interval_secs": 5.0, "start_grace_secs": 0})
+
+    def frame(t, pos):
+        return make_state(t=t, current_lap=3, race_start_pos=pos, cars_on_track=True)
+
+    out = run_rule(rule, [frame(0.0, 5), frame(3.0, 5)])
+    stop = PitStop(1, 3, None, 4.0, None, 0.0, 10.0, 10.0, False, 60.0, 5, 5, "test")
+    rule.on_pit(PitStatus(True, (stop,)))
+    out += run_rule(rule, [frame(4.0 + 3 * i, pos) for i, pos in enumerate(range(6, 12))])
+    assert out == [], "P5 to P11 in the box, not a word"
+    rule.on_pit(PitStatus(False, (replace(stop, out_lap=4, exit_t=25.0),)))
+    out += run_rule(rule, [frame(25.0, 10), frame(26.0, 10), frame(27.5, 10)])
+    assert out == ["Down to tenth."], "the net change from fifth, once out and settled"
+
+
+def test_position_out_of_the_pits_where_it_went_in_says_nothing():
+    rule = PositionRule({"settle_secs": 2.0, "min_interval_secs": 5.0, "start_grace_secs": 0})
+
+    def frame(t, pos):
+        return make_state(t=t, current_lap=3, race_start_pos=pos, cars_on_track=True)
+
+    run_rule(rule, [frame(0.0, 2), frame(3.0, 2)])
+    stop = PitStop(1, 3, None, 4.0, None, 0.0, 10.0, 10.0, False, 60.0, 2, 2, "test")
+    rule.on_pit(PitStatus(True, (stop,)))
+    assert run_rule(rule, [frame(4.0, 3), frame(10.0, 4), frame(16.0, 3)]) == []
+    rule.on_pit(PitStatus(False, (replace(stop, out_lap=4, exit_t=20.0),)))
+    assert run_rule(rule, [frame(20.0, 2), frame(22.0, 2), frame(25.0, 2)]) == []
 
 
 def test_position_defaults_are_calmer_than_a_call_per_swap():

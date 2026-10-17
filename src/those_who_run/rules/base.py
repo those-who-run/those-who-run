@@ -43,8 +43,11 @@ class Rule(ABC):
         self.session = kind
 
     def on_pit(self, status: PitStatus) -> None:
-        """The car entered or left the pit lane. Kept on ``self.pits``, which also
-        stays current while the car is in the pits; overrides should call this."""
+        """The car entered or left the pit lane: called once on the entry and once on
+        the exit, not on the frames between. Kept on ``self.pits``, so
+        ``self.pits.in_pit_lane`` holds for the whole stop, but the open stop's
+        figures (fuel, time at rest, tyres) are as they were at the entry.
+        Overrides should call this."""
         self.pits = status
 
     def on_end(self, last: RaceState, state: RaceState) -> list[Callout]:

@@ -202,10 +202,9 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
         "Lap five. one thirty-eight point four. zero point nine over best.",
         "Up to sixth.",
         "Up to fifth.",
-        "Down to seventh.",  # standing in the box
-        "Down to ninth.",
+        # quiet in the pit lane while P5 drops to P11 in the box
         "Lap six. two oh zero point one. twenty-two point five over best.",
-        "Down to tenth.",
+        "Down to tenth.",  # the net change, once out of the pits
         "Up to ninth.",
         "Lap seven. one forty-two point two. four point seven over best.",
         "Up to sixth.",

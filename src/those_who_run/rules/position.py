@@ -11,6 +11,11 @@ grace compares with the grid slot.
 Only spoken when other cars are racing for position (the session kind): never
 in a time trial, where a ghost can count as a second car.
 
+Quiet in the pit lane. Places drop one by one while the car stands in the box
+(P5 to P11 at Circuit Gilles Villeneuve, 2026-10-17) and calling each is noise
+when the driver most needs quiet. The last position called is kept, so once
+the car is out and the order has settled, one call gives the net change.
+
 Situational pools, used when configured: ``template_gained_lead`` (into first),
 ``template_gained_podium`` (into second or third), ``template_lost_lead``.
 """
@@ -50,6 +55,9 @@ class PositionRule(Rule):
             self.announced = pos
             return []
         if state.t - self.started_at < self.grace:
+            return []
+        if self.pits.in_pit_lane:
+            self.pending_since = None  # settle again from the pit exit
             return []
         if pos == self.announced:
             self.pending_since = None

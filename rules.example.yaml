@@ -25,7 +25,6 @@ rules:
     # delta_slower: "{delta} over best"
     # delta_equal: "equal to best"
     delta_first: ""
-    equal_ms: 50            # within this of the best is "equal", not a new best by zero point zero
     small_delta_ms: 300     # delta_slower_small under this, delta_slower_large over large_delta_ms
     large_delta_ms: 2000
     small_gap_ms: 200       # template_new_best_small for a new best by less than this

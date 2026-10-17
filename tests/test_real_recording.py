@@ -243,7 +243,7 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
         "Up to sixth.",
         "Up to fifth.",
         # quiet in the pit lane while P5 drops to P11 in the box
-        "Lap six. two oh zero point one. twenty-two point five over best.",
+        "Lap six. two oh zero point one. twenty-two point six over best.",
         "Down to tenth.",  # the net change, once out of the pits
         "Up to ninth.",
         "Lap seven. one forty-two point two. four point seven over best.",
@@ -272,9 +272,9 @@ async def test_real_pit_stop_crossed_in_the_exit_cut(tmp_path):
     engine, texts, laps = await _replay_with_store(WILLOW_STOP, tmp_path, end=True)
     fuel = [t for t in texts if t.startswith(("Fuel", "Pit", "Lap"))]
     assert fuel == [
-        "Lap six. one thirty-six point six. sixteen point six over best.",
+        "Lap six. one thirty-six point six. sixteen point seven over best.",
         "Lap seven. one twenty-four point two. four point three over best.",
-        "Lap eight. one twenty-one point nine. one point nine over best.",
+        "Lap eight. one twenty-one point nine. two point zero over best.",
     ]
     assert _pit_column(tmp_path) == ["in", "out", None, None]  # lap 9 is cut short
     assert [round(x, 2) for x in _fuel_rule(engine).consumption] == [12.62]
@@ -308,7 +308,7 @@ async def test_real_race_with_the_pit_call_ignored(tmp_path):
         "Up to third.",
         "Up to second.",
         "Pit this lap.",
-        "Lap four. one oh one point two. New best by two point zero.",
+        "Lap four. one oh one point two. New best by one point nine.",
         "Fuel. one lap remaining.",
         "Fuel critical. Less than one lap.",
         "Final lap.",

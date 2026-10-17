@@ -3,8 +3,9 @@
 The best lap is GT7's own once it has one. In a lap-count race GT7 ignores lap 1
 (the grid sits ahead of the line, so the lap is short: 57.1 s against 60 s laps at
 Suzuka East, 2026-10-15), and so does the fallback kept here; a timed race or a
-time trial counts lap 1. Laps within ``equal_ms`` of the best are "equal", so
-identical time-trial laps are not called a new best by zero point zero.
+time trial counts lap 1. The delta is the difference between the spoken times
+(both rounded to tenths), so a lap that sounds the same as the best is "equal",
+never a new best by zero point zero.
 
 Situational pools, used when configured: ``delta_slower_small`` (under
 ``small_delta_ms``), ``delta_slower_large`` (over ``large_delta_ms``) and
@@ -27,7 +28,13 @@ from __future__ import annotations
 from those_who_run.callouts import Callout
 from those_who_run.rules.base import Rule
 from those_who_run.state import RaceState, lap_time_posted
-from those_who_run.verbalise import delta_words, lap_time_words, number_words, tidy_sentence
+from those_who_run.verbalise import (
+    delta_words,
+    lap_time_words,
+    number_words,
+    spoken_delta_ms,
+    tidy_sentence,
+)
 
 
 class LapTimeRule(Rule):
@@ -39,7 +46,6 @@ class LapTimeRule(Rule):
         self.last_announced_lap = 0
         self.own_best_ms = 0
         self.lap1_ms = 0
-        self.equal_ms = int(self.cfg.get("equal_ms", 50))
         self.small_delta_ms = int(self.cfg.get("small_delta_ms", 300))
         self.large_delta_ms = int(self.cfg.get("large_delta_ms", 2000))
         self.small_gap_ms = int(self.cfg.get("small_gap_ms", 200))
@@ -70,9 +76,7 @@ class LapTimeRule(Rule):
         if prev_best <= 0 or only_lap_1:
             delta = self.template("delta_first", "")
         else:
-            diff = state.last_lap_ms - prev_best
-            if abs(diff) < self.equal_ms:
-                diff = 0
+            diff = spoken_delta_ms(state.last_lap_ms, prev_best)
             if diff < 0:
                 keys = ["template_new_best"]
                 if -diff < self.small_gap_ms:

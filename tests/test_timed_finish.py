@@ -31,7 +31,7 @@ async def test_real_timed_race_finishes_at_the_line(tmp_path):
         # GT7 left lap 1 (from a grid ahead of the line) out of its best: no delta
         "Lap two. one oh seven point six.",
         "Lap three. one oh seven point six. equal to best.",
-        "Lap four. one oh seven point seven. zero point two over best.",
+        "Lap four. one oh seven point seven. zero point one over best.",
         "Lap five. one oh eight point two. zero point six over best.",
     ]
     assert spoken[-1] == (

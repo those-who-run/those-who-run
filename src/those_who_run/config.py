@@ -31,7 +31,6 @@ DEFAULT_RULES: dict[str, Any] = {
             "delta_slower": "{delta} over best",
             "delta_equal": "equal to best",
             "delta_first": "",
-            "equal_ms": 50,
             "small_delta_ms": 300,
             "large_delta_ms": 2000,
             "small_gap_ms": 200,

@@ -235,15 +235,13 @@ def test_lap_time_counts_lap_one_without_a_lap_total(sim):
     assert run_rule(LapTimeRule(), no_gt7)[1] == "Lap two. one forty-one point three."
 
 
-def test_lap_time_within_a_twentieth_is_equal_not_a_new_best(sim):
+def test_lap_time_that_sounds_like_the_best_is_equal_not_a_new_best(sim):
     frames = sim(total_laps=0).race([93892, 93896, 93885]).frames
     assert run_rule(LapTimeRule(), frames) == [
         "Lap one. one thirty-three point nine.",
         "Lap two. one thirty-three point nine. equal to best.",
         "Lap three. one thirty-three point nine. equal to best.",
     ]
-    strict = LapTimeRule({"equal_ms": 0})
-    assert run_rule(strict, frames)[2].endswith("New best by zero point zero.")
 
 
 def test_position_ignores_the_grid_settling_then_announces():

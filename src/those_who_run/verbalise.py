@@ -7,6 +7,7 @@ one decimal place, deltas likewise.
 
 from __future__ import annotations
 
+import math
 import re
 
 _ONES = [
@@ -34,24 +35,50 @@ _ONES = [
 _TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
 
 
+NUMBER_WORDS_LIMIT = 1_000_000
+
+
 def number_words(n: int) -> str:
-    """Integers 0..999 as words."""
+    """Integers with magnitude under a million as words, British style:
+    ``1234`` -> "one thousand two hundred and thirty-four", ``1005`` -> "one
+    thousand and five". Raises ``ValueError`` on anything it cannot say."""
+    if isinstance(n, bool) or not isinstance(n, int):
+        raise ValueError(f"number_words needs an int, got {n!r}")
     if n < 0:
         return "minus " + number_words(-n)
+    if n >= NUMBER_WORDS_LIMIT:
+        raise ValueError(f"number_words cannot say {n}: limit is {NUMBER_WORDS_LIMIT - 1}")
     if n < 20:
         return _ONES[n]
     if n < 100:
         tens, ones = divmod(n, 10)
         return _TENS[tens] if ones == 0 else f"{_TENS[tens]}-{_ONES[ones]}"
-    hundreds, rest = divmod(n, 100)
-    head = f"{_ONES[hundreds]} hundred"
-    return head if rest == 0 else f"{head} and {number_words(rest)}"
+    if n < 1000:
+        hundreds, rest = divmod(n, 100)
+        head = f"{_ONES[hundreds]} hundred"
+        return head if rest == 0 else f"{head} and {number_words(rest)}"
+    thousands, rest = divmod(n, 1000)
+    head = f"{number_words(thousands)} thousand"
+    if rest == 0:
+        return head
+    return f"{head} and {number_words(rest)}" if rest < 100 else f"{head} {number_words(rest)}"
+
+
+def tenths_half_up(ms: int) -> int:
+    """Milliseconds to whole tenths of a second, ties up, in integer arithmetic:
+    ``102250`` -> 1023, ``102350`` -> 1024 (``round()`` would give 1022 and 1024)."""
+    return (int(ms) + 50) // 100
+
+
+def spoken_delta_ms(ms: int, ref_ms: int) -> int:
+    """The difference between two times as they are spoken, in milliseconds (a
+    multiple of 100): the spoken delta always matches the spoken times."""
+    return (tenths_half_up(ms) - tenths_half_up(ref_ms)) * 100
 
 
 def _tenths(ms: int) -> tuple[int, int]:
-    """Split milliseconds into (whole seconds, tenths), rounding to nearest tenth."""
-    tenths_total = int(round(ms / 100.0))
-    return divmod(tenths_total, 10)
+    """Split milliseconds into (whole seconds, tenths), rounding half up."""
+    return divmod(tenths_half_up(ms), 10)
 
 
 def lap_time_words(ms: int) -> str:
@@ -95,8 +122,13 @@ def ordinal_words(n: int) -> str:
 
 
 def percent_words(value: float) -> str:
-    """``37.5`` -> "thirty-eight percent" (one word for the speech model, not "per cent")."""
-    return f"{number_words(int(value + 0.5))} percent"
+    """``37.5`` -> "thirty-eight percent" (one word for the speech model, not "per
+    cent"). Halves round away from zero, so ``-2.5`` is "minus three percent".
+    Raises ``ValueError`` on NaN or infinity."""
+    if not math.isfinite(value):
+        raise ValueError(f"percent_words needs a finite value, got {value!r}")
+    whole = math.floor(abs(value) + 0.5)
+    return f"{number_words(-whole if value < 0 else whole)} percent"
 
 
 _TRACK_SUBS = (

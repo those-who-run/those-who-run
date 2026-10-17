@@ -43,8 +43,10 @@ def detect_recording(path: Path) -> tuple[TrackMatch, list[Step]]:
     return det.match, steps
 
 
-def session_points(session_dir: Path) -> Iterator[tuple[float, int, str, float, float]]:
-    """(t, lap, phase, x, z) for every stored frame of a session, in time order."""
+def session_points(
+    session_dir: Path,
+) -> Iterator[tuple[float, int, str, float, float, float, float]]:
+    """(t, lap, phase, x, z, vel_x, vel_z) for every stored frame of a session, in time order."""
     import duckdb
 
     files = sorted(session_dir.glob("lap-*.parquet"))
@@ -53,7 +55,7 @@ def session_points(session_dir: Path) -> Iterator[tuple[float, int, str, float, 
     con = duckdb.connect()
     try:
         rows = con.execute(
-            "SELECT t, lap, phase, pos_x, pos_z"
+            "SELECT t, lap, phase, pos_x, pos_z, vel_x, vel_z"
             " FROM read_parquet(?, union_by_name = true) ORDER BY t",
             [[str(f) for f in files]],
         ).fetchall()
@@ -67,8 +69,8 @@ def detect_session(session_dir: Path) -> tuple[TrackMatch, list[Step]]:
     so there is no menu boundary to honour; a restart starts a new session anyway."""
     det = TrackDetector()
     steps: list[Step] = []
-    for t, lap, phase, x, z in session_points(session_dir):
-        m = det.observe_point(x, z, lap=lap if phase in LAP_VALUES else None)
+    for t, lap, phase, x, z, vx, vz in session_points(session_dir):
+        m = det.observe_point(x, z, lap=lap if phase in LAP_VALUES else None, velocity=(vx, vz))
         if m is not None:
             steps.append(Step(t, lap, m))
     return det.match, steps
@@ -111,7 +113,7 @@ def learn_track(source: Path, half_width_m: float = 15.0) -> LearnedTrack:
     if source.is_dir():
         pts = [
             (lap if phase in LAP_VALUES else None, x, z)
-            for _, lap, phase, x, z in session_points(source)
+            for _, lap, phase, x, z, _, _ in session_points(source)
         ]
     else:
         pts = [

@@ -131,6 +131,7 @@ class TrackDetector:
         self._pending_reset = False
         self._anchors: list[Point] = []  # places the car is known to be on the circuit
         self._prev: Point | None = None
+        self._velocity: Point | None = None
         self._box: Box | None = None
         self._distance = 0.0
         self._last_lap: int | None = None
@@ -180,10 +181,25 @@ class TrackDetector:
         # The chequered flag is a lap boundary too: a lap-count race reports
         # total_laps + 1 with the FINISHED phase on the frame that closes the last lap.
         lap = state.current_lap if state.phase in LAP_PHASES else None
-        return self.observe_point(state.pos_x, state.pos_z, lap=lap)
+        return self.observe_point(
+            state.pos_x, state.pos_z, lap=lap, velocity=(state.vel_x, state.vel_z)
+        )
 
-    def observe_point(self, x: float, z: float, lap: int | None = None) -> TrackMatch | None:
+    def observe_point(
+        self,
+        x: float,
+        z: float,
+        lap: int | None = None,
+        velocity: Point | None = None,
+    ) -> TrackMatch | None:
         """Feed one position; ``lap`` is GT7's lap counter while racing, else None.
+
+        ``velocity`` is the car's world-frame (x, z) velocity on this frame. When
+        it is given and not zero, it sets the direction of travel used against
+        the table's line directions; otherwise the step from the previous
+        position does. One position step is a poor witness: a frozen frame has
+        none, and on a straight running mostly along z one frame of drift can
+        flip its x sign.
 
         Anchors (positions known to be on the circuit, used to find layouts
         whose finish line is close by): the first frame, the first racing
@@ -192,6 +208,7 @@ class TrackDetector:
         that are not the car's.
         """
         p = (x, z)
+        self._velocity = velocity
         if not self._anchors:
             self._anchors.append(p)
         if self._box is None:
@@ -233,8 +250,16 @@ class TrackDetector:
 
     # evidence
 
+    def _direction(self, a: Point, b: Point) -> str | None:
+        """Which way the car is going between a and b: its velocity, else the step."""
+        if self._velocity is not None:
+            vx, vz = self._velocity
+            if vx or vz:
+                return travel_direction((0.0, 0.0), (vx, vz))
+        return travel_direction(a, b)
+
     def _note_crossings(self, a: Point, b: Point) -> None:
-        direction = travel_direction(a, b)
+        direction = self._direction(a, b)
         for t in self.tracks:
             if t.id in self._crossed or t.id not in self._alive:
                 continue
@@ -252,7 +277,7 @@ class TrackDetector:
         nothing. Either way lap 1 starts here: driving to the line from the pit
         or the formation lap is not part of it.
         """
-        direction = travel_direction(a, b)
+        direction = self._direction(a, b)
         on_line = {
             t.id
             for t in self.tracks
@@ -283,8 +308,16 @@ class TrackDetector:
         Lines can be up to ``line_radius`` off, but a line much further away
         than the nearest one is another circuit's: Tokyo East's sits 118 m from
         Fuji's, beside the pit lane.
+
+        When no live layout faces the way the car is going, it depends on how
+        sure that direction is. With none at all (a frozen frame: no step, no
+        velocity) or with the velocity and the step disagreeing (one frame of
+        drift on a straight along z), the reading is suspect, so the boundary
+        settles nothing and eliminates nothing. A direction both agree on is a
+        fact: the car is driving a layout the table lacks, such as the reverse
+        of a listed one, and every live layout goes.
         """
-        direction = travel_direction(a, b)
+        direction = self._direction(a, b)
         self._anchors.append(b)
         assert self._box is not None
         dist = {
@@ -292,6 +325,11 @@ class TrackDetector:
             for t in self.tracks
             if t.id in self._alive and t.direction == direction
         }
+        step = travel_direction(a, b)
+        if not dist and (direction is None or (step is not None and step != direction)):
+            self._lap_length = self._lap_distance  # still a whole lap, just no direction
+            self._lap_distance = 0.0
+            return
         reach = min(self.line_radius, min(dist.values(), default=0.0) + self.line_slack)
         for t in self.tracks:
             if t.id not in self._alive:

@@ -47,7 +47,10 @@ class Rule(ABC):
         the exit, not on the frames between. Kept on ``self.pits``, so
         ``self.pits.in_pit_lane`` holds for the whole stop, but the open stop's
         figures (fuel, time at rest, tyres) are as they were at the entry.
-        Overrides should call this."""
+        A stop the car never made (no rest, no service: a reset to track) is
+        withdrawn when it would have closed: a call with ``in_pit_lane`` false,
+        no new stop, and one more entry in ``status.teleports``. Overrides
+        should call this."""
         self.pits = status
 
     def on_end(self, last: RaceState, state: RaceState) -> list[Callout]:

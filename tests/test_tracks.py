@@ -368,6 +368,66 @@ def test_lap_counter_drops_a_line_much_further_away_than_the_nearest():
     assert det.match.confidence == "confirmed" and det.match.candidate_ids == (1,)
 
 
+def test_a_lap_tick_on_a_frozen_frame_eliminates_nothing():
+    """GT7 can repeat a position for a frame (pit entry): no step, so no direction."""
+    det = TrackDetector(_tracks(), box_tolerance_m=20, start_radius_m=500)
+    _drive(det, FULL_LAP, lap=1)
+    before = set(det.match.candidate_ids)
+    assert {1, 3} <= before
+    x, z = FULL_LAP[-1]
+    det.observe_point(x, z, lap=1)
+    det.observe_point(x, z, lap=2)  # the counter ticks on the repeated frame
+    assert det.match.confidence != "none"
+    assert set(det.match.candidate_ids) == before
+    assert det.is_alive(1) and det.is_alive(3)
+    # The next boundary, with a real step, settles it as usual.
+    _drive(det, FULL_LAP, lap=2)
+    _drive(det, FULL_LAP[:3], lap=3)
+    assert det.match.confidence == "confirmed" and det.match.track_id == 1
+
+
+def test_velocity_sets_the_direction_when_the_step_is_misleading():
+    tracks = (
+        Track(1, "Forward", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),
+        Track(3, "Reverse", "NX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),
+    )
+    x, z = FULL_LAP[0]
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, [*FULL_LAP, (x, z)], lap=1)
+    # One frame of jitter steps backwards in x while the car is doing 40 m/s forwards.
+    det.observe_point(x - 0.1, z, lap=2, velocity=(40.0, 0.5))
+    assert det.match.confidence == "confirmed" and det.match.candidate_ids == (1,)
+    # Without the velocity the same step points the wrong way.
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, [*FULL_LAP, (x, z)], lap=1)
+    det.observe_point(x - 0.1, z, lap=2)
+    assert det.match.candidate_ids == (3,)
+    # A zero velocity (no reading) falls back to the step.
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    _drive(det, [*FULL_LAP, (x, z)], lap=1)
+    det.observe_point(x + 5, z, lap=2, velocity=(0.0, 0.0))
+    assert det.match.candidate_ids == (1,)
+
+
+def test_a_layout_the_table_lacks_is_still_ruled_out_on_the_lap_counter():
+    """Driving the unlisted reverse of a listed layout: velocity and step agree the
+    car goes +x, no live layout faces +x, so none of them is this circuit."""
+    tracks = (Track(3, "Listed Reverse", "NX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400)),)
+    for velocity in (None, (40.0, 0.0)):
+        det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+        for x, z in FULL_LAP:
+            det.observe_point(x, z, lap=1, velocity=velocity)
+        for x, z in FULL_LAP[:3]:
+            det.observe_point(x, z, lap=2, velocity=velocity)
+        assert det.match.confidence == "none" and not det.is_alive(3)
+    # The same tick with velocity and step disagreeing is a suspect reading: kept.
+    det = TrackDetector(tracks, box_tolerance_m=20, start_radius_m=500)
+    x, z = FULL_LAP[0]
+    _drive(det, [*FULL_LAP, (x, z)], lap=1)
+    det.observe_point(x - 0.1, z, lap=2, velocity=(40.0, 0.5))  # step -x, velocity +x
+    assert det.is_alive(3)
+
+
 def test_lap_1_is_measured_from_the_lap_counter_not_from_the_pit_exit():
     lap_length = 2 * (930 + 380)
     tracks = (Track(1, "Here", "PX", ((100.0, 0.0), (100.0, 20.0)), (0, 0, 1000, 400), lap_length),)

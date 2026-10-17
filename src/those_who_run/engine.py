@@ -97,7 +97,7 @@ class Engine:
         # frame after the pit cut, and the fuel rule must know it was in the pits.
         pit = self.pits.observe(state)
         if pit is not None and self.session_open:
-            self._apply_pits(pit)
+            self._apply_pits(pit, state)
 
         # Rules and the lap store compare against the last driving frame. A pause or
         # a loading screen in between hides nothing: GT7 posts a lap on a loading
@@ -237,11 +237,15 @@ class Engine:
             except Exception:  # noqa: BLE001
                 log.exception("rule %s failed on session update", rule.name)
 
-    def _apply_pits(self, status: PitStatus) -> None:
-        stop = status.stops[-1]
-        if status.in_pit_lane:
+    def _apply_pits(self, status: PitStatus, state: RaceState) -> None:
+        if status.teleports and status.teleports[-1].t == state.t:
+            jump = status.teleports[-1]
+            log.info("teleport on lap %d, not a pit stop: %s", jump.lap, jump.evidence)
+        elif status.in_pit_lane:
+            stop = status.stops[-1]
             log.info("pit entry on lap %d: %s", stop.in_lap, stop.evidence)
         else:
+            stop = status.stops[-1]
             log.info(
                 "pit exit on lap %s after %.1f s, fuel %.1f -> %.1f, tyres %s; stint %d",
                 stop.out_lap,

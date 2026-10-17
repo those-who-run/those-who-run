@@ -201,3 +201,57 @@ def test_a_pause_in_the_pits_keeps_the_stop_and_is_not_time_at_rest():
         det.observe(s)
     assert det.status.in_pit_lane
     assert det.status.stops[0].stationary_secs == pytest.approx(1.0)  # 0.04 to 1.04
+
+
+def _reset_to_track(lap=3, fuel_after=50.0, **over):
+    """Off at 150 km/h, put back on track 300 m away, straight back up to speed."""
+    hot = (90.0, 90.0, 90.0, 90.0)
+    return [
+        _frame(0.0, lap=lap, x=0, tire_temp=hot),
+        _frame(0.02, lap=lap, phase=Phase.LOADING, x=300, tire_temp=hot),
+        _frame(0.04, lap=lap, speed=40.0, x=300, tire_temp=hot),
+        _frame(2.0, lap=lap, speed=80.0, x=340, tire_temp=hot),
+        _frame(4.0, lap=lap, speed=110.0, x=400, fuel=fuel_after, **{"tire_temp": hot, **over}),
+    ]
+
+
+@pytest.mark.parametrize("cut", ["loading", "teleport"])
+def test_a_reset_to_track_is_a_teleport_not_a_stop(cut):
+    frames = _reset_to_track()
+    if cut == "teleport":
+        del frames[1]
+    det, changes = detect(frames)
+    assert [s.in_pit_lane for _, s in changes] == [True, False]
+    assert det.status.stops == () and not det.status.in_pit_lane
+    assert det.status.stint == 1 and not det.status.is_pit_lap(3)
+    (jump,) = det.status.teleports
+    assert (jump.lap, jump.t) == (3, 4.0) and jump.entry_t < jump.t
+    assert jump.evidence.endswith("over 100 km/h; never at rest, no fuel, no tyres")
+
+
+def test_a_stop_without_rest_still_counts_with_fuel_or_tyres():
+    det, _ = detect(_reset_to_track(fuel_after=80.0))
+    assert len(det.status.stops) == 1 and det.status.teleports == ()
+    det, _ = detect(_reset_to_track(tire_temp=(60.0, 60.0, 60.0, 60.0)))
+    (stop,) = det.status.stops
+    assert stop.tyres_changed and det.status.stint == 2
+
+
+def test_engine_keeps_the_stint_through_a_reset_to_track(tmp_path):
+    from those_who_run.callouts import CalloutQueue
+    from those_who_run.config import DEFAULT_RULES
+    from those_who_run.engine import Engine
+    from those_who_run.metrics import Metrics
+    from those_who_run.rules import build_rules
+    from those_who_run.rules.fuel import FuelRule
+    from those_who_run.store import SessionStore
+
+    rules = build_rules(DEFAULT_RULES["rules"])
+    engine = Engine(rules, CalloutQueue(), SessionStore(tmp_path), Metrics())
+    engine.process(_frame(-1.0, lap=0, phase=Phase.AT_TRACK, speed=0.0))
+    for s in _reset_to_track(lap=1):
+        engine.process(s)
+    fuel = next(r for r in rules if isinstance(r, FuelRule))
+    assert fuel.stint == 1 and not fuel.pits.in_pit_lane and fuel.pits.stops == ()
+    assert len(fuel.pits.teleports) == 1
+    engine.recorder.close()

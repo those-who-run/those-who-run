@@ -42,6 +42,14 @@ frames, which no car does; the pit cuts imply thousands of km/h) counts as a
 cut, and the car going faster than ``exit_kph`` (no pit lane allows it; the
 exit cut lands at 80) ends a stop whose exit cut was missed.
 
+Not every cut or teleport is the pits: being put back on track after an off
+moves the car too. A "stop" that ends without the car ever coming to rest,
+with no fuel added and no tyres changed, was not a stop. It is withdrawn (the
+status goes back to what it was before the entry, so no stint starts and no
+lap is a pit lap) and kept as a ``Teleport`` instead, for the spin and off
+detection to come (#98). No reset to track has been recorded yet; a reset that
+leaves the car standing still would still read as a stop.
+
 Feed every frame and read ``status``, like the track and session detectors.
 """
 
@@ -111,9 +119,20 @@ class PitStop:
 
 
 @dataclass(frozen=True, slots=True)
+class Teleport:
+    """A cut or teleport that opened a stop the car never made: no rest, no service."""
+
+    lap: int
+    t: float  # when it was withdrawn: the frame that would have closed the stop
+    entry_t: float
+    evidence: str
+
+
+@dataclass(frozen=True, slots=True)
 class PitStatus:
     in_pit_lane: bool
     stops: tuple[PitStop, ...]
+    teleports: tuple[Teleport, ...] = ()  # withdrawn stops, oldest first
 
     @property
     def stint(self) -> int:
@@ -159,6 +178,7 @@ class PitDetector:
         exit_kph: float = 100.0,
         tyre_drop: float = 5.0,
         max_step_secs: float = 1.0,
+        refuel_min: float = 0.5,
     ) -> None:
         self.teleport_kph = teleport_kph
         self.teleport_m = teleport_m  # GT7 nudges a car at rest by a few cm
@@ -167,11 +187,13 @@ class PitDetector:
         self.exit_kph = exit_kph
         self.tyre_drop = tyre_drop
         self.max_step = max_step_secs  # a pause or a gap is not time at rest
+        self.refuel_min = refuel_min  # fuel added that counts as a service
         self.reset()
 
     def reset(self) -> None:
         """Forget everything: call on a race start or restart."""
         self._stops: list[PitStop] = []
+        self._teleports: list[Teleport] = []
         self._open: PitStop | None = None
         self._last: RaceState | None = None  # last racing frame
         self._cut = False  # the frames since _last include a loading screen
@@ -273,15 +295,25 @@ class PitDetector:
         elif state.speed_kph > self.exit_kph:
             out = f"over {self.exit_kph:.0f} km/h"
         if out is None:
-            self._status = PitStatus(True, (*self._stops, stop))
+            self._status = PitStatus(True, (*self._stops, stop), tuple(self._teleports))
             return None
+        self._open = None
+        if not self._rested and not stop.tyres_changed and stop.fuel_added < self.refuel_min:
+            self._teleports.append(
+                Teleport(
+                    lap=stop.in_lap,
+                    t=state.t,
+                    entry_t=stop.entry_t,
+                    evidence=f"{stop.evidence}; {out}; never at rest, no fuel, no tyres",
+                )
+            )
+            return self._publish()
         done = replace(stop, out_lap=state.current_lap, exit_t=state.t)
         done = replace(done, evidence=f"{done.evidence}; {out}")
         self._stops.append(done)
-        self._open = None
         return self._publish()
 
     def _publish(self) -> PitStatus:
         stops = tuple(self._stops) + ((self._open,) if self._open is not None else ())
-        self._status = PitStatus(self._open is not None, stops)
+        self._status = PitStatus(self._open is not None, stops, tuple(self._teleports))
         return self._status

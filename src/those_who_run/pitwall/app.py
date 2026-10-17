@@ -9,12 +9,14 @@ of its own (``?session=20261017-162118``) for the results cards to use later
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import tzinfo
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 import altair as alt
+import duckdb
 import pandas as pd
 import streamlit as st
 
@@ -53,20 +55,21 @@ def viewer_tz() -> tzinfo | None:
 
 
 # Cached on the index's modification time: a new lap or session shows up on the
-# next rerun, and nothing is re-read while the engineer is idle.
+# next rerun, and nothing is re-read while the engineer is idle. The stamp changes
+# every lap, so each cache keeps only the latest few entries.
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=4)
 def sessions(root: str, stamp: float) -> list[data.SessionRow]:
     return data.list_sessions(Path(root))
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=16)
 def laps(root: str, session_id: str, stamp: float) -> list[data.LapRow]:
     return data.lap_summaries(Path(root), session_id)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=16)
 def trace(root: str, session_id: str, lap: int, stamp: float) -> data.Trace | None:
     return data.lap_trace(Path(root), session_id, lap)
 
@@ -131,7 +134,7 @@ def session_view(root: str, stamp: float, tz: tzinfo | None, session_id: str) ->
     all_rows = sessions(root, stamp)
     row = next((r for r in all_rows if r.session_id == session_id), None)
     if row is None:
-        st.warning(f"No session {session_id}.")
+        st.error(f"No session {session_id}.")
         return
     st.subheader(row.title)
     st.markdown(row.result)
@@ -195,21 +198,27 @@ def compare_view(
     def lap_label(r: data.LapRow) -> str:
         return f"Lap {r.lap}  {r.time or r.flags}".rstrip()
 
+    # Keyed per session, so the picks survive a lap landing on a live session
+    # (the options grow) and reset when another session is opened.
     lap_no = {r.lap: r for r in lap_rows}
     a = st.selectbox(
         "Lap A",
         [r.lap for r in lap_rows],
         index=[r.lap for r in lap_rows].index(best.lap),
         format_func=lambda n: lap_label(lap_no[n]),
+        key=f"lap-a-{row.session_id}",
     )
 
     # Lap B from this session by default, or from another session at the same track.
-    others = [r for r in all_rows if r.track == row.track and r.session_id != row.session_id]
+    others = data.same_track_sessions(row, all_rows)
     b_session = row.session_id
-    if others and st.toggle("Lap B from another session at this track"):
+    if others and st.toggle(
+        "Lap B from another session at this track", key=f"other-{row.session_id}"
+    ):
         b_session = st.selectbox(
             "Session for lap B",
             [r.session_id for r in others],
+            key=f"b-session-{row.session_id}",
             format_func=lambda sid: next(
                 f"{r.started(tz):%d %b %H:%M} · {r.title.split(' · ', 1)[-1]} · {r.car or ''}"
                 for r in others
@@ -231,6 +240,7 @@ def compare_view(
         [r.lap for r in b_rows],
         index=[r.lap for r in b_rows].index(b_default),
         format_func=lambda n: lap_label(b_no[n]),
+        key=f"lap-b-{row.session_id}-{b_session}",
     )
 
     traces = [trace(root, row.session_id, a, stamp), trace(root, b_session, b, stamp)]
@@ -289,13 +299,15 @@ def main() -> None:
     tz = viewer_tz()
     st.markdown(f"### {brand.GLYPH_FLAG} Pit wall")
     session_id = st.query_params.get("session")
-    if session_id:
-        try:
+    try:
+        if session_id:
             session_view(root, stamp, tz, session_id)
-        except ValueError as exc:  # a hand-edited link
-            st.warning(str(exc))
-    else:
-        sessions_view(root, stamp, tz)
+        else:
+            sessions_view(root, stamp, tz)
+    except ValueError as exc:  # a hand-edited link
+        st.error(str(exc))
+    except (sqlite3.Error, duckdb.Error) as exc:  # a locked index, a corrupt lap file
+        st.error(f"Could not read the store in {root}: {exc}")
     st.caption(f"{brand.NAME} {brand.KANJI} {__version__} · read-only view of {root}")
 
 

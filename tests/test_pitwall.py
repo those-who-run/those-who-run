@@ -201,3 +201,150 @@ def test_page_renders_both_views(store_dir, monkeypatch):
     assert len(at.dataframe[0].value) == 4
     assert [s.label for s in at.selectbox] == ["Lap A", "Lap B"]
     assert at.selectbox[0].value == 3  # the best lap
+
+
+# old stores, same-track matching and errors (#160)
+
+
+def _drop_columns(store_dir: Path, table: str, *cols: str) -> None:
+    db = sqlite3.connect(store_dir / "index.sqlite")
+    for col in cols:
+        db.execute(f"ALTER TABLE {table} DROP COLUMN {col}")
+    db.commit()
+    db.close()
+
+
+def test_old_index_reads_every_column_it_has(store_dir):
+    """An index from before the session kind columns and the pit-stop detector:
+    ``fuel_used`` is read as it is, not taken for ``fuel_use`` (#160)."""
+    race = data.list_sessions(store_dir)[-1]
+    (store_dir / "sessions" / race.session_id / "summary.json").unlink()  # read the index
+    before = data.session_summary(store_dir, race.session_id)
+    assert before is not None and before["fuel_used"] == 10.0
+    _drop_columns(store_dir, "sessions", "track_confidence", "session_kind", "fuel_use")
+    _drop_columns(store_dir, "sessions", "start_type")
+    _drop_columns(store_dir, "laps", "pit")
+    after = data.session_summary(store_dir, race.session_id)
+    assert after is not None and after["fuel_used"] == 10.0
+    assert after["session_kind"] is None
+    assert [r.lap for r in data.lap_summaries(store_dir, race.session_id)] == [1, 2, 3, 4]
+    assert len(data.list_sessions(store_dir)) == 3
+
+
+def _row(session_id: str, track_id: int | None, track: str = "Unknown track") -> data.SessionRow:
+    return data.SessionRow(session_id, T0, None, track, "lap_race", None, "", "", (), 1, True,
+                           track_id)  # fmt: skip
+
+
+def test_same_track_needs_a_track_id(store_dir):
+    rows = data.list_sessions(store_dir)
+    assert all(r.track == "Unknown track" and r.track_id is None for r in rows)
+    assert data.same_track_sessions(rows[0], rows) == []  # two unknowns are not the same
+    suzuka = [_row("a", 351, "Suzuka"), _row("b", 351, "Suzuka"), _row("c", 352, "Suzuka")]
+    assert data.same_track_sessions(suzuka[0], suzuka) == [suzuka[1]]
+
+
+def test_track_id_only_when_the_detector_is_sure():
+    assert data.sure_track_id({"id": 351, "confidence": "confirmed"}) == 351
+    assert data.sure_track_id({"id": 351, "confidence": "probable"}) == 351
+    assert data.sure_track_id({"id": 351, "confidence": "ambiguous"}) is None
+    assert data.sure_track_id({"id": None, "confidence": "none"}) is None
+    assert data.sure_track_id(None) is None
+
+
+def test_real_sessions_at_one_track_match(tmp_path):
+    frames = list(read_recording(FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"))
+    drive(tmp_path, frames)
+    drive(tmp_path, frames, at=T0 + DAY)
+    a, b = data.list_sessions(tmp_path)
+    assert a.track_id is not None and a.track_id == b.track_id
+    assert data.same_track_sessions(a, [a, b]) == [b]
+
+
+def test_old_and_new_lap_files_read_together(store_dir):
+    """Laps from before 0.3 have no rotation columns; a session can hold both."""
+    import duckdb
+
+    race = data.list_sessions(store_dir)[-1]
+    old = store_dir / "sessions" / race.session_id / "lap-03.parquet"  # after a new one
+    tmp = old.with_suffix(".old.parquet")
+    con = duckdb.connect()
+    con.execute(
+        "COPY (SELECT * EXCLUDE (rot_x, rot_y, rot_z, orientation, ang_vel_x, ang_vel_y,"
+        f" ang_vel_z) FROM read_parquet('{old}')) TO '{tmp}' (FORMAT PARQUET)"
+    )
+    con.close()
+    tmp.replace(old)
+    laps = data.lap_summaries(store_dir, race.session_id)
+    assert [r.top_speed_kph for r in laps] == [150.0] * 4
+
+
+def _app(store_dir: Path, monkeypatch):
+    testing = pytest.importorskip("streamlit.testing.v1")
+    import those_who_run.pitwall as pitwall
+
+    monkeypatch.setenv("GT7_DATA_DIR", str(store_dir))
+    script = str(Path(pitwall.__file__).with_name("app.py"))
+    return testing.AppTest.from_file(script, default_timeout=60)
+
+
+def test_page_renders_an_empty_data_dir(tmp_path, monkeypatch):
+    at = _app(tmp_path, monkeypatch).run()
+    assert not at.exception
+    assert any("No sessions" in i.value for i in at.info)
+
+
+@pytest.mark.parametrize("session_id", ["../etc", "20990101-000000"])
+def test_page_shows_an_error_for_a_bad_session_link(store_dir, monkeypatch, session_id):
+    at = _app(store_dir, monkeypatch)
+    at.query_params["session"] = session_id
+    at.run()
+    assert not at.exception
+    assert len(at.error) == 1
+
+
+def test_page_shows_an_error_for_a_corrupt_lap_file(store_dir, monkeypatch):
+    race = data.list_sessions(store_dir)[-1]
+    (store_dir / "sessions" / race.session_id / "lap-02.parquet").write_bytes(b"not parquet")
+    at = _app(store_dir, monkeypatch)
+    at.query_params["session"] = race.session_id
+    at.run()
+    assert not at.exception
+    assert len(at.error) == 1 and "Could not read the store" in at.error[0].value
+
+
+def test_page_shows_an_error_for_a_locked_index(store_dir, monkeypatch):
+    db = sqlite3.connect(store_dir / "index.sqlite")
+    db.execute("BEGIN EXCLUSIVE")
+    try:
+        at = _app(store_dir, monkeypatch).run()
+    finally:
+        db.rollback()
+        db.close()
+    assert not at.exception
+    assert len(at.error) == 1 and "Could not read the store" in at.error[0].value
+
+
+def test_lap_picks_survive_a_new_lap(tmp_path, monkeypatch, sim):
+    live = sim(total_laps=6, burn=5).menu().at_track().race([98000, 97000, 99000], finish=False)
+    drive(tmp_path, live.frames, close=False)
+    (row,) = data.list_sessions(tmp_path)
+    at = _app(tmp_path, monkeypatch)
+    at.query_params["session"] = row.session_id
+    at.run()
+    assert [s.value for s in at.selectbox] == [2, 1]  # best, then the next quickest
+    at.selectbox[0].set_value(3)
+    at.selectbox[1].set_value(2)
+    at.run()
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    db.execute(
+        "INSERT INTO laps (session_id, lap, lap_time_ms, complete, frames, file, recorded_at)"
+        " VALUES (?, 4, 96000, 1, 3, 'lap-04.parquet', ?)",
+        (row.session_id, T0),
+    )
+    db.commit()
+    db.close()
+    at.run()
+    assert not at.exception
+    assert at.selectbox[0].options[-1].startswith("Lap 4")
+    assert [s.value for s in at.selectbox] == [3, 2]

@@ -52,10 +52,10 @@ def session_points(session_dir: Path) -> Iterator[tuple[float, int, str, float, 
         return
     con = duckdb.connect()
     try:
-        file_list = ", ".join(f"'{f}'" for f in files)
         rows = con.execute(
             "SELECT t, lap, phase, pos_x, pos_z"
-            f" FROM read_parquet([{file_list}], union_by_name = true) ORDER BY t"
+            " FROM read_parquet(?, union_by_name = true) ORDER BY t",
+            [[str(f) for f in files]],
         ).fetchall()
     finally:
         con.close()
@@ -110,7 +110,7 @@ def learn_track(source: Path, half_width_m: float = 15.0) -> LearnedTrack:
 
     if source.is_dir():
         pts = [
-            (lap if phase == Phase.IN_RACE.value else None, x, z)
+            (lap if phase in LAP_VALUES else None, x, z)
             for _, lap, phase, x, z in session_points(source)
         ]
     else:

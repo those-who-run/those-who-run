@@ -533,6 +533,23 @@ def test_learn_track_needs_a_completed_lap(tmp_path):
         learn_track(partial)
 
 
+def test_learn_track_from_a_stored_one_lap_race(tmp_path):
+    """A one-lap race's only lap boundary is the chequered-flag frame (FINISHED),
+    which stored sessions must count as recordings do (#160)."""
+    from those_who_run.store import frame_row, write_parquet
+
+    frames = [
+        make_state(t=float(i), current_lap=1, track_id=None, pos_x=10.0 * i, pos_z=0.0)
+        for i in range(50)
+    ]
+    frames.append(
+        make_state(t=50.0, phase=Phase.FINISHED, current_lap=2, track_id=None, pos_x=500.0)
+    )
+    write_parquet(tmp_path / "lap-01.parquet", [frame_row(s) for s in frames])
+    learned = learn_track(tmp_path)
+    assert learned.laps_used == 1 and learned.direction == "PX"
+
+
 def test_engine_records_the_track_in_the_session(tmp_path):
     store = SessionStore(tmp_path)
     metrics = Metrics()

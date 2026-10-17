@@ -67,6 +67,7 @@ class SessionRow:
     facts: tuple[tuple[str, str], ...]  # the card fields: best lap, car, fuel used
     laps_completed: int
     closed: bool  # summary.json written: the session has ended
+    track_id: int | None = None  # only when the detector is sure: probable or confirmed
 
     @property
     def kind_name(self) -> str:
@@ -174,32 +175,57 @@ def _columns(db: sqlite3.Connection, table: str) -> set[str]:
     return {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
 
 
-def _query(data_dir: Path, sql: str, args: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+def _select(cols: tuple[str, ...], have: set[str], table: str) -> str:
+    """``table.col`` for each column the table has, ``NULL AS col`` for the rest:
+    older indexes predate some columns (``store._ensure_column``)."""
+    return ", ".join(f"{table}.{c}" if c in have else f"NULL AS {c}" for c in cols)
+
+
+_SESSION_COLS = (
+    "id",
+    "started_at",
+    "ended_at",
+    "type",
+    "track_id",
+    "car_code",
+    "total_laps",
+    "laps_completed",
+    "best_lap_ms",
+    "fuel_used",
+    "final_position",
+    "track_confidence",
+    "session_kind",
+    "fuel_use",
+    "start_type",
+)
+_LAP_COLS = (
+    "lap",
+    "lap_time_ms",
+    "complete",
+    "fuel_start",
+    "fuel_end",
+    "fuel_used",
+    "position",
+    "pit",  # before the pit-stop detector, NULL
+    "frames",
+    "file",
+)
+
+
+def _query(
+    data_dir: Path, table: str, where: str = "", args: tuple[Any, ...] = ()
+) -> list[dict[str, Any]]:
+    """Rows of ``sessions`` or ``laps`` with every column the pit wall reads, NULL
+    where an older index lacks one."""
+    cols = {"sessions": _SESSION_COLS, "laps": _LAP_COLS}[table]
     db = open_index(data_dir)
     if db is None:
         return []
     try:
-        # Older indexes predate the session kind columns (store._ensure_column).
-        cols = _columns(db, "sessions")
-        for col in ("track_confidence", "session_kind", "fuel_use", "start_type"):
-            if col not in cols:
-                sql = sql.replace(f"s.{col}", f"NULL AS {col}")
-        if "laps.pit" in sql and "pit" not in _columns(db, "laps"):
-            sql = sql.replace("laps.pit", "NULL")  # before the pit-stop detector
+        sql = f"SELECT {_select(cols, _columns(db, table), table)} FROM {table} {where}"
         return [dict(r) for r in db.execute(sql, args)]
     finally:
         db.close()
-
-
-_SESSIONS_SQL = (
-    "SELECT s.id, s.started_at, s.ended_at, s.type, s.track_id, s.car_code, s.total_laps,"
-    " s.laps_completed, s.best_lap_ms, s.fuel_used, s.final_position, s.track_confidence,"
-    " s.session_kind, s.fuel_use, s.start_type FROM sessions s"
-)
-_LAPS_SQL = (
-    "SELECT lap, lap_time_ms, complete, fuel_start, fuel_end, fuel_used, position,"
-    " laps.pit AS pit, frames, file FROM laps WHERE session_id = ? ORDER BY lap"
-)
 
 
 def _session_dir(data_dir: Path, session_id: str) -> Path:
@@ -218,7 +244,7 @@ def read_summary(data_dir: Path, session_id: str) -> dict[str, Any] | None:
 
 
 def _laps(data_dir: Path, session_id: str) -> list[dict[str, Any]]:
-    rows = _query(data_dir, _LAPS_SQL, (session_id,))
+    rows = _query(data_dir, "laps", "WHERE session_id = ? ORDER BY lap", (session_id,))
     for r in rows:
         r["complete"] = bool(r["complete"])
     return rows
@@ -264,7 +290,7 @@ def session_summary(data_dir: Path, session_id: str) -> dict[str, Any] | None:
     summary = read_summary(data_dir, session_id)
     if summary is not None:
         return summary
-    rows = _query(data_dir, _SESSIONS_SQL + " WHERE s.id = ?", (session_id,))
+    rows = _query(data_dir, "sessions", "WHERE id = ?", (session_id,))
     return _index_summary(rows[0], _laps(data_dir, session_id)) if rows else None
 
 
@@ -296,12 +322,32 @@ def _row(summary: dict[str, Any], closed: bool) -> SessionRow:
         facts=tuple(facts),
         laps_completed=laps,
         closed=closed,
+        track_id=sure_track_id(summary.get("track")),
     )
+
+
+def sure_track_id(rec: dict[str, Any] | None) -> int | None:
+    """The detector's track id when it is probable or confirmed, else None."""
+    if not rec or rec.get("confidence") not in ("probable", "confirmed"):
+        return None
+    track_id = rec.get("id")
+    return None if track_id is None else int(track_id)
+
+
+def same_track(a: SessionRow, b: SessionRow) -> bool:
+    """Both sessions at the same layout, as far as the detector is sure. Two
+    sessions it could not place are not the same track."""
+    return a.track_id is not None and a.track_id == b.track_id
+
+
+def same_track_sessions(row: SessionRow, sessions: list[SessionRow]) -> list[SessionRow]:
+    """The other sessions at ``row``'s track, for lap B in lap compare."""
+    return [s for s in sessions if s.session_id != row.session_id and same_track(row, s)]
 
 
 def list_sessions(data_dir: Path) -> list[SessionRow]:
     """Every session in the index, newest first."""
-    rows = _query(data_dir, _SESSIONS_SQL + " ORDER BY s.started_at DESC")
+    rows = _query(data_dir, "sessions", "ORDER BY started_at DESC")
     out = []
     for r in rows:
         summary = read_summary(data_dir, r["id"])
@@ -358,7 +404,7 @@ def _lap_stats(paths: list[Path]) -> dict[str, tuple[float, float]]:
         rows = con.execute(
             "WITH f AS (SELECT filename, speed_kph, fuel_level - min(fuel_level) OVER"
             " (PARTITION BY filename ORDER BY t ROWS UNBOUNDED PRECEDING) AS rise"
-            " FROM read_parquet(?, filename = true))"
+            " FROM read_parquet(?, filename = true, union_by_name = true))"
             " SELECT filename, max(speed_kph), max(rise) FROM f GROUP BY filename",
             [[str(p) for p in paths]],
         ).fetchall()

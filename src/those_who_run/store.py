@@ -55,6 +55,7 @@ from typing import IO, Any
 
 from those_who_run.cars import car_name
 from those_who_run.pitstop import NO_STOPS, PitStatus
+from those_who_run.results import best_lap
 from those_who_run.sessionkind import SessionKind
 from those_who_run.state import Phase, RaceState, lap_completed, racing_frame
 from those_who_run.trackdetect import TrackMatch
@@ -299,6 +300,73 @@ def track_record(match: TrackMatch) -> dict[str, Any]:
             for c in match.candidates
         ],
     }
+
+
+def session_best_lap(
+    laps: list[dict[str, Any]], kind: dict[str, Any] | None, gt7_best: int | None
+) -> int | None:
+    """The session's best lap as the results card, the pit wall and the spoken
+    summary give it (``results.best_lap``): GT7's own best when there is one,
+    else the quickest complete lap, leaving out lap 1 of a lap race."""
+    quickest = best_lap(laps, (kind or {}).get("kind") == "lap_race", gt7_best)
+    return quickest[1] if quickest else None
+
+
+@dataclass(frozen=True, slots=True)
+class BestLapFix:
+    session_id: str
+    before: int | None
+    after: int | None
+
+
+def rebuild_best_laps(data_dir: Path) -> list[BestLapFix]:
+    """Recompute ``best_lap_ms`` for every stored session from the laps in its
+    ``summary.json`` and correct the index and the summary where they differ.
+
+    A one-off fix for stores written by 0.4.0 and earlier, which counted lap 1
+    from a grid start (#185). Safe to run again: a corrected session is left alone.
+    Sessions without a summary (still open, or cut short by a crash) are skipped.
+
+    Refuses (``StoreBusy``) while the engineer is running, like ``tracks
+    backfill``: it rewrites summary.json files. Each session is committed on its
+    own, so no write transaction is held across the store.
+    """
+    data_dir = Path(data_dir)
+    with exclusive_store(data_dir):
+        return _rebuild_best_laps(data_dir)
+
+
+def _rebuild_best_laps(data_dir: Path) -> list[BestLapFix]:
+    db = connect_index(data_dir)
+    fixes: list[BestLapFix] = []
+    try:
+        rows = db.execute("SELECT id, best_lap_ms FROM sessions ORDER BY id").fetchall()
+        for session_id, stored in rows:
+            path = data_dir / "sessions" / session_id / "summary.json"
+            if not path.exists():
+                continue
+            summary = json.loads(path.read_text(encoding="utf-8"))
+            laps = summary.get("laps") or []
+            best = session_best_lap(
+                laps, summary.get("session_kind"), summary.get("gt7_best_lap_ms")
+            )
+            if (
+                best == stored
+                and best == summary.get("best_lap_ms")
+                and "fastest_lap_ms" in summary
+            ):
+                continue
+            times = [x["lap_time_ms"] for x in laps if x.get("complete") and x.get("lap_time_ms")]
+            summary["best_lap_ms"] = best
+            summary["fastest_lap_ms"] = min(times) if times else None
+            write_summary(path, summary)
+            db.execute("UPDATE sessions SET best_lap_ms = ? WHERE id = ?", (best, session_id))
+            db.commit()
+            if best != stored:
+                fixes.append(BestLapFix(session_id, stored, best))
+    finally:
+        db.close()
+    return fixes
 
 
 def _ensure_column(db: sqlite3.Connection, table: str, column: str, decl: str) -> None:
@@ -604,6 +672,7 @@ class SessionStore:
         self.wait()  # the summary marks the session directory as complete
         completed = [x for x in s.laps if x["complete"]]
         times = [x["lap_time_ms"] for x in completed if x["lap_time_ms"]]
+        gt7_best = s.gt7_best_ms or None
         finished = finished or state.phase is Phase.FINISHED
         summary = {
             "session_id": s.session_id,
@@ -617,13 +686,14 @@ class SessionStore:
             "car_name": car_name(s.car_code),
             "total_laps": s.total_laps,
             "laps_completed": len(completed),
-            "best_lap_ms": min(times) if times else None,
+            "best_lap_ms": session_best_lap(s.laps, s.kind, gt7_best),
+            "fastest_lap_ms": min(times) if times else None,  # lap 1 from the grid too
             "finished": finished,  # the chequered flag, not a quit
             "total_time_ms": sum(times) if finished and times else None,
             "final_position": state.position or s.last_position,
             "total_cars": state.total_cars if state.total_cars > 0 else s.last_cars,
             "fuel_burned": round(s.fuel_burned, 3),
-            "gt7_best_lap_ms": s.gt7_best_ms or None,
+            "gt7_best_lap_ms": gt7_best,
             "fuel_capacity": state.fuel_capacity,
             "fuel_at_start": s.fuel_at_start,
             "fuel_at_end": state.fuel_level,

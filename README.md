@@ -348,10 +348,20 @@ raw from the packet, for drift detection; older laps lack those columns.
 The index is in SQLite's WAL mode, so the pit wall reading it never holds up
 the engineer's writes. There is one writer at a time (ADR 0001): `run` holds
 an exclusive lock on `engineer.lock` for as long as it is up, and every other
-command that writes the store (`tracks backfill`, `post`)
+command that writes the store (`tracks backfill`, `post`, `rebuild-best`)
 refuses with exit code 1 while it does. Use the pit wall, or stop the engineer
 first. The engineer likewise refuses to start while one of those is running.
 The pit wall only reads and never takes the lock.
+
+A session's `best_lap_ms` is the best lap the results card and the pit wall
+show: GT7's own best when there is one, which leaves out lap 1 from a grid
+start; `fastest_lap_ms` in `summary.json` is the quickest complete lap of any
+kind. Stores written by 0.4.0 or earlier counted that lap 1; correct them once
+with:
+
+```sh
+those-who-run rebuild-best
+```
 
 ## Pit wall
 

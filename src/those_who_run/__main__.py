@@ -101,6 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
     po.add_argument("session_id", help="a directory name under GT7_DATA_DIR/sessions")
     po.add_argument("--dry-run", action="store_true", help="print the card, post nothing")
 
+    sub.add_parser(
+        "rebuild-best",
+        help="recompute each stored session's best lap from its summary (stores from 0.4.0)",
+    )
+
     wb = sub.add_parser(
         "web", help="the pit wall: browse sessions and laps in GT7_DATA_DIR (needs the web extra)"
     )
@@ -151,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_recordings(settings, args.paths, args.last)
         if args.command == "post":
             return asyncio.run(run_post(settings, args.session_id, args.dry_run))
+        if args.command == "rebuild-best":
+            return run_rebuild_best(settings)
         if args.command == "web":
             return run_web(settings, args.port or settings.web_port, args.address)
         if args.command == "healthcheck":
@@ -166,6 +173,21 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     return 1
+
+
+def run_rebuild_best(settings: Settings) -> int:
+    from those_who_run.results import race_time
+    from those_who_run.store import rebuild_best_laps
+
+    if not (settings.data_dir / "index.sqlite").exists():
+        raise ConfigError(f"{settings.data_dir}: no index.sqlite")
+    fixes = rebuild_best_laps(settings.data_dir)
+    for f in fixes:
+        before = race_time(f.before) if f.before else "-"
+        after = race_time(f.after) if f.after else "-"
+        print(f"{f.session_id}  {before} -> {after}")
+    print(f"\n{len(fixes)} session(s) corrected")
+    return 0
 
 
 async def run_post(settings: Settings, session_id: str, dry_run: bool) -> int:

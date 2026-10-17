@@ -155,7 +155,9 @@ def test_real_rolling_start_read_through_a_packet_burst():
     frames alone and call it a grid start. The packet window still reads rolling."""
     from dataclasses import replace
 
-    frames = list(read_recording(FIXTURES / "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl"))
+    frames = list(
+        read_recording(FIXTURES / "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz")
+    )
     first = next(i for i, f in enumerate(frames) if f.phase is Phase.IN_RACE)
     assert frames[first].speed_kph < 1 and frames[first + 1].speed_kph < 1
     burst = frames[: first + 1] + [replace(f, t=f.t + 0.4) for f in frames[first + 1 :]]
@@ -170,19 +172,19 @@ def test_real_rolling_start_read_through_a_packet_burst():
 @pytest.mark.parametrize(
     ("fixture", "kind", "fuel_use", "cars_on_track", "start"),
     [
-        ("real-nuc-suzuka-no-stop-2026-10-15.jsonl", "lap_race", True, True, "rolling"),
-        ("real-nuc-suzuka-pit-stop-2026-10-15.jsonl", "lap_race", True, True, "rolling"),
-        ("real-nuc-suzuka-east-2026-10-15.jsonl", "solo_laps", True, True, "flying"),
-        ("real-nuc-fuji-timed-2026-10-15.jsonl", "solo_timed", False, True, "flying"),
-        ("real-nuc-sugo-timed-2026-10-15.jsonl", "solo_timed", False, True, "flying"),
-        ("real-n24h-race-lap1-positions-2026-10-14.jsonl", "lap_race", True, True, "rolling"),
+        ("real-nuc-suzuka-no-stop-2026-10-15.jsonl.gz", "lap_race", True, True, "rolling"),
+        ("real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz", "lap_race", True, True, "rolling"),
+        ("real-nuc-suzuka-east-2026-10-15.jsonl.gz", "solo_laps", True, True, "flying"),
+        ("real-nuc-fuji-timed-2026-10-15.jsonl.gz", "solo_timed", False, True, "flying"),
+        ("real-nuc-sugo-timed-2026-10-15.jsonl.gz", "solo_timed", False, True, "flying"),
+        ("real-n24h-race-lap1-positions-2026-10-14.jsonl.gz", "lap_race", True, True, "rolling"),
         # the unnamed mode: no cars-on-track flag, no fuel use (see #63)
-        ("real-nuc-tokyo-east-race-2026-10-15.jsonl", "lap_race", False, False, "rolling"),
-        ("real-nuc-laguna-seca-race-2026-10-15.jsonl", "lap_race", False, False, "rolling"),
-        ("real-nuc-tsukuba-brz-drift-2026-10-15.jsonl", "solo_laps", False, False, "flying"),
+        ("real-nuc-tokyo-east-race-2026-10-15.jsonl.gz", "lap_race", False, False, "rolling"),
+        ("real-nuc-laguna-seca-race-2026-10-15.jsonl.gz", "lap_race", False, False, "rolling"),
+        ("real-nuc-tsukuba-brz-drift-2026-10-15.jsonl.gz", "solo_laps", False, False, "flying"),
         # 0 km/h on the first racing frames after loading, then 100 behind the pace
         (
-            "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl",
+            "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz",
             "lap_race",
             False,
             False,
@@ -203,7 +205,7 @@ def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track, start):
 def test_real_qualifying_is_a_timed_field():
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
     kinds = set()
-    for s in read_recording(FIXTURES / "real-quali-restart-quit-2026-10-14.jsonl", strict=True):
+    for s in read_recording(FIXTURES / "real-quali-restart-quit-2026-10-14.jsonl.gz", strict=True):
         engine.process(s)
         kinds.add(engine.kind.kind)
     assert kinds == {"unknown", "timed_field"}
@@ -230,7 +232,7 @@ def test_engine_records_the_kind_in_the_session_metrics_and_rules(tmp_path):
     metrics = Metrics()
     spy = Spy()
     engine = Engine([spy], CalloutQueue(max_age=None), store, metrics)
-    fixture = FIXTURES / "real-nuc-suzuka-no-stop-2026-10-15.jsonl"
+    fixture = FIXTURES / "real-nuc-suzuka-no-stop-2026-10-15.jsonl.gz"
     asyncio.run(replay(read_recording(fixture, strict=True), engine, ConsolePlayer()))
     store.close()
     assert spy.seen[-1] == ("lap_race", True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
+import io
 import json
 import logging
 import re
@@ -29,8 +30,15 @@ def _open(path: Path, mode: str) -> TextIO:
 
 
 def write_recording(path: Path, states: Iterable[RaceState]) -> int:
+    """Write a whole recording. A gzip file gets no timestamp in its header, so the
+    same frames always give the same bytes (a fixture re-cut is no diff)."""
     n = 0
-    with _open(path, "w") as fh:
+    fh: TextIO = (
+        io.TextIOWrapper(gzip.GzipFile(path, "wb", mtime=0), encoding="utf-8")
+        if str(path).endswith(".gz")
+        else _open(path, "w")
+    )
+    with fh:
         for state in states:
             fh.write(json.dumps(state.to_dict(), separators=(",", ":")))
             fh.write("\n")

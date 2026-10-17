@@ -7,7 +7,7 @@ from pathlib import Path
 
 from those_who_run.__main__ import build_parser, main
 
-FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
+FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl.gz"
 
 
 def test_replay_leaves_the_data_directory_untouched(tmp_path, monkeypatch):

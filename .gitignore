@@ -15,5 +15,6 @@ voices/*.onnx.json
 /data/
 *.wav
 *.jsonl
+*.jsonl.gz
 .env
-!tests/fixtures/*.jsonl
+!tests/fixtures/*.jsonl.gz

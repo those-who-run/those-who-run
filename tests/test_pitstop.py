@@ -15,9 +15,9 @@ from those_who_run.replay import read_recording
 from those_who_run.state import Phase
 
 FIXTURES = Path(__file__).parent / "fixtures"
-GILLES = FIXTURES / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl"
-WILLOW = FIXTURES / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl"
-SUZUKA = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"
+GILLES = FIXTURES / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl.gz"
+WILLOW = FIXTURES / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz"
+SUZUKA = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 STOPS = (GILLES, WILLOW, SUZUKA)
 
 
@@ -132,7 +132,7 @@ def test_a_lost_cut_frame_is_seen_as_a_teleport(path):
 
 @pytest.mark.parametrize(
     "path",
-    sorted(p for p in FIXTURES.glob("*.jsonl") if p not in STOPS),
+    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in STOPS),
     ids=lambda p: p.stem,
 )
 def test_no_stop_in_any_other_recording(path):

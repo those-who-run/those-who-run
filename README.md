@@ -178,11 +178,15 @@ outing (from leaving the menu to returning to it) becomes one
 `<dir>/<YYYYMMDD-HHMMSS>.jsonl.gz` (UTC), about 20 MB an hour, and only the newest
 `GT7_RECORD_KEEP` (20) files are kept. Cut a recording down to a test fixture
 with `thin`: it keeps every frame where a phase, lap, lap time, position or car
-count changed, the frames either side, and one frame per half second.
+count changed, the frames either side, and one frame per half second. It
+writes gzip unless given `--plain`, and adds `.gz` to the name if it is missing.
+Every fixture gets an entry in `tests/fixtures/FIXTURES.yaml`: track, car,
+session kind, date, outing and the behaviours it pins (a test fails on a fixture
+that isn't listed).
 
 ```sh
 kubectl -n those-who-run cp those-who-run-xxxx:/data/recordings/20261016-193001.jsonl.gz ./outing.jsonl.gz
-those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl --start 120 --end 600
+those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl.gz --start 120 --end 600
 ```
 
 Recordings are one `RaceState` JSON object per line, version-tagged, and do not

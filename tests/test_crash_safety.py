@@ -16,12 +16,12 @@ from those_who_run.replay import OutingRecorder, read_recording
 from those_who_run.state import Phase
 
 FIXTURES = Path(__file__).parent / "fixtures"
-FUJI = FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl"
+FUJI = FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl.gz"
 
 
 def cut_last_line_in_half(src: Path, dst: Path) -> int:
     """Copy ``src`` with its last line cut in half; returns the number of whole lines."""
-    lines = src.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines = gzip.decompress(src.read_bytes()).decode("utf-8").splitlines(keepends=True)
     last = lines[-1].rstrip("\n")
     dst.write_text("".join(lines[:-1]) + last[: len(last) // 2], encoding="utf-8")
     return len(lines) - 1
@@ -42,7 +42,7 @@ def test_a_recording_with_its_last_line_cut_in_half_returns_every_whole_frame(tm
 
 def test_a_gzip_recording_cut_off_mid_stream_reads_up_to_the_damage(tmp_path):
     whole = list(read_recording(FUJI))
-    data = gzip.compress(FUJI.read_bytes())
+    data = FUJI.read_bytes()
     cut = tmp_path / "cut.jsonl.gz"
     cut.write_bytes(data[: len(data) // 2])
     rec = read_recording(cut)
@@ -56,7 +56,7 @@ def test_a_gzip_recording_cut_off_mid_stream_reads_up_to_the_damage(tmp_path):
 def test_listing_skips_a_corrupt_gzip_and_keeps_the_good_recording(tmp_path, capsys):
     (tmp_path / "20261016-180000.jsonl.gz").write_bytes(b"not gzip at all" * 100)
     good = tmp_path / "20261016-190000.jsonl"
-    good.write_bytes(FUJI.read_bytes())
+    good.write_bytes(gzip.decompress(FUJI.read_bytes()))
     sessions, complete = summarise_recording(tmp_path / "20261016-180000.jsonl.gz")
     assert sessions == [] and not complete
     assert main(["recordings", str(tmp_path)]) == 0
@@ -77,7 +77,7 @@ def test_summarising_closes_its_store_when_the_engine_fails(tmp_path, monkeypatc
 
 def test_listing_goes_on_past_a_recording_that_cannot_be_summarised(tmp_path, capsys, monkeypatch):
     for name in ("20261016-180000.jsonl", "20261016-190000.jsonl"):
-        (tmp_path / name).write_bytes(FUJI.read_bytes())
+        (tmp_path / name).write_bytes(gzip.decompress(FUJI.read_bytes()))
     real = Engine.process
     calls = {"n": 0}
 
@@ -154,7 +154,7 @@ def test_a_same_second_outing_sorts_after_the_first(tmp_path, capsys, monkeypatc
     assert capsys.readouterr().out.splitlines()[0] == "20261014-174641.jsonl.gz"
 
 
-@pytest.mark.parametrize("fixture", sorted(FIXTURES.glob("*.jsonl")), ids=lambda p: p.name)
+@pytest.mark.parametrize("fixture", sorted(FIXTURES.glob("*.jsonl.gz")), ids=lambda p: p.name)
 def test_every_fixture_reads_whole(fixture):
     """Fixtures are read strictly: a damaged one fails here, loudly, rather than
     being skipped over by the lenient reader the tools use."""

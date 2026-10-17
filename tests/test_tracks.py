@@ -31,15 +31,17 @@ from those_who_run.trackdetect import (
 from those_who_run.tracks import Track, load_tracks, track_by_id, track_name
 from those_who_run.tracktools import backfill, detect_recording, detect_session, learn_track
 
-FIXTURE = Path(__file__).parent / "fixtures" / "real-n24h-race-lap1-positions-2026-10-14.jsonl"
-UNKNOWN_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-unknown-track-2026-10-15.jsonl"
-SUZUKA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-east-2026-10-15.jsonl"
-FUJI_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-fuji-timed-2026-10-15.jsonl"
-TOKYO_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-tokyo-east-race-2026-10-15.jsonl"
-LAGUNA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-laguna-seca-race-2026-10-15.jsonl"
-SUGO_TIMED_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-sugo-timed-2026-10-15.jsonl"
+FIXTURE = Path(__file__).parent / "fixtures" / "real-n24h-race-lap1-positions-2026-10-14.jsonl.gz"
+UNKNOWN_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-unknown-track-2026-10-15.jsonl.gz"
+SUZUKA_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-east-2026-10-15.jsonl.gz"
+FUJI_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-fuji-timed-2026-10-15.jsonl.gz"
+TOKYO_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-tokyo-east-race-2026-10-15.jsonl.gz"
+LAGUNA_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "real-nuc-laguna-seca-race-2026-10-15.jsonl.gz"
+)
+SUGO_TIMED_FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-sugo-timed-2026-10-15.jsonl.gz"
 GILLES_FIXTURE = (
-    Path(__file__).parent / "fixtures" / "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl"
+    Path(__file__).parent / "fixtures" / "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz"
 )
 N24H, GP, NORDSCHLEIFE, TOURIST = 348, 349, 95, 347
 SUGO = 100001  # learned 2026-10-15, the first row we added ourselves

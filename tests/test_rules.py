@@ -585,7 +585,7 @@ def test_real_drift_rears_are_one_warning_each_time():
     from those_who_run.replay import read_recording
 
     frames = read_recording(
-        Path(__file__).parent / "fixtures" / "real-nuc-tsukuba-brz-drift-2026-10-15.jsonl",
+        Path(__file__).parent / "fixtures" / "real-nuc-tsukuba-brz-drift-2026-10-15.jsonl.gz",
         strict=True,
     )
     assert run_rule(TempsRule(), frames) == ["Rear tyres hot."] * 3

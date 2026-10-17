@@ -23,8 +23,8 @@ from those_who_run.rules import build_rules
 from those_who_run.store import BestLapFix, SessionStore, StoreBusy, rebuild_best_laps
 
 FIXTURES = Path(__file__).parent / "fixtures"
-REAL = sorted(FIXTURES.glob("real-*.jsonl"))
-PIT_STOP = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"
+REAL = sorted(FIXTURES.glob("real-*.jsonl.gz"))
+PIT_STOP = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 
 
 async def _replay(path: Path, data_dir: Path) -> None:
@@ -81,7 +81,7 @@ async def test_stored_best_lap_is_the_cards(path, tmp_path):
     ],
 )
 async def test_stored_best_lap_leaves_out_a_grid_start(name, bests, tmp_path):
-    await _replay(FIXTURES / f"{name}.jsonl", tmp_path)
+    await _replay(FIXTURES / f"{name}.jsonl.gz", tmp_path)
     assert list(_stored(tmp_path).values()) == bests
 
 
@@ -113,7 +113,7 @@ def _as_written_by_0_4_0(data_dir: Path) -> None:
 
 async def test_rebuild_corrects_a_store_written_by_0_4_0(tmp_path):
     await _replay(PIT_STOP, tmp_path)
-    await _replay(FIXTURES / "real-nuc-laguna-seca-race-2026-10-15.jsonl", tmp_path)
+    await _replay(FIXTURES / "real-nuc-laguna-seca-race-2026-10-15.jsonl.gz", tmp_path)
     _as_written_by_0_4_0(tmp_path)
     pit_id, laguna_id = _stored(tmp_path)
     assert _stored(tmp_path) == {pit_id: 57109, laguna_id: 112476}
@@ -161,7 +161,7 @@ async def test_rebuild_refuses_while_the_engineer_runs(tmp_path, monkeypatch, ca
 
 async def test_rebuild_commits_each_session_and_writes_summaries_whole(tmp_path, monkeypatch):
     await _replay(PIT_STOP, tmp_path)
-    await _replay(FIXTURES / "real-race-2laps-2026-10-14.jsonl", tmp_path)
+    await _replay(FIXTURES / "real-race-2laps-2026-10-14.jsonl.gz", tmp_path)
     _as_written_by_0_4_0(tmp_path)
     written: list[Path] = []
     real_write = store_mod.write_summary

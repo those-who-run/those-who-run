@@ -109,7 +109,7 @@ def test_quit_summary_needs_a_lap_and_never_follows_the_flag():
 async def test_real_fuji_time_trial_has_no_fuel_or_position_and_a_summary_on_leaving():
     engine_ = engine()
     out = await replay(
-        read_recording(FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl", strict=True),
+        read_recording(FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl.gz", strict=True),
         engine_,
         ConsolePlayer(),
     )
@@ -120,7 +120,7 @@ async def test_real_fuji_time_trial_has_no_fuel_or_position_and_a_summary_on_lea
 
 async def test_real_tokyo_east_race_is_briefed_without_position_or_fuel():
     out = await replay(
-        read_recording(FIXTURES / "real-nuc-tokyo-east-race-2026-10-15.jsonl", strict=True),
+        read_recording(FIXTURES / "real-nuc-tokyo-east-race-2026-10-15.jsonl.gz", strict=True),
         engine(),
         ConsolePlayer(),
     )

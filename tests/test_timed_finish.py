@@ -13,7 +13,7 @@ from those_who_run.rules import build_rules
 from those_who_run.state import Phase, race_started
 from those_who_run.store import SessionStore
 
-FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-timed-race-2026-10-16.jsonl"
+FIXTURE = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-timed-race-2026-10-16.jsonl.gz"
 
 
 async def test_real_timed_race_finishes_at_the_line(tmp_path):

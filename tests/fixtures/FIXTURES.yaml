@@ -1,0 +1,252 @@
+# What each fixture is and what it pins. Every file in this folder is listed
+# here, and every entry is a file here: tests/test_fixtures.py fails otherwise.
+#
+# Fixtures are real drives cut down with `those-who-run thin` (gzipped by
+# default) to the frames where something changed, about 2 Hz.
+#
+#   file      the fixture, a .jsonl.gz in this folder
+#   date      the day it was driven
+#   track     as the track table names it, or why there is no track
+#   car       as the car table names it, or why there is no car
+#   kind      session kind and start type (sessionkind.py), one per session
+#   outing    the NUC outing it was cut from (GT7_RECORD_DIR file name without
+#             .jsonl.gz, UTC), or null when it was not recorded on the NUC or
+#             the outing was pruned before its id was noted
+#   source    where it came from and which part was kept
+#   pins      the behaviours the tests check against it
+#   tests     the test modules that read it
+
+fixtures:
+  - file: real-race-2laps-2026-10-14.jsonl.gz
+    date: 2026-10-14
+    track: none in the frames (recorded before track ids were kept)
+    car: none in the frames (recorded before car codes were kept)
+    kind: [solo_timed (flying), lap_race (rolling)]
+    outing: null
+    source: >-
+      The first recording, made with `record` on a laptop: practice laps, then
+      a two-lap race. Thinned at one frame a second.
+    pins:
+      - The phases cover the whole session, menu to results screen.
+      - A two-lap race from P10 to P6, the flag at "lap 3 of 2", and the replay
+        blip GT7 sends after the results.
+      - Callouts and stored sessions for practice followed by a race.
+      - The stored best lap matches the results card.
+      - A replay writes its sessions to a store of its own, never the live one.
+    tests: [test_best_lap_stored, test_real_recording, test_replay_store]
+
+  - file: real-quali-restart-quit-2026-10-14.jsonl.gz
+    date: 2026-10-14
+    track: Nurburgring 24h
+    car: Hyundai Genesis Gr.3
+    kind: [timed_field (flying), timed_field (flying)]
+    outing: null
+    source: Recorded with `record` on a laptop, a qualifying session.
+    pins:
+      - A restart goes straight back to lap 1 and ends the session as a restart.
+      - Leaving through the menu is a quit, and keeps the last position.
+      - Pausing and resuming three times mid-lap is neither a start nor an end.
+      - Qualifying reads as a timed field.
+    tests: [test_real_recording, test_recordtools, test_results, test_sessionkind]
+
+  - file: real-n24h-race-lap1-positions-2026-10-14.jsonl.gz
+    date: 2026-10-14
+    track: Nurburgring 24h
+    car: Hyundai Genesis Gr.3
+    kind: [lap_race (rolling)]
+    outing: null
+    source: Recorded with `record` on a laptop, a race through lap 1.
+    pins:
+      - Track detection is probable before the lights and confirmed after lap 1.
+      - The engine records the track in the session, and backfill restores it
+        from the stored laps.
+      - A lap race with a rolling start.
+    tests: [test_tracks, test_sessionkind]
+
+  - file: real-nuc-unknown-track-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Sportsland SUGO (not in the table when it was cut)
+    car: Ferrari F355 Berlinetta '94
+    kind: [solo_timed (flying)]
+    outing: null
+    source: NUC outing from about 12:03 UTC, since pruned.
+    pins:
+      - A track the table lacks is reported as none, not as the nearest layout
+        (Fuji).
+      - "`tracks learn` derives a table row from the lap, and the learned row
+        then confirms SUGO."
+      - Backfill clears a stale guess when nothing fits.
+    tests: [test_tracks]
+
+  - file: real-nuc-suzuka-east-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Suzuka Circuit East Course
+    car: Ferrari F355 Berlinetta '94
+    kind: [solo_laps (flying)]
+    outing: null
+    source: NUC outing from about 12:05 UTC, since pruned. One lap, 60 s.
+    pins:
+      - Suzuka East is confirmed on the lap counter.
+      - Solo laps with a flying start.
+    tests: [test_tracks, test_sessionkind]
+
+  - file: real-nuc-suzuka-no-stop-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Suzuka Circuit East Course
+    car: Honda Civic Si Group A version '87
+    kind: [lap_race (rolling)]
+    outing: null
+    source: NUC outing from about 16:56 UTC, since pruned. A six-lap race.
+    pins:
+      - A finished race, flag to results, with the pit call ignored.
+      - The results card for a finished race.
+      - The engine records the session kind in the session, the metrics and
+        the rules.
+      - The stored best lap matches the results card.
+    tests: [test_best_lap_stored, test_real_recording, test_recordtools, test_results, test_sessionkind]
+
+  - file: real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Suzuka Circuit East Course
+    car: Honda Civic Si Group A version '87
+    kind: [lap_race (rolling)]
+    outing: null
+    source: NUC outing from about 17:04 UTC, since pruned. A six-lap race with a stop.
+    pins:
+      - A pit stop whose finish line is crossed in the entry cut.
+      - The pit-in lap posted on a loading frame is still called.
+      - Both stints are counted on the results card, and the pit wall flags
+        the stop.
+      - Sessions at one track match on the pit wall.
+      - The stored best lap matches the results card.
+    tests: [test_best_lap_stored, test_pitstop, test_pitwall, test_real_recording, test_results, test_sessionkind]
+
+  - file: real-nuc-sugo-timed-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Sportsland SUGO
+    car: Honda Civic Si Group A version '87
+    kind: [solo_timed (flying)]
+    outing: null
+    source: NUC outing from about 17:11 UTC, since pruned.
+    pins:
+      - A timed session from the pits is confirmed as SUGO.
+      - A time trial with a flying start.
+    tests: [test_tracks, test_sessionkind]
+
+  - file: real-nuc-fuji-timed-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Fuji International Speedway (Short)
+    car: NISMO 400R '95
+    kind: [solo_timed (flying)]
+    outing: null
+    source: NUC outing from about 18:34 UTC, since pruned. A time trial, two laps.
+    pins:
+      - Fuji from the pits is never Tokyo East.
+      - A time trial has no position and no fuel callouts, and gets a summary
+        on leaving through the menu.
+      - "`recordings` dates sessions from the outing's file name, not the PS5 clock."
+      - The results card, its dry run and its pit wall link.
+      - Cut off mid-line or mid-stream, a recording still reads up to the damage.
+    tests: [test_crash_safety, test_recordtools, test_results, test_session_callouts, test_sessionkind, test_tracks]
+
+  - file: real-nuc-tokyo-east-race-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Tokyo Expressway - East Clockwise
+    car: Porsche 911 GT3 (997) '09
+    kind: [lap_race (rolling)]
+    outing: null
+    source: NUC outing from about 18:57 UTC, since pruned. A race, quit after lap 1.
+    pins:
+      - Tokyo East is never Suzuka mid-lap.
+      - A race GT7 does not flag positions in is briefed without position or
+        fuel.
+      - Retiring from it gives a card with no position.
+    tests: [test_results, test_session_callouts, test_sessionkind, test_tracks]
+
+  - file: real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: none (the Nordschleife is not in the table)
+    car: Mazda RX-VISION GT3 CONCEPT
+    kind: [lap_race (rolling)]
+    outing: null
+    source: NUC outing from about 19:04 UTC, since pruned. The first 40 s of the race.
+    pins:
+      - A rolling start read through a burst of packets.
+      - A race entered from a loading screen.
+    tests: [test_real_recording, test_sessionkind]
+
+  - file: real-nuc-laguna-seca-race-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: WeatherTech Raceway Laguna Seca
+    car: Dodge Challenger R/T '70
+    kind: [lap_race (rolling)]
+    outing: null
+    source: NUC outing from about 19:10 UTC, since pruned. A race, quit after lap 1.
+    pins:
+      - Laguna Seca is never Interlagos mid-lap.
+      - The stored best lap matches the results card.
+    tests: [test_best_lap_stored, test_sessionkind, test_tracks]
+
+  - file: real-nuc-tsukuba-brz-drift-2026-10-15.jsonl.gz
+    date: 2026-10-15
+    track: Tsukuba Circuit
+    car: Subaru BRZ Drift Car '17
+    kind: [solo_laps (flying)]
+    outing: null
+    source: NUC outing from about 19:17 UTC, since pruned. Two drift laps.
+    pins:
+      - Hot rears while drifting give one warning each time, not a stream.
+    tests: [test_rules, test_sessionkind]
+
+  - file: real-nuc-suzuka-timed-race-2026-10-16.jsonl.gz
+    date: 2026-10-16
+    track: Suzuka Circuit East Course
+    car: Honda Civic SiR-II (EG) '93
+    kind: [timed_field (flying)]
+    outing: null
+    source: >-
+      NUC outing from about 12:10 UTC, since pruned. A 5-minute timed race,
+      19 AI cars, 5 laps, P1, and the replayed frames after it.
+    pins:
+      - A timed race finishes at the line after 3 s of hands-off coasting.
+      - The stored best lap matches the results card.
+    tests: [test_best_lap_stored, test_timed_finish]
+
+  - file: real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz
+    date: 2026-10-17
+    track: "Willow Springs International Raceway: Big Willow"
+    car: Toyota 86 Gr.B Rally Car
+    kind: [lap_race (rolling)]
+    outing: 20261017-141530
+    source: NUC outing 20261017-141530, laps 6 to 8.
+    pins:
+      - A pit stop whose finish line is crossed in the exit cut.
+    tests: [test_pitstop, test_real_recording]
+
+  - file: real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz
+    date: 2026-10-17
+    track: Circuit Gilles Villeneuve
+    car: Mazda RX-VISION GT3 EVO '26
+    kind: [lap_race (rolling)]
+    outing: 20261017-162118
+    source: NUC outing 20261017-162118, the 12-lap daily race, the first 230 s.
+    pins:
+      - Detection is probable once the car crosses the line and confirmed at
+        the end of lap 1.
+      - The card links to the pit wall only when the pit wall URL is set.
+      - The stored best lap matches the results card.
+    tests: [test_best_lap_stored, test_results, test_tracks]
+
+  - file: real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl.gz
+    date: 2026-10-17
+    track: Circuit Gilles Villeneuve
+    car: Mazda RX-VISION GT3 EVO '26
+    kind: [lap_race (rolling)]
+    outing: 20261017-162118
+    source: NUC outing 20261017-162118, laps 5 to 8 of the 12-lap race.
+    pins:
+      - A pit stop whose finish line is crossed in the pit lane.
+      - In and out laps are left out of the fuel average, and stints split at
+        the stop.
+      - An open stop marks every lap from the in lap.
+    tests: [test_pitstop, test_real_recording]

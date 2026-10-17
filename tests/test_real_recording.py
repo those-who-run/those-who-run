@@ -21,15 +21,15 @@ from those_who_run.rules import FuelRule, build_rules
 from those_who_run.state import Phase, race_ended, race_restarted, race_started
 from those_who_run.store import SessionStore
 
-FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl"
-QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl"
-PIT_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"
-NO_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-no-stop-2026-10-15.jsonl"
+FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl.gz"
+QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl.gz"
+PIT_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
+NO_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-no-stop-2026-10-15.jsonl.gz"
 GILLES_STOP = (
-    Path(__file__).parent / "fixtures" / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl"
+    Path(__file__).parent / "fixtures" / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl.gz"
 )
 WILLOW_STOP = (
-    Path(__file__).parent / "fixtures" / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl"
+    Path(__file__).parent / "fixtures" / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz"
 )
 
 
@@ -129,7 +129,9 @@ def test_real_race_entered_from_a_loading_screen():
     LOADING -> IN_RACE is not a start (a pit stop on lap 1 looks the same); the
     session opens once, on the frame after the menu blip (#157)."""
     path = (
-        Path(__file__).parent / "fixtures" / "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl"
+        Path(__file__).parent
+        / "fixtures"
+        / "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz"
     )
     states = list(read_recording(path))
     loading_to_race = [

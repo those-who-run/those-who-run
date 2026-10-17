@@ -67,7 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     th = sub.add_parser("thin", help="cut a recording down to a test fixture")
     th.add_argument("source", type=Path, help="a .jsonl or .jsonl.gz recording")
-    th.add_argument("output", type=Path)
+    th.add_argument("output", type=Path, help="gzipped: .gz is added unless --plain")
+    th.add_argument("--plain", action="store_true", help="write plain JSONL, not gzip")
     th.add_argument("--start", type=float, help="seconds from the first frame")
     th.add_argument("--end", type=float, help="seconds from the first frame")
     th.add_argument(
@@ -78,7 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     trs = tr.add_subparsers(dest="tracks_command", required=True)
     trs.add_parser("list", help="print the track table")
     td = trs.add_parser("detect", help="run the detector over a recording or a stored session")
-    td.add_argument("source", type=Path, help="a .jsonl recording or a sessions/<id> directory")
+    td.add_argument(
+        "source", type=Path, help="a .jsonl(.gz) recording or a sessions/<id> directory"
+    )
     tb = trs.add_parser(
         "backfill", help="detect the track for stored sessions and update the index"
     )
@@ -192,7 +195,7 @@ def dispatch(args: argparse.Namespace, settings: Settings) -> int:
     if args.command == "record":
         return asyncio.run(run_record(settings, args.output, args.ps5_ip, args.seconds))
     if args.command == "thin":
-        return run_thin(args.source, args.output, args.start, args.end, args.every)
+        return run_thin(args.source, args.output, args.start, args.end, args.every, args.plain)
     if args.command == "tracks":
         return run_tracks(settings, args)
     if args.command == "cars":
@@ -400,10 +403,10 @@ def run_tracks(settings: Settings, args: argparse.Namespace) -> int:
         src: Path = args.source
         if src.is_dir():
             match, steps = detect_session(src)
-        elif src.suffix == ".jsonl":
+        elif src.name.endswith((".jsonl", ".jsonl.gz")):
             match, steps = detect_recording(src)
         else:
-            raise ConfigError(f"{src}: expected a .jsonl recording or a session directory")
+            raise ConfigError(f"{src}: expected a .jsonl(.gz) recording or a session directory")
         for st in steps:
             cands = ", ".join(
                 f"{c.track.name} ({c.fit:.2f}{', line' if c.line_crossed else ''})"
@@ -481,10 +484,17 @@ async def run_replay(
 
 
 def run_thin(
-    source: Path, output: Path, start: float | None, end: float | None, every: float
+    source: Path,
+    output: Path,
+    start: float | None,
+    end: float | None,
+    every: float,
+    plain: bool = False,
 ) -> int:
     from those_who_run.replay import read_recording, thin, write_recording
 
+    if not plain and output.suffix != ".gz":
+        output = output.with_name(output.name + ".gz")
     frames = list(read_recording(source))
     kept = write_recording(output, thin(frames, every=every, start=start, end=end))
     print(f"{kept} of {len(frames)} frames kept in {output}")

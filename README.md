@@ -14,17 +14,17 @@ synthesises speech locally with Piper, and plays it into a Discord voice
 channel. Join that channel from the PS5's Discord integration and the engineer
 speaks inside your PSVR2 headset while the HUD is gone.
 
-No cloud. No subscription. No LLM. One small box on your LAN.
+No cloud required. No subscription. One small box on your LAN.
 
 ```
  ┌───────────────────────────────────────────────┐
- │  THOSE WHO RUN        走り屋        v0.1.0     │
+ │  THOSE WHO RUN        走り屋        v0.4.0     │
  │  PS5 ──UDP 33740──▶ engineer ──Piper──▶ Discord │
  │  ⏱️  lap times   ⛽ fuel   🚩 final lap   P1▲   │
  └───────────────────────────────────────────────┘
 ```
 
-## ⏱️ What it says (v1)
+## ⏱️ What it says
 
 | Rule | When | Example |
 |---|---|---|
@@ -136,7 +136,7 @@ podman run --rm \
 From source:
 
 ```sh
-make venv            # creates .venv and installs with dev extras
+make venv            # creates .venv and installs with the dev and web extras
 make voice           # downloads the Piper voice into ./voices
 GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/those-who-run run
 ```
@@ -332,8 +332,8 @@ completes, so a crash loses at most the lap in progress and callouts are never
 held up by disk. A partial lap at the end of a session is written with
 `complete = 0`. Restarting from the pause menu closes the session and opens a
 new one; quitting closes it; Ctrl-C closes whatever is open. Budget roughly
-10 MB per hour of driving. Parquet is written and read with DuckDB; any
-Parquet-aware tool can read the files. From 0.3 frames also carry the body
+20 MB per hour of driving (#36 measured 17.5 to 23 MB). Parquet is written and
+read with DuckDB; any Parquet-aware tool can read the files. From 0.3 frames also carry the body
 rotation (`rot_x`, `rot_y`, `rot_z`, `orientation`) and spin (`ang_vel_*`),
 raw from the packet, for drift detection; older laps lack those columns.
 

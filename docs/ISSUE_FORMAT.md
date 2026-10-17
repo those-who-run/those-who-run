@@ -16,7 +16,8 @@ build it without asking around first. The template is
   is needed) before it goes.
 - **Requirements are numbered** (R1, R2, …) and say MUST or SHOULD. Acceptance
   criteria are checkboxes, each one testable, and say which fixture pins it
-  (README principle 5: a behaviour ships with a fixture from a real drive).
+  ([ROADMAP.md](../ROADMAP.md) principle 5: a behaviour ships with a fixture
+  from a real drive).
 - **Approach is advice, not a contract.** It names the modules and signals to
   start from; the implementer may do better and says so in the PR.
 - **One issue, one deliverable.** Split anything that needs two PRs.
@@ -36,8 +37,10 @@ build it without asking around first. The template is
 | Evidence | What the telemetry and recordings show, with numbers. Unknowns marked. |
 | Requirements | R1… with MUST or SHOULD. Behaviour, not implementation. |
 | Out of scope | What this issue deliberately leaves to other issues (linked). |
+| Interfaces | Events, tables, config keys, CLI commands and health or metric fields it adds or changes, so overlaps between parallel specs show before they are built. |
 | Approach | Suggested design: modules, signals, thresholds, data flow. |
 | Acceptance criteria | Checkboxes, each testable and tied to a fixture or a check. |
+| Definition of done | The checklist every PR closes: tests in a named file, fixtures indexed, README tables, `make check`, `stream:` label. |
 | Fixtures | Recordings the work has, and drives it still needs. |
 | Dependencies | Blocked by and Blocks, as issue links. |
 | Open questions | Decisions still to make, and who makes them. |

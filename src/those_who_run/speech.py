@@ -5,10 +5,14 @@ between them: Piper's own gap after a full stop is too short to hear, so "Lap
 two. one oh four point six. four point three over best." ran together. Each
 sentence is cached on its own, so the fixed parts ("Lap two.", "Final lap.")
 are synthesised once and only the numbers are new for each lap.
+
+Text with nothing to say (no letters or digits, or audio Piper leaves empty)
+gives no clip: ``synthesize`` returns None and leaves no file behind.
 """
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import re
@@ -27,9 +31,15 @@ def split_sentences(text: str) -> list[str]:
     return [part for part in (p.strip() for p in _SENTENCE_END.split(text)) if part]
 
 
+def speakable(text: str) -> bool:
+    """Whether ``text`` has anything to say: a letter or a digit."""
+    return any(ch.isalnum() for ch in text)
+
+
 class Speech(Protocol):
-    def synthesize(self, text: str) -> Path:
-        """Return a WAV file containing ``text``. May be cached."""
+    def synthesize(self, text: str) -> Path | None:
+        """Return a WAV file containing ``text``, or None when there is nothing to
+        say. May be cached."""
 
 
 class PiperSpeech:
@@ -59,12 +69,17 @@ class PiperSpeech:
         self._voice = PiperVoice.load(str(model_path))
         self._model_tag = hashlib.sha1(str(model_path).encode()).hexdigest()[:8]
 
-    def synthesize(self, text: str) -> Path:
+    def synthesize(self, text: str) -> Path | None:
+        if not speakable(text):
+            return None
         out = self._path(f"{self._pause}|{text}")
         if out.exists():
             return out
         started = time.perf_counter()
-        parts = [self._sentence(s) for s in split_sentences(text) or [text]]
+        sentences = [s for s in split_sentences(text) if speakable(s)]
+        parts = [p for p in (self._sentence(s) for s in sentences) if p is not None]
+        if not parts:
+            return None
         if len(parts) == 1:
             out = parts[0]
         else:
@@ -79,13 +94,29 @@ class PiperSpeech:
         digest = hashlib.sha1(f"{self._model_tag}|{self._syn}|{key}".encode()).hexdigest()
         return self.cache_dir / f"{digest}.wav"
 
-    def _sentence(self, sentence: str) -> Path:
+    def _sentence(self, sentence: str) -> Path | None:
         out = self._path(sentence)
         if out.exists():
             return out
         tmp = out.with_suffix(".tmp.wav")
-        with wave.open(str(tmp), "wb") as wav:
-            self._voice.synthesize_wav(sentence, wav, syn_config=self._syn)
+        try:
+            wav = wave.open(str(tmp), "wb")  # noqa: SIM115 - closed below, see except
+            try:
+                self._voice.synthesize_wav(sentence, wav, syn_config=self._syn)
+            except BaseException:
+                # Closing a WAV with no params raises too; keep the voice's error.
+                with contextlib.suppress(wave.Error):
+                    wav.close()
+                raise
+            wav.close()
+        except wave.Error as exc:
+            # Piper wrote no audio, so the WAV header was never set.
+            tmp.unlink(missing_ok=True)
+            log.warning("no audio for %r: %s", sentence, exc)
+            return None
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
         tmp.replace(out)
         return out
 

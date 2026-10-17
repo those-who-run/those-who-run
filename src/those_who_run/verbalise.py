@@ -127,8 +127,11 @@ _EMPTY_SENTENCES = re.compile(r"([.!?])(?:\s*\.)+")
 def tidy_sentence(text: str) -> str:
     """Collapse whitespace and the empty sentences left by empty template slots
     ("{delta}." with no delta, or a slot that already ends in a full stop), and
-    end with one full stop unless the text ends in ! or ?."""
+    end with one full stop unless the text ends in ! or ?. Nothing left is "",
+    not a lone full stop."""
     text = " ".join(text.split())
     text = _EMPTY_SENTENCES.sub(r"\1", text).lstrip(" .")
     text = text.rstrip(" ,")
+    if not text:
+        return ""
     return text if text.endswith((".", "!", "?")) else text + "."

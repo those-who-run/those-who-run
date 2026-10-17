@@ -6,7 +6,7 @@ import string
 
 import pytest
 
-from those_who_run.config import DEFAULT_RULES, load_rules_config, load_script
+from those_who_run.config import DEFAULT_RULES, ConfigError, load_rules_config, load_script
 from those_who_run.phrasing import Phrasebook
 from those_who_run.verbalise import tidy_sentence
 
@@ -144,3 +144,55 @@ def test_phrasebook_strings_lists_and_fallbacks():
     assert book.pick("missing", "fallback") == "fallback"
     assert book.first(["missing", "empty", "pool"], "d") == "p"
     assert book.first(["missing"], "d") == "d"
+
+
+GAINED = ("template_gained", "template_gained_lead", "template_gained_podium")
+LOST = ("template_lost", "template_lost_lead")
+
+
+def test_gaining_and_losing_a_place_never_sound_the_same():
+    pos = SCRIPT["position"]
+    gained = {tidy_sentence(t).lower(): k for k in GAINED for t in pos.get(k, [])}
+    lost = {tidy_sentence(t).lower(): k for k in LOST for t in pos.get(k, [])}
+    shared = set(gained) & set(lost)
+    assert not shared, {t: (gained[t], lost[t]) for t in shared}
+
+
+@pytest.mark.parametrize(
+    ("key", "words"),
+    [
+        ("template_gained", {"up", "move", "moved", "moving", "pass", "taking", "into"}),
+        ("template_gained_podium", {"up", "moved", "into"}),
+        ("template_lost", {"down", "fell", "dropped", "lost"}),
+        ("template_lost_lead", {"lost", "dropped", "fell"}),
+    ],
+)
+def test_every_place_change_variant_says_which_way(key, words):
+    for text in SCRIPT["position"][key]:
+        said = set(re.findall(r"[a-z]+", text.lower()))
+        assert said & words, f"position.{key}: {text!r} does not say gained or lost"
+
+
+def test_phrasebook_null_is_the_default():
+    book = Phrasebook({"k": None, "pool": [None, "p"], "nulls": [None]})
+    assert book.pick("k", "d") == "d"
+    assert not book.has("k")
+    assert book.pick("pool", "d") == "p"
+    assert book.pick("nulls", "d") == "d"
+    assert book.first(["k", "nulls", "pool"], "d") == "p"
+
+
+def test_rules_config_null_template_falls_back_to_the_built_in(tmp_path):
+    f = tmp_path / "rules.yaml"
+    f.write_text("rules:\n  final_lap:\n    template:\n")
+    cfg = load_rules_config(f)
+    assert cfg["rules"]["final_lap"]["template"] is None
+    assert Phrasebook(cfg["rules"]["final_lap"]).pick("template", "Final lap.") == "Final lap."
+
+
+@pytest.mark.parametrize("value", ["{a: b}", "42", "[Final lap., {a: b}]", "[1, 2]"])
+def test_rules_config_rejects_a_template_that_is_not_text(tmp_path, value):
+    f = tmp_path / "rules.yaml"
+    f.write_text(f"rules:\n  final_lap:\n    template: {value}\n")
+    with pytest.raises(ConfigError, match=r"rules\.final_lap\.template"):
+        load_rules_config(f)

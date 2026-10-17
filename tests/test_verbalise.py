@@ -77,3 +77,10 @@ def test_tidy_sentence_drops_empty_slots_and_doubled_stops():
     assert tidy_sentence("Race over. . Best lap y.. ") == "Race over. Best lap y."
     assert tidy_sentence("Box!") == "Box!"
     assert tidy_sentence("Final lap") == "Final lap."
+
+
+def test_tidy_sentence_with_nothing_left_is_empty():
+    from those_who_run.verbalise import tidy_sentence
+
+    assert tidy_sentence("") == ""
+    assert tidy_sentence(" . . ") == ""

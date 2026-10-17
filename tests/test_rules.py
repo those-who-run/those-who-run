@@ -794,3 +794,9 @@ def test_fuel_is_measured_across_a_pause():
     c = make_state(t=200, current_lap=2, total_laps=10, fuel_level=90.0)
     rule.evaluate(b, c)
     assert list(rule.consumption) == pytest.approx([10.0])
+
+
+def test_max_age_seconds_zero_means_zero_not_unset():
+    assert FinalLapRule({"max_age_seconds": 0}).max_age == 0.0
+    assert FinalLapRule({"max_age_seconds": 3}).max_age == 3.0
+    assert FinalLapRule({}).max_age is None

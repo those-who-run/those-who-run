@@ -23,7 +23,7 @@ class Rule(ABC):
         self.cfg: dict[str, Any] = dict(cfg or {})
         self.priority: int = int(self.cfg.get("priority", self.default_priority))
         max_age = self.cfg.get("max_age_seconds")
-        self.max_age: float | None = float(max_age) if max_age else None
+        self.max_age: float | None = float(max_age) if max_age is not None else None
         self.phrases = Phrasebook(self.cfg, random.Random())
         self.session: SessionKind | None = None  # the engine's verdict, see on_session
         self.pits: PitStatus = NO_STOPS  # the engine's pit detector, see on_pit

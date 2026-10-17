@@ -185,6 +185,9 @@ class DiscordPlayer:
                 return
         loop = asyncio.get_running_loop()
         wav = await loop.run_in_executor(None, self._speech.synthesize, callout.text)
+        if wav is None:
+            log.info("nothing to say (%s): %r", callout.rule, callout.text)
+            return
         async with self._play_lock:
             vc = self._vc
             if vc is None:

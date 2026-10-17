@@ -50,5 +50,7 @@ class WavDirPlayer(ConsolePlayer):
     async def play(self, callout: Callout) -> None:
         await super().play(callout)
         src = self.speech.synthesize(callout.text)
+        if src is None:
+            return
         dst = self.out_dir / f"{len(self.spoken):03d}-{callout.rule}.wav"
         dst.write_bytes(src.read_bytes())

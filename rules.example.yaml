@@ -6,6 +6,9 @@
 # The templates below are commented out because a template set here replaces
 # the script's list for that key. Uncomment one to pin a single phrase, or give
 # a list of your own. `script: false` falls back to these single phrases.
+# A template left blank (null) uses the built-in single phrase; to silence a
+# callout, set `enabled: false` on its rule. A template must be text or a list
+# of text: anything else is rejected at start-up.
 script: true
 voice:
   length_scale: 0.9     # < 1 speaks faster

@@ -207,7 +207,34 @@ def load_rules_config(path: Path | None) -> dict[str, Any]:
     base = DEFAULT_RULES
     if loaded.get("script", DEFAULT_RULES["script"]):
         base = deep_merge(base, load_script())
-    return deep_merge(base, loaded)
+    cfg = deep_merge(base, loaded)
+    validate_templates(cfg)
+    return cfg
+
+
+TEMPLATE_PREFIXES = ("template", "delta_")
+
+
+def validate_templates(cfg: Mapping[str, Any]) -> None:
+    """Every template key (``template*``, ``delta_*``) holds a string, null (the
+    built-in phrase) or a list of strings and nulls; anything else would be
+    spoken as its Python repr, so it is a ``ConfigError`` naming the key."""
+    rules = cfg.get("rules") or {}
+    if not isinstance(rules, Mapping):
+        raise ConfigError("rules must be a mapping of rule name to settings")
+    for rule, settings in rules.items():
+        if not isinstance(settings, Mapping):
+            continue
+        for key, value in settings.items():
+            if not str(key).startswith(TEMPLATE_PREFIXES) or value is None:
+                continue
+            if isinstance(value, str):
+                continue
+            if isinstance(value, list) and all(v is None or isinstance(v, str) for v in value):
+                continue
+            raise ConfigError(
+                f"rules.{rule}.{key} must be a string or a list of strings, got {value!r}"
+            )
 
 
 def _read_rules_file(path: Path) -> Mapping[str, Any]:

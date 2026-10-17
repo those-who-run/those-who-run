@@ -83,10 +83,10 @@ rules:
   position:
     template_gained:
       - "Up to {position}."
-      - "Now {position}."
+      - "Made a pass. Now {position}."
       - "Good move. P {p}."
       - "Moved up to {position}."
-      - "That is P {p}."
+      - "Moving forward. P {p}."
       - "Taking {position}."
     template_gained_lead:
       - "Into the lead."
@@ -95,14 +95,14 @@ rules:
       - "P one. Control the pace."
     template_gained_podium:
       - "Up into the podium places. P {p}."
-      - "Now running {position}."
+      - "Up to {position}. On the podium."
       - "Moved up to {position}. Good work."
     template_lost:
       - "Down to {position}."
       - "Fell to P {p}."
-      - "Now running {position}."
+      - "Lost ground. Now running {position}."
       - "Dropped back to {position}."
-      - "Currently P {p}."
+      - "Lost out. P {p}."
     template_lost_lead:
       - "Lost the lead. Down to {position}."
       - "Dropped to {position}."

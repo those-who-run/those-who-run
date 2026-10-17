@@ -1,5 +1,7 @@
 import wave
 
+import pytest
+
 from those_who_run.speech import PiperSpeech, join_wavs, split_sentences
 
 RATE = 1000
@@ -72,4 +74,45 @@ def test_each_sentence_is_synthesised_once_and_cached(tmp_path):
 def test_a_single_sentence_is_its_own_wav(tmp_path):
     sp = _speech(tmp_path)
     assert _frames(sp.synthesize("Final lap.")) == b"\x01\x00" * 10
+    assert sp._voice.calls == ["Final lap."]
+
+
+class SilentVoice(FakeVoice):
+    """Piper on text it has no phonemes for: writes nothing, sets no params."""
+
+    def synthesize_wav(self, text, wav, syn_config=None):
+        self.calls.append(text)
+
+
+def test_text_with_nothing_to_say_gives_no_clip_and_no_file(tmp_path):
+    sp = _speech(tmp_path)
+    for text in ("", ".", " . ! ", "..."):
+        assert sp.synthesize(text) is None
+    assert sp._voice.calls == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_empty_audio_from_the_voice_leaves_the_cache_clean(tmp_path):
+    sp = _speech(tmp_path)
+    sp._voice = SilentVoice()
+    assert sp.synthesize("Hmm.") is None
+    assert sp.synthesize("Hmm. Hmm again.") is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failing_voice_leaves_no_temp_file(tmp_path):
+    class Broken(FakeVoice):
+        def synthesize_wav(self, text, wav, syn_config=None):
+            raise RuntimeError("onnx")
+
+    sp = _speech(tmp_path)
+    sp._voice = Broken()
+    with pytest.raises(RuntimeError):
+        sp.synthesize("Final lap.")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_unspeakable_sentences_are_dropped_from_a_callout(tmp_path):
+    sp = _speech(tmp_path)
+    assert _frames(sp.synthesize("Final lap. .")) == b"\x01\x00" * 10
     assert sp._voice.calls == ["Final lap."]

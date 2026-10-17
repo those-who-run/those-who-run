@@ -1,11 +1,15 @@
 # Roadmap
 
 Where Those Who Run is going and in what order. GitHub milestones and issues
-are the source of truth for the details: each item below links to its
-milestone, and every open issue carries a `stream:` label so a stream can be
-worked on its own.
+are the source of truth for the details. Each milestone is a release, each
+release below links to its milestone, and every open issue carries a `stream:`
+label so a stream can be worked on its own. The
+[project board](https://github.com/users/ciaranRoche/projects/2) shows the same
+releases: a board for the current release and the next one, and a table of
+everything open.
 
-Last reviewed 2026-10-16, at release 0.3.2.
+Last reviewed 2026-10-17, at release 0.4.0, after a code review and an
+architecture review of the same day.
 
 ## Principles
 
@@ -22,115 +26,69 @@ Last reviewed 2026-10-16, at release 0.3.2.
 5. **Pinned by a recording.** A behaviour ships with a fixture from a real
    drive.
 
-## Streams
+## Releases
 
-Streams move in parallel. The hand-offs between them are few and are shown in
-the graph.
+From 0.5 on, each milestone is a minor release, cut when its issues are
+closed; fixes in between ship as patch releases. A release depends only on the
+ones before it (checked against every issue's "Blocked by" line on
+2026-10-17).
 
-| Stream | Label | Milestones |
-|---|---|---|
-| Session awareness | `stream: session` | [0.2 Race awareness](https://github.com/those-who-run/those-who-run/milestone/2), [0.3 Session awareness](https://github.com/those-who-run/those-who-run/milestone/7) |
-| A. Engineer voice | `stream: voice` | [0.4 Cockpit voice](https://github.com/those-who-run/those-who-run/milestone/10), [0.7 Drift](https://github.com/those-who-run/those-who-run/milestone/9) |
-| B. Lap model and coaching | `stream: coaching` | [0.5 Lap model and live delta](https://github.com/those-who-run/those-who-run/milestone/3), [0.8 Coaching](https://github.com/those-who-run/those-who-run/milestone/11), [1.1 AI coach](https://github.com/those-who-run/those-who-run/milestone/13) |
-| C. Pit wall and progression | `stream: pit wall` | [2.0 Pit wall](https://github.com/those-who-run/those-who-run/milestone/6) (phased), [0.9 Progression](https://github.com/those-who-run/those-who-run/milestone/12) |
-| D. Strategy | `stream: strategy` | [0.6 Strategy](https://github.com/those-who-run/those-who-run/milestone/4) |
-| E. Conversation | `stream: conversation` | [1.0 Voice questions](https://github.com/those-who-run/those-who-run/milestone/5) |
-| Ops | `stream: ops` | [Polish and ops](https://github.com/those-who-run/those-who-run/milestone/14), ongoing |
+| Release | What it delivers |
+|---|---|
+| [0.5 Solid ground](https://github.com/those-who-run/those-who-run/milestone/19) | The bugs from the code review fixed, including the stored best lap (#185). Guardrails: `make check` with type checking, reproducible builds, release checks, deterministic tests, gzipped fixtures. The pit wall on the NUC (#35), after the data and network decisions (#194). An archive for the outings specs rely on (#197). |
+| [0.6 Foundations](https://github.com/those-who-run/those-who-run/milestone/20) | The structure the streams build on: a runtime object and an API server on the event loop, engine events, one frame delta and a per-frame context for rules, one lap model and its lap table, versioned storage, the speech policy layer and audio pipeline, one fuel model, structured messages, a job runner, layered config, import contracts and a frame budget. |
+| [0.7 Cockpit voice](https://github.com/those-who-run/those-who-run/milestone/21) | The engineer as a HUD replacement in VR, on the session awareness it needs: start type, the unflagged mode, kinematics, track detection through a pit stop; the A-packet flags and extended telemetry; the timing gate, verbosity profiles, traction-aid and rev-limiter calls, the state-of-the-race bundle; phrasing and voices; replay that speaks in real time; raw packet recordings. |
+| [0.8 Pit wall setup](https://github.com/those-who-run/those-who-run/milestone/22) | Set the engineer up from the pit wall: settings on the data volume, a control API, PS5 discovery, the PlayStation and Discord setup pages, an admin token, host networking, the token in a Secret, a slimmer engineer image. |
+| [0.9 Lap model and strategy](https://github.com/those-who-run/those-who-run/milestone/23) | Distance along the track, reference laps, live delta, corner names, reference data on the data volume, the racing line and delta trace on the pit wall; tyre wear and drop-off, the fuel saving target, stop now or later, timed-race strategy, per-car overrides. |
+| [0.10 Coaching and drift](https://github.com/those-who-run/those-who-run/milestone/24) | Corner by corner against your own best: lockups and wheelspin, spins and big hits, braking points, minimum and exit speeds, theoretical best and consistency, the debrief, corner growth on the pit wall; drift detection, callouts and the drift card. |
+| [0.11 Progression](https://github.com/those-who-run/those-who-run/milestone/25) | Getting faster over weeks: a personal-best ledger, goals, PB cards, the weekly digest, a break reminder, the pit wall's growth view, retention and export, the Postgres push. |
+| [1.0 Voice questions](https://github.com/those-who-run/those-who-run/milestone/5) | Ask the engineer: voice receive and wake word, local speech to text, deterministic answers first, free-form answers through one model gateway (#190), slash-command history queries, "say that again". |
+| [1.1 AI coach](https://github.com/those-who-run/those-who-run/milestone/13) | A model turns the measured coaching data into advice: notes after a session, one practice tip between laps, a pre-session plan, `@coach` in Discord. Every number is checked against the data before it is said, with the deterministic debrief as the fallback. |
+| [Polish and ops](https://github.com/those-who-run/those-who-run/milestone/14) | Ongoing, not a release: upstream fixes and chores that belong to no release. |
 
 ```mermaid
 flowchart LR
-  S03[0.3 Session awareness] --> V04[0.4 Cockpit voice]
-  S03 --> D07[0.7 Drift]
-  L05[0.5 Lap model + live delta] --> C08[0.8 Coaching]
-  C08 --> AI11[1.1 AI coach]
-  L05 --> PW2[2.0 Pit wall: the track]
-  PW1[2.0 Pit wall: sessions + laps] --> PW2
-  P09[0.9 Progression] --> PW3[2.0 Pit wall: growth]
-  C08 --> PW3
-  Q10[1.0 Voice questions] --> AI11
-  S06[0.6 Strategy]
+  R05[0.5 Solid ground] --> R06[0.6 Foundations]
+  R06 --> R07[0.7 Cockpit voice]
+  R06 --> R08[0.8 Pit wall setup]
+  R07 --> R09[0.9 Lap model and strategy]
+  R09 --> R010[0.10 Coaching and drift]
+  R010 --> R011[0.11 Progression]
+  R011 --> R10[1.0 Voice questions]
+  R10 --> R11[1.1 AI coach]
 ```
 
-Milestone numbers give a rough order of the themes, not the release versions.
-Releases follow semver as work lands: the race feed shipped in 0.3.1, and the
-timed-race finish in 0.3.2.
+0.8 has nothing waiting on it, so it can run alongside 0.7 and later releases.
+
+## Streams
+
+| Stream | Label | Releases |
+|---|---|---|
+| Code health | `stream: health` | 0.5, 0.6, plus single pieces in 0.7, 0.9 and 1.0 |
+| Session awareness | `stream: session` | 0.7, and drift detection in 0.10 |
+| A. Engineer voice | `stream: voice` | 0.7, drift callouts in 0.10 |
+| B. Lap model and coaching | `stream: coaching` | 0.9, 0.10, 1.1 |
+| C. Pit wall and progression | `stream: pit wall` | 0.5 (deploy), 0.8 (setup), 0.9 to 0.11 |
+| D. Strategy | `stream: strategy` | 0.9 |
+| E. Conversation | `stream: conversation` | 1.0 |
+| Ops | `stream: ops` | 0.7, 0.8, 0.9, and Polish and ops |
 
 ## Order
 
-- **Now:** recordings from the checklist close 0.2 (a mid-race network drop)
-  and most of 0.3 (grid start, the unnamed mode, one session of each kind). Then
-  drift detection (#65).
-- **Next, in parallel:** 0.4 Cockpit voice (stream A) and 0.5 Lap model
-  (stream B), with pit wall phase 1 (#33) alongside, since it only reads what
-  is already stored.
-- **Then:** 0.8 Coaching, pit wall phase 2, and 0.6 Strategy once a long race
-  with a stop has been recorded.
-- **Later:** 0.9 Progression, 1.0 Voice questions, 1.1 AI coach, and 0.7 Drift
-  callouts.
-
-## Milestones
-
-- **[0.4 Cockpit voice](https://github.com/those-who-run/those-who-run/milestone/10)**, the engineer as a HUD replacement:
-  - extended telemetry (GT7's "~" packets: steering angle, body acceleration,
-    traction-aid flags)
-  - a timing gate so callouts wait for a straight
-  - verbosity profiles by session kind
-  - traction-aid and rev-limiter calls
-  - a state-of-the-race bundle
-- **[0.5 Lap model and live delta](https://github.com/those-who-run/those-who-run/milestone/3)**:
-  - distance along the track
-  - reference laps
-  - corner names per track
-  - live delta
-- **[0.6 Strategy](https://github.com/those-who-run/those-who-run/milestone/4)**:
-  - tyre wear from tyre radius
-  - fuel saving target
-  - pit-stop detection
-  - tyre drop-off trend
-  - stop now or later
-- **[0.7 Drift](https://github.com/those-who-run/those-who-run/milestone/9)**: drift callouts and drift results on the card, after
-  detection in 0.3.
-- **[0.8 Coaching](https://github.com/those-who-run/those-who-run/milestone/11)**, against your own best:
-  - lockups and wheelspin
-  - spins and big hits
-  - braking points
-  - minimum and exit speeds
-  - theoretical best and consistency
-  - a post-session debrief
-- **[0.9 Progression](https://github.com/those-who-run/those-who-run/milestone/12)**:
-  - personal-best ledger per car and track
-  - goals
-  - PB cards
-  - weekly digest
-  - optional break reminder
-- **[1.0 Voice questions](https://github.com/those-who-run/those-who-run/milestone/5)**:
-  - wake word and local speech to text
-  - deterministic answers, Ollama for the rest
-  - Discord slash commands
-  - "say that again"
-- **[1.1 AI coach](https://github.com/those-who-run/those-who-run/milestone/13)**: a model turns 0.8's measured data into advice:
-  - coach's notes after a session
-  - one practice tip between laps
-  - a pre-session plan
-  - `@coach` questions in Discord
-
-  Every number is checked against the data before it is said, with the
-  deterministic debrief as the fallback. It starts on the home-lab Ollama; a
-  hosted model is optional.
-- **[2.0 Pit wall](https://github.com/those-who-run/those-who-run/milestone/6)**, a Streamlit app on the LAN, in phases:
-  1. Sessions, laps and lap compare (#33). Needs nothing new.
-  2. The track: racing line, delta trace, corner table (#117, #34). Needs 0.5.
-  3. Growth over weeks (#118). Needs 0.8 and 0.9.
-  4. Housekeeping: retention and export (#36).
-
-  A lap summary table written at lap close (#115) keeps it fast. Results cards
-  will link to their session page (#116).
-- **[Polish and ops](https://github.com/those-who-run/those-who-run/milestone/14)**:
-  - image size and warnings
-  - phrasing and voices
-  - External Secrets for the token
-  - per-car overrides
-  - upstreaming the gt-telem "~" fix
+- **Now: 0.5 Solid ground.** The fixes are small and independent, so most can
+  go in parallel. `make check` (#161) lands first so every later PR runs the
+  same checks. The deployment decisions (#194) come before the pit wall goes
+  on the NUC (#35). Outings that specs cite are archived (#197) before the NUC
+  prunes them.
+- **Next: 0.6 Foundations.** Roughly in this order: the runtime (#171, #172,
+  #173), the engine model (#175, #176, #177, then #186 and #187), storage
+  (#174, #178, then #115 and #183), speech (#179, #180, #181), then the job
+  runner (#189), config (#191) and import contracts (#195). The frame budget
+  (#196) measures each step.
+- **Then:** 0.7 Cockpit voice and 0.8 Pit wall setup in parallel, then 0.9,
+  0.10 and 0.11.
+- **Later:** 1.0 Voice questions and 1.1 AI coach, the releases that add
+  models (local first, through #190).
 
 ## Open decisions
 
@@ -140,3 +98,33 @@ timed-race finish in 0.3.2.
   local by default, with hosted as an opt-in setting, to be decided after the
   evaluation set (#114).
 - Whether to keep the break reminder (#107) and the weekly digest (#106).
+- Data and network (#194): one writer for `/data`, how the pit wall opens the
+  index, what the LAN can reach with host networking, where secrets live, one
+  image or two.
+- Settings on the NUC (#135, #191): does the environment always win, and which
+  keys move from the ConfigMap to the pit wall?
+- Where to archive the recordings specs rely on (#197).
+- Speech to text in the engineer's process or as a separate server (#22,
+  #190).
+- One corner table per track, with stable ids, rather than one per reference
+  lap (#94, #193).
+
+## Milestones before 2026-10-17
+
+Until 2026-10-17 milestones were themes, and their numbers were not versions.
+Older issues, comments and PRs still use them. This is where that work went:
+
+| Old milestone | Now |
+|---|---|
+| 0.3 Session awareness | 0.7 Cockpit voice; drift detection (#65) in 0.10 |
+| 0.4 Cockpit voice | 0.7 Cockpit voice |
+| 0.5 Lap model and live delta, 0.6 Strategy | 0.9 Lap model and strategy |
+| 0.7 Drift, 0.8 Coaching | 0.10 Coaching and drift |
+| 0.9 Progression | 0.11 Progression |
+| 2.0 Pit wall | Deploy (#35, #116) in 0.5, the lap table (#115) in 0.6, setup in 0.8, the track (#117) in 0.9, the corner table (#34) in 0.10, growth (#118), retention (#36) and Postgres (#133) in 0.11 |
+| Code health: fixes, Code health: guardrails | 0.5 Solid ground |
+| Code health: foundations | 0.6 Foundations |
+| Architecture: building blocks | 0.6 Foundations, except #194 and #197 (0.5), #188 and #192 (0.7), #193 (0.9) and #190 (1.0) |
+
+Releases so far: the race feed shipped in 0.3.1, the timed-race finish in
+0.3.2, and pit-stop detection with pit wall phase 1 in 0.4.0.

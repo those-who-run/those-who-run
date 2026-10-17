@@ -12,6 +12,8 @@
 script: true
 voice:
   length_scale: 0.9     # < 1 speaks faster
+  # noise_scale: 0.5     # variation in the voice
+  # noise_w_scale: 0.5   # variation in the timing
   sentence_pause_secs: 0.35   # silence between sentences ("Lap two. <pause> one oh four...")
 queue:
   max_age_seconds: 8    # callouts older than this are dropped instead of spoken late;
@@ -76,6 +78,7 @@ rules:
     # template_position: "Finished {position}."
     # template_best: "Best lap {time}."
     # template_fuel: "Fuel used {fuel}."
+    # template_fuel_stints: "Fuel used {stints}."   # after a pit stop: fuel per stint
     # Leaving a session that has no flag: time trial, practice, solo laps. Add
     # lap_race to hear a summary on retiring too.
     quit_kinds: [solo_timed, solo_laps]

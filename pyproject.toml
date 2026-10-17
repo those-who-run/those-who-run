@@ -48,11 +48,13 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["those_who_run"]
+# A directory, not the package name: the pit wall page runs as __main__ under
+# Streamlit, and a package source would not count it.
+source = ["src/those_who_run"]
 
 [tool.coverage.report]
 # The floor `make check` enforces. Raise it as coverage climbs; never lower it.
-fail_under = 85
+fail_under = 90
 skip_covered = true
 show_missing = true
 

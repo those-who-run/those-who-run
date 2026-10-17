@@ -320,4 +320,5 @@ def main() -> None:
     st.caption(f"{brand.NAME} {brand.KANJI} {__version__} · read-only view of {root}")
 
 
-main()
+if __name__ == "__main__":  # ``streamlit run`` and AppTest; importing draws nothing
+    main()

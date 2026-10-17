@@ -326,6 +326,8 @@ racing lines, traces and growth over time. Under `GT7_DATA_DIR`:
 
 ```
 index.sqlite                      sessions and laps tables, for listing and filtering
+index.sqlite-wal, -shm            SQLite's write-ahead log, while a process has it open
+engineer.lock                     the writer lock: held by whatever is writing the store
 sessions/<id>/lap-NN.parquet      60 Hz frames for that lap, ZSTD compressed
 sessions/<id>/summary.json        human-readable summary
 ```
@@ -339,6 +341,14 @@ new one; quitting closes it; Ctrl-C closes whatever is open. Budget roughly
 read with DuckDB; any Parquet-aware tool can read the files. From 0.3 frames also carry the body
 rotation (`rot_x`, `rot_y`, `rot_z`, `orientation`) and spin (`ang_vel_*`),
 raw from the packet, for drift detection; older laps lack those columns.
+
+The index is in SQLite's WAL mode, so the pit wall reading it never holds up
+the engineer's writes. There is one writer at a time (ADR 0001): `run` holds
+an exclusive lock on `engineer.lock` for as long as it is up, and every other
+command that writes the store (`tracks backfill`, `post`)
+refuses with exit code 1 while it does. Use the pit wall, or stop the engineer
+first. The engineer likewise refuses to start while one of those is running.
+The pit wall only reads and never takes the lock.
 
 ## Pit wall
 
@@ -360,8 +370,16 @@ stored today:
   Drag a chart to zoom. Distance replaces time once #15 lands.
 
 Each session has its own link, `?session=<id>`. The pit wall only reads: the
-index is opened read-only and nothing under `GT7_DATA_DIR` is written. One
-column, so it works on a phone straight after a race.
+index is opened read-only and no session data is written. One column, so it
+works on a phone straight after a race.
+
+Because the index is in WAL mode, a reader still needs to write SQLite's
+shared-memory file, `index.sqlite-shm`, next to it, and needs `-wal` and `-shm`
+to exist already if it cannot create them. SQLite removes both when the last
+connection closes, so on a read-only mount (`:ro`, `readOnly: true`) the pit
+wall can only open the index while the engineer is running. Mount the data
+directory read-write for the pit wall; it still opens the index `mode=ro`
+(see #35).
 
 Streamlit is an optional extra, so the engineer's own install stays lean:
 

@@ -49,6 +49,9 @@ PIT_REFUEL = 2.0
 # this long on the time axis, so traces of two laps still line up.
 MAX_STEP_SECS = 0.1
 
+# How long a read waits on a busy index before the page shows an error.
+READ_TIMEOUT_SECS = 5.0
+
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -154,11 +157,19 @@ def index_path(data_dir: Path) -> Path:
 
 
 def index_stamp(data_dir: Path) -> float:
-    """Changes whenever the engineer writes to the index: a cache key for the UI."""
-    try:
-        return index_path(data_dir).stat().st_mtime
-    except FileNotFoundError:
-        return 0.0
+    """Changes whenever the engineer writes to the index: a cache key for the UI.
+
+    The index is in WAL mode, so a commit lands in ``index.sqlite-wal`` and the
+    main file only changes at a checkpoint: the stamp is the later of the two.
+    """
+    path = index_path(data_dir)
+    stamps = []
+    for p in (path, path.with_name(path.name + "-wal")):
+        try:
+            stamps.append(p.stat().st_mtime)
+        except FileNotFoundError:
+            continue
+    return max(stamps, default=0.0)
 
 
 def open_index(data_dir: Path) -> sqlite3.Connection | None:
@@ -166,7 +177,9 @@ def open_index(data_dir: Path) -> sqlite3.Connection | None:
     path = index_path(data_dir)
     if not path.exists():
         return None
-    db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    # A busy timeout on this side too: a WAL reader can briefly wait on recovery
+    # or a checkpoint.
+    db = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=READ_TIMEOUT_SECS)
     db.row_factory = sqlite3.Row
     return db
 

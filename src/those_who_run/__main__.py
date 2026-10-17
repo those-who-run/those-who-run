@@ -20,7 +20,7 @@ from those_who_run.engine import Engine
 from those_who_run.metrics import HealthServer, Metrics
 from those_who_run.rules import build_rules
 from those_who_run.state import Phase, RaceState
-from those_who_run.store import SessionStore
+from those_who_run.store import SessionStore, StoreBusy
 from those_who_run.supervise import Supervisor
 
 if TYPE_CHECKING:
@@ -160,6 +160,9 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         log.error("configuration error: %s", exc)
         return 2
+    except StoreBusy as exc:  # another process holds the data directory's writer lock
+        print(f"those-who-run {args.command}: {exc}", file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
     return 1
@@ -190,15 +193,16 @@ async def run_post(settings: Settings, session_id: str, dry_run: bool) -> int:
         return 0
     if not settings.discord_token or not settings.results_channel_id:
         raise ConfigError("posting needs DISCORD_BOT_TOKEN and DISCORD_RESULTS_CHANNEL_ID")
+    # Recording the post writes the index: refused (StoreBusy) while the engineer runs.
+    store = SessionStore(settings.data_dir)
     client = discord.Client(intents=discord.Intents.none())
-    await client.login(settings.discord_token)  # HTTP only: no gateway needed to post
     try:
-        store = SessionStore(settings.data_dir)
+        await client.login(settings.discord_token)  # HTTP only: no gateway needed to post
         poster = ResultsPoster(client, settings.results_channel_id, on_posted=store.mark_posted)
         ok = await poster.post(session_id, card)
-        store.close()
     finally:
         await client.close()
+        store.close()
     return 0 if ok else 1
 
 
@@ -316,7 +320,7 @@ def run_tracks(settings: Settings, args: argparse.Namespace) -> int:
         print("\ncsv row:\n" + learned.csv_row(args.id, args.name))
         return 0
     if args.tracks_command == "backfill":
-        results = backfill(settings.data_dir, force=args.force)
+        results = backfill(settings.data_dir, force=args.force)  # StoreBusy: see main
         for r in results:
             flag = "updated" if r.updated else "skipped"
             print(

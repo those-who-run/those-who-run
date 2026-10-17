@@ -314,7 +314,11 @@ def test_page_shows_an_error_for_a_corrupt_lap_file(store_dir, monkeypatch):
 
 
 def test_page_shows_an_error_for_a_locked_index(store_dir, monkeypatch):
+    # In WAL mode readers go past a writer's transaction; only exclusive locking
+    # mode shuts them out.
+    monkeypatch.setattr(data, "READ_TIMEOUT_SECS", 0.1)
     db = sqlite3.connect(store_dir / "index.sqlite")
+    db.execute("PRAGMA locking_mode=EXCLUSIVE")
     db.execute("BEGIN EXCLUSIVE")
     try:
         at = _app(store_dir, monkeypatch).run()

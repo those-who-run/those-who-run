@@ -2,7 +2,8 @@
 
 Layout under the data directory::
 
-    index.sqlite                       sessions and laps tables
+    index.sqlite                       sessions and laps tables (WAL journal)
+    engineer.lock                      held exclusively by the one writer, see writer_lock
     sessions/<id>/lap-NN.parquet       60 Hz frames for lap NN (ZSTD)
     sessions/<id>/summary.json         human-readable session summary
 
@@ -15,22 +16,36 @@ lap is ~28k frames and DuckDB's row-by-row ``executemany`` took over a minute
 for it on the event loop (2026-10-14), which starved the Discord heartbeat.
 Spooling the rows through a CSV file and ``COPY``-ing it in takes well under
 a second for the same lap.
+
+The index is in WAL mode so the pit wall (another process, read-only) never
+makes the engineer's commits wait, and the other way round. Commits run on the
+event loop, so nothing that writes the index may hold a write transaction for
+long: ``tracks backfill`` commits per session.
+
+One writer at a time (ADR 0001, point 1): whatever writes under the data
+directory holds an exclusive ``flock`` on ``engineer.lock`` while it does. A
+``SessionStore`` takes it when it opens and drops it when it closes, so the live
+engineer holds it for as long as ``run`` is up, and ``post``, ``replay --store``
+and ``tracks backfill`` refuse (``StoreBusy``) rather than wait while it does.
+The engineer refuses to start while one of them holds it. Readers (the pit
+wall) never take it.
 """
 
 from __future__ import annotations
 
 import contextlib
 import csv
+import fcntl
 import functools
 import json
 import logging
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from those_who_run.cars import car_name
 from those_who_run.pitstop import NO_STOPS, PitStatus
@@ -91,6 +106,59 @@ FRAME_COLUMNS: tuple[tuple[str, str], ...] = (
     ("ang_vel_y", "DOUBLE"),
     ("ang_vel_z", "DOUBLE"),
 )
+
+# How long a write waits for another writer (backfill, a ``post``) before failing.
+BUSY_TIMEOUT_SECS = 5.0
+LOCK_FILE = "engineer.lock"
+
+
+class StoreBusy(RuntimeError):
+    """Another process (the engineer, or a command such as ``tracks backfill``)
+    holds the data directory's writer lock."""
+
+
+def connect_index(data_dir: Path) -> sqlite3.Connection:
+    """Open (or create) the index for writing: WAL journal and a busy timeout.
+
+    ``journal_mode=WAL`` is persistent, so this also converts an index made by
+    an earlier version on its first open.
+    """
+    db = sqlite3.connect(
+        Path(data_dir) / "index.sqlite", timeout=BUSY_TIMEOUT_SECS, check_same_thread=False
+    )
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute(f"PRAGMA busy_timeout = {int(BUSY_TIMEOUT_SECS * 1000)}")
+    return db
+
+
+def writer_lock(data_dir: Path) -> IO[bytes]:
+    """Take the data directory's writer lock (an exclusive ``flock`` on
+    ``engineer.lock``) without waiting; raises StoreBusy while another process
+    holds it. The lock goes when the returned file is closed or the process
+    dies, so a crash leaves nothing stale."""
+    data_dir = Path(data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    f = (data_dir / LOCK_FILE).open("ab")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        raise StoreBusy(
+            f"{data_dir} is in use by another writer (the engineer, or a command such as"
+            " tracks backfill): use the pit wall, or stop that process first"
+        ) from None
+    return f
+
+
+@contextlib.contextmanager
+def exclusive_store(data_dir: Path) -> Iterator[None]:
+    """Hold the writer lock for a block, for a bulk rewrite such as backfill."""
+    f = writer_lock(data_dir)
+    try:
+        yield
+    finally:
+        f.close()
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -255,8 +323,12 @@ class SessionStore:
         self.data_dir = Path(data_dir)
         self.clock = clock
         self.session: Session | None = None
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(self.data_dir / "index.sqlite", check_same_thread=False)
+        self._lock: IO[bytes] | None = writer_lock(self.data_dir)  # raises StoreBusy
+        try:
+            self._db = connect_index(self.data_dir)
+        except BaseException:
+            self._lock.close()
+            raise
         self._db.executescript(_SCHEMA)
         _ensure_column(self._db, "sessions", "track_confidence", "TEXT")
         _ensure_column(self._db, "sessions", "session_kind", "TEXT")
@@ -273,6 +345,9 @@ class SessionStore:
         self.wait()
         self._writer.shutdown(wait=True)
         self._db.close()
+        if self._lock is not None:
+            self._lock.close()
+            self._lock = None
 
     def wait(self) -> None:
         """Block until every queued lap file has been written."""

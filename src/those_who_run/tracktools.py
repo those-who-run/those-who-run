@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 from those_who_run.replay import read_recording
 from those_who_run.state import Phase
-from those_who_run.store import track_record
+from those_who_run.store import connect_index, exclusive_store, track_record
 from those_who_run.trackdetect import CONFIDENCE_RANK, LAP_PHASES, TrackDetector, TrackMatch
 
 log = logging.getLogger(__name__)
@@ -180,14 +179,24 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
     confident, with one exception: "nothing fits" (``none``) from a newer
     detector replaces an earlier ``ambiguous`` or ``probable`` guess, because
     a wrong name is worse than no name.
+
+    Refuses (``StoreBusy``) while the engineer is running: it rewrites
+    summary.json files and the engineer must not wait on it. Each session is
+    committed on its own, so no write transaction spans a detection.
     """
     data_dir = Path(data_dir)
-    db = sqlite3.connect(data_dir / "index.sqlite")
+    with exclusive_store(data_dir):
+        return _backfill(data_dir, force)
+
+
+def _backfill(data_dir: Path, force: bool) -> list[BackfillResult]:
+    db = connect_index(data_dir)
     results: list[BackfillResult] = []
     try:
         cols = {row[1] for row in db.execute("PRAGMA table_info(sessions)")}
         if "track_confidence" not in cols:
             db.execute("ALTER TABLE sessions ADD COLUMN track_confidence TEXT")
+            db.commit()
         rows = db.execute(
             "SELECT id, track_id, track_confidence FROM sessions ORDER BY id"
         ).fetchall()
@@ -224,6 +233,7 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
                 "UPDATE sessions SET track_id = ?, track_confidence = ? WHERE id = ?",
                 (match.track_id, match.confidence, session_id),
             )
+            db.commit()
             summary_path = sdir / "summary.json"
             if summary_path.exists():
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -232,7 +242,6 @@ def backfill(data_dir: Path, force: bool = False) -> list[BackfillResult]:
                 summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
             note = "cleared stale guess" if match.confidence == "none" else "updated"
             results.append(BackfillResult(session_id, before, match, True, note))
-        db.commit()
     finally:
         db.close()
     return results

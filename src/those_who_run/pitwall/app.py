@@ -69,9 +69,18 @@ def laps(root: str, session_id: str, stamp: float) -> list[data.LapRow]:
     return data.lap_summaries(Path(root), session_id)
 
 
+# A lap file never changes once its row is in the index (#148), so a trace is
+# keyed on the file and its frame count, not the index stamp: closing a lap
+# does not make every trace on the page be read again.
+
+
 @st.cache_data(show_spinner=False, max_entries=16)
-def trace(root: str, session_id: str, lap: int, stamp: float) -> data.Trace | None:
+def trace(root: str, session_id: str, lap: int, file: str, frames: int) -> data.Trace | None:
     return data.lap_trace(Path(root), session_id, lap)
+
+
+def lap_trace(root: str, session_id: str, lap: data.LapRow) -> data.Trace | None:
+    return trace(root, session_id, lap.lap, lap.file, lap.frames)
 
 
 def open_session(session_id: str | None) -> None:
@@ -243,7 +252,7 @@ def compare_view(
         key=f"lap-b-{row.session_id}-{b_session}",
     )
 
-    traces = [trace(root, row.session_id, a, stamp), trace(root, b_session, b, stamp)]
+    traces = [lap_trace(root, row.session_id, lap_no[a]), lap_trace(root, b_session, b_no[b])]
     if any(t is None or len(t) == 0 for t in traces):
         st.info("A lap file is missing or still being written.")
         return

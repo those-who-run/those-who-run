@@ -334,7 +334,8 @@ sessions/<id>/summary.json        human-readable summary
 
 Frames are buffered in memory and written on a background thread when the lap
 completes, so a crash loses at most the lap in progress and callouts are never
-held up by disk. A partial lap at the end of a session is written with
+held up by disk. A lap's row goes into the index only once its file is
+complete, so the pit wall never shows a lap without its frames. A partial lap at the end of a session is written with
 `complete = 0`. Restarting from the pause menu closes the session and opens a
 new one; quitting closes it; Ctrl-C closes whatever is open. Budget roughly
 20 MB per hour of driving (#36 measured 17.5 to 23 MB). Parquet is written and

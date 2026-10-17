@@ -37,7 +37,8 @@ def test_a_reader_holding_a_transaction_does_not_block_a_lap_commit(tmp_path, si
     store, clock = open_store(tmp_path)
     s = sim(total_laps=3).menu().at_track()
     s.race([100000], finish=False)
-    engine = drive(store, s.frames, T0, clock)  # session open, lap 1 committed
+    engine = drive(store, s.frames, T0, clock)
+    store.wait()  # session open, lap 1 committed (by the writer thread, #148)
     reader = data.open_index(tmp_path)
     assert reader is not None
     reader.execute("BEGIN")

@@ -29,6 +29,11 @@ engineer holds it for as long as ``run`` is up, and ``post``, ``replay --store``
 and ``tracks backfill`` refuse (``StoreBusy``) rather than wait while it does.
 The engineer refuses to start while one of them holds it. Readers (the pit
 wall) never take it.
+
+A lap's ``laps`` row is inserted by that same thread once its Parquet file is
+complete, so a reader that finds the row always finds the file (#148). The
+SQLite connection is shared between the event loop and the writer thread, so
+every use of it holds ``_db_lock``.
 """
 
 from __future__ import annotations
@@ -40,6 +45,7 @@ import functools
 import json
 import logging
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -110,6 +116,10 @@ FRAME_COLUMNS: tuple[tuple[str, str], ...] = (
 # How long a write waits for another writer (backfill, a ``post``) before failing.
 BUSY_TIMEOUT_SECS = 5.0
 LOCK_FILE = "engineer.lock"
+
+
+class LapNotIndexed(RuntimeError):
+    """A lap file was written but its row could not be added to the index."""
 
 
 class StoreBusy(RuntimeError):
@@ -324,6 +334,7 @@ class SessionStore:
         self.clock = clock
         self.session: Session | None = None
         self._lock: IO[bytes] | None = writer_lock(self.data_dir)  # raises StoreBusy
+        self._db_lock = threading.Lock()  # the writer thread inserts lap rows
         try:
             self._db = connect_index(self.data_dir)
         except BaseException:
@@ -344,7 +355,8 @@ class SessionStore:
     def close(self) -> None:
         self.wait()
         self._writer.shutdown(wait=True)
-        self._db.close()
+        with self._db_lock:
+            self._db.close()
         if self._lock is not None:
             self._lock.close()
             self._lock = None
@@ -362,10 +374,18 @@ class SessionStore:
 
     def _on_written(self, path: Path, frames: int, fut: Future[float]) -> None:
         exc = fut.exception()
-        if exc is not None:
+        if isinstance(exc, LapNotIndexed):
+            log.error("wrote %s (%d frames) but could not index it: %s", path, frames, exc)
+        elif exc is not None:
             log.error("failed to write %s (%d frames): %s", path, frames, exc)
         else:
             log.info("wrote %s: %d frames in %.2fs", path.name, frames, fut.result())
+
+    def _write(self, sql: str, args: tuple[Any, ...]) -> None:
+        """One statement, committed, under the connection's lock."""
+        with self._db_lock:
+            self._db.execute(sql, args)
+            self._db.commit()
 
     # session lifecycle
 
@@ -388,7 +408,7 @@ class SessionStore:
             fuel_at_start=state.fuel_level,
             lap_start_fuel=state.fuel_level,
         )
-        self._db.execute(
+        self._write(
             "INSERT INTO sessions (id, started_at, type, track_id, car_code, total_laps)"
             " VALUES (?, ?, ?, ?, ?, ?)",
             (
@@ -400,7 +420,6 @@ class SessionStore:
                 state.total_laps,
             ),
         )
-        self._db.commit()
         log.info(
             "session %s started (%s, %s, %s laps)",
             session_id,
@@ -417,19 +436,17 @@ class SessionStore:
             return
         s.track_id = match.track_id
         s.track = track_record(match)
-        self._db.execute(
+        self._write(
             "UPDATE sessions SET track_id = ?, track_confidence = ? WHERE id = ?",
             (match.track_id, match.confidence, s.session_id),
         )
-        self._db.commit()
 
     def mark_posted(self, session_id: str, at: float | None = None) -> None:
         """Record that the session's results card reached Discord."""
-        self._db.execute(
+        self._write(
             "UPDATE sessions SET posted_at = ? WHERE id = ?",
             (self.clock() if at is None else at, session_id),
         )
-        self._db.commit()
 
     def set_kind(self, kind: SessionKind) -> None:
         """Record the session kind for the open session."""
@@ -438,11 +455,10 @@ class SessionStore:
             return
         s.kind = kind.record()
         fuel = None if kind.fuel_use is None else int(kind.fuel_use)
-        self._db.execute(
+        self._write(
             "UPDATE sessions SET session_kind = ?, fuel_use = ?, start_type = ? WHERE id = ?",
             (kind.kind, fuel, kind.start, s.session_id),
         )
-        self._db.commit()
 
     def set_pits(self, status: PitStatus) -> None:
         """Record the pit detector's view for the open session. Laps written from
@@ -451,10 +467,9 @@ class SessionStore:
         if s is None:
             return
         s.pits = status
-        self._db.execute(
+        self._write(
             "UPDATE sessions SET pit_stops = ? WHERE id = ?", (len(status.stops), s.session_id)
         )
-        self._db.commit()
 
     def observe(self, prev: RaceState | None, state: RaceState) -> None:
         s = self.session
@@ -486,9 +501,6 @@ class SessionStore:
             s.buffer = [rows[-1]]
             rows = rows[:-1]
         path = s.dir / f"lap-{lap_no:02d}.parquet"
-        fut = self._writer.submit(write_parquet, path, rows)
-        fut.add_done_callback(functools.partial(self._on_written, path, len(rows)))
-        self._pending.append(fut)
         lap = {
             "lap": lap_no,
             "lap_time_ms": state.last_lap_ms if complete and state.last_lap_ms > 0 else None,
@@ -504,30 +516,54 @@ class SessionStore:
         }
         s.lap_start_fuel = state.fuel_level
         s.laps.append(lap)
-        self._db.execute(
-            "INSERT OR REPLACE INTO laps (session_id, lap, lap_time_ms, complete, fuel_start,"
-            " fuel_end, fuel_used, position, pit, frames, file, recorded_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                s.session_id,
-                lap_no,
-                lap["lap_time_ms"],
-                int(complete),
-                lap["fuel_start"],
-                lap["fuel_end"],
-                lap["fuel_used"],
-                lap["position"],
-                lap["pit"],
-                lap["frames"],
-                lap["file"],
-                lap["recorded_at"],
-            ),
+        lap_row = (
+            s.session_id,
+            lap_no,
+            lap["lap_time_ms"],
+            int(complete),
+            lap["fuel_start"],
+            lap["fuel_end"],
+            lap["fuel_used"],
+            lap["position"],
+            lap["pit"],
+            lap["frames"],
+            lap["file"],
+            lap["recorded_at"],
         )
-        self._db.execute(
-            "UPDATE sessions SET laps_completed = ?, track_id = COALESCE(track_id, ?) WHERE id = ?",
-            (sum(1 for x in s.laps if x["complete"]), s.track_id, s.session_id),
-        )
-        self._db.commit()
+        session_row = (sum(1 for x in s.laps if x["complete"]), s.track_id, s.session_id)
+        fut = self._writer.submit(self._write_lap, path, rows, lap_row, session_row)
+        fut.add_done_callback(functools.partial(self._on_written, path, len(rows)))
+        self._pending.append(fut)
+
+    def _write_lap(
+        self,
+        path: Path,
+        rows: list[tuple[Any, ...]],
+        lap_row: tuple[Any, ...],
+        session_row: tuple[Any, ...],
+    ) -> float:
+        """On the writer thread: the lap file, then its index row. A lap whose
+        file could not be written gets no row (summary.json still lists it)."""
+        took = write_parquet(path, rows)
+        try:
+            with self._db_lock:
+                self._db.execute(
+                    "INSERT OR REPLACE INTO laps (session_id, lap, lap_time_ms, complete,"
+                    " fuel_start, fuel_end, fuel_used, position, pit, frames, file, recorded_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    lap_row,
+                )
+                self._db.execute(
+                    "UPDATE sessions SET laps_completed = ?, track_id = COALESCE(track_id, ?)"
+                    " WHERE id = ?",
+                    session_row,
+                )
+                self._db.commit()
+        except sqlite3.Error as exc:
+            with contextlib.suppress(sqlite3.Error), self._db_lock:
+                self._db.rollback()
+            raise LapNotIndexed(str(exc)) from exc
+        return took
 
     def end_session(self, state: RaceState, finished: bool = False) -> Path | None:
         """Close the open session. ``finished``: it ended at the line (the engine's
@@ -569,7 +605,7 @@ class SessionStore:
             "laps": s.laps,
         }
         (s.dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-        self._db.execute(
+        self._write(
             "UPDATE sessions SET ended_at = ?, laps_completed = ?, best_lap_ms = ?, fuel_used = ?,"
             " final_position = ?, track_id = COALESCE(track_id, ?) WHERE id = ?",
             (
@@ -582,7 +618,6 @@ class SessionStore:
                 s.session_id,
             ),
         )
-        self._db.commit()
         log.info("session %s ended after %d laps", s.session_id, len(completed))
         self.session = None
         if self.on_end is not None:

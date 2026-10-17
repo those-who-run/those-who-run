@@ -8,6 +8,7 @@ from typing import Any
 
 from those_who_run.callouts import Callout
 from those_who_run.phrasing import Phrasebook
+from those_who_run.pitstop import NO_STOPS, PitStatus
 from those_who_run.sessionkind import SessionKind
 from those_who_run.state import Phase, RaceState
 from those_who_run.trackdetect import TrackMatch
@@ -25,6 +26,7 @@ class Rule(ABC):
         self.max_age: float | None = float(max_age) if max_age else None
         self.phrases = Phrasebook(self.cfg, random.Random())
         self.session: SessionKind | None = None  # the engine's verdict, see on_session
+        self.pits: PitStatus = NO_STOPS  # the engine's pit detector, see on_pit
         self.reset()
 
     def reset(self) -> None:
@@ -39,6 +41,11 @@ class Rule(ABC):
         """The engine's session verdict changed: kind, fuel use, start or the cars-on-track
         flag. Kept on ``self.session``; overrides should call this."""
         self.session = kind
+
+    def on_pit(self, status: PitStatus) -> None:
+        """The car entered or left the pit lane. Kept on ``self.pits``, which also
+        stays current while the car is in the pits; overrides should call this."""
+        self.pits = status
 
     def on_end(self, last: RaceState, state: RaceState) -> list[Callout]:
         """The session ended without a chequered flag (quit, or back to the menu).

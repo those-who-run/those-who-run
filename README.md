@@ -44,8 +44,9 @@ No cloud. No subscription. No LLM. One small box on your LAN.
 The telemetry callout is the one thing not driven by frames: the live
 watchdog (`GT7_TELEMETRY_TIMEOUT_SECS`, 3 s) raises it, so a quiet headset is
 never ambiguous. Fuel is estimated from the last three laps' consumption and only announced
-when it is shorter than the laps left in the race. A pit stop resets the
-warnings. Every threshold and phrase is configurable, see `rules.example.yaml`.
+when it is shorter than the laps left in the race. The in-lap and out-lap of a
+pit stop are left out of the average, and a stop starts a new stint with the
+warnings armed again. Every threshold and phrase is configurable, see `rules.example.yaml`.
 
 ### The script
 
@@ -409,10 +410,30 @@ Learned from recordings, and encoded in `state.py`:
   with the finished race's lap counter. They are not a new race.
 - Laps within 50 ms of the best are "equal to best"; time-trial laps can repeat
   to a few milliseconds.
-- Driving into the pits, the car crosses the line inside the pit cut-scene, so
-  the lap time and the lap counter bump arrive on a loading frame. The engine
-  compares the next driving frame with the one before the loading screen, so the
-  in-lap is still called, and the fuel rule stays quiet on that crossing.
+- GT7 has no pit flag; a stop is a run of camera cuts, each a single loading
+  frame that keeps the lap counter (quitting and restarting reset it to 0, so
+  they never look like this). **Entry:** the car jumps 120 to 330 m into the
+  pit lane and the next frame reads the limiter, 60.0 km/h with no pedals,
+  while GT7 drives it to the box (at Willow Springs the picture first freezes
+  at the pit entry for five seconds). **Box:** one or two more cuts at rest,
+  then fuel climbs about 10% a second to the amount asked for, and new tyres
+  show as all four tyre temperatures dropping to 60.0 °C in one frame (tyre
+  radius never changes). **Exit:** once the car moves off, a cut puts it at the
+  pit exit at 80 km/h. Places drop while the car stands in the box (P5 to P11
+  at Gilles Villeneuve). Seen at Suzuka East, Willow Springs (three stops) and
+  Circuit Gilles Villeneuve, 2026-10-15 to 17; no race without a stop has such
+  a cut. `src/those_who_run/pitstop.py` finds stops from the cuts, or from the
+  car jumping between two packets when a cut frame is lost.
+- The finish line can fall anywhere in a stop: in the entry cut (Suzuka East),
+  in the exit cut (Willow Springs) or on a driving frame in the pit lane after
+  the box (Gilles Villeneuve). A crossing in a cut arrives on the loading
+  frame; the engine compares the next driving frame with the one before the
+  cut, so the lap is still called. The engineer calls the lap the car entered
+  the pits on the in-lap and the lap it left on the out-lap; neither counts
+  towards fuel use, the fuel rule stays quiet on a crossing in the pits, and the
+  session summary lists each stop (`pit_stops`: laps, time in the pit lane and
+  at rest, fuel before and after, tyres, places) with the number of `stints`.
+  Laps carry `pit` = `in` or `out` in the index.
 - Time trials and practice report zero total laps and no cars on track. Lap
   times are still announced; the brief, final-lap, position and summary rules
   stay quiet. Qualifying reports zero total laps *with* cars on track, so it is

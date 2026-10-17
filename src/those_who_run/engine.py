@@ -6,6 +6,7 @@ import logging
 
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.metrics import Metrics
+from those_who_run.pitstop import NO_STOPS, PitDetector, PitStatus
 from those_who_run.rules.base import Rule
 from those_who_run.rules.fuel import FuelRule
 from those_who_run.sessionkind import SessionDetector, SessionKind
@@ -50,6 +51,7 @@ class Engine:
         self.tracks = TrackDetector()
         self.track: TrackMatch | None = None  # best match applied to the open session
         self.kinds = SessionDetector()
+        self.pits = PitDetector()
         self.finished = False  # this session ended at the line (flag or timed finish)
         self._crossing: RaceState | None = None  # last line crossing of a timed race
         self._coast_since: float | None = None
@@ -73,12 +75,14 @@ class Engine:
             for rule in self.rules:
                 rule.reset()
                 rule.session = None
+                rule.pits = NO_STOPS
             self.queue.clear()
             if restarted:
                 self.tracks.reset()  # the car was teleported back to the grid
             self.track = None
             self.last_driving = None
             self.kinds.reset()
+            self.pits.reset()
             self.finished = False
             self._crossing = None
             self._coast_since = None
@@ -89,10 +93,17 @@ class Engine:
             if self.tracks.match.confidence != "none":
                 self._apply_track(self.tracks.match)
 
+        # Before the rules: the crossing that closes an in-lap can come on the very
+        # frame after the pit cut, and the fuel rule must know it was in the pits.
+        pit = self.pits.observe(state)
+        if pit is not None and self.session_open:
+            self._apply_pits(pit)
+
         # Rules and the lap store compare against the last driving frame. A pause or
-        # a loading screen in between hides nothing: GT7 posts the pit-in lap on a
-        # loading frame when the car crosses the line into the pit cut-scene
-        # (2026-10-15), so the crossing is only visible from the frame before it.
+        # a loading screen in between hides nothing: GT7 posts a lap on a loading
+        # frame when the car crosses the line in a pit cut-scene (into the pits at
+        # Suzuka East 2026-10-15, out of them at Willow Springs 2026-10-17), so the
+        # crossing is only visible from the frame before it.
         seen = prev
         if (
             prev is not None
@@ -148,6 +159,7 @@ class Engine:
                 log.info("race end at lap %d", state.current_lap)
                 if self.track is not None and self.tracks.match.decision == self.track.decision:
                     self.recorder.set_track(self.tracks.match)  # final candidates and fit
+                self.recorder.set_pits(self.pits.status)  # fuel and time of a stop still open
                 self.recorder.end_session(state, finished=self.finished)
                 self.track = None
 
@@ -224,6 +236,28 @@ class Engine:
                 rule.on_session(kind)
             except Exception:  # noqa: BLE001
                 log.exception("rule %s failed on session update", rule.name)
+
+    def _apply_pits(self, status: PitStatus) -> None:
+        stop = status.stops[-1]
+        if status.in_pit_lane:
+            log.info("pit entry on lap %d: %s", stop.in_lap, stop.evidence)
+        else:
+            log.info(
+                "pit exit on lap %s after %.1f s, fuel %.1f -> %.1f, tyres %s; stint %d",
+                stop.out_lap,
+                stop.pit_lane_secs or 0.0,
+                stop.fuel_before,
+                stop.fuel_after,
+                "changed" if stop.tyres_changed else "kept",
+                status.stint,
+            )
+        if self.recorder is not None and self.recorder.session is not None:
+            self.recorder.set_pits(status)
+        for rule in self.rules:
+            try:
+                rule.on_pit(status)
+            except Exception:  # noqa: BLE001
+                log.exception("rule %s failed on pit update", rule.name)
 
     def _apply_track(self, match: TrackMatch) -> None:
         """Keep the best answer the session has had; never downgrade on a blip. A

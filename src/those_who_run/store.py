@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from those_who_run.cars import car_name
+from those_who_run.pitstop import NO_STOPS, PitStatus
 from those_who_run.sessionkind import SessionKind
 from those_who_run.state import Phase, RaceState, lap_completed, racing_frame
 from those_who_run.trackdetect import TrackMatch
@@ -240,6 +241,7 @@ class Session:
     last_position: int | None = None  # a quit's last frame has no position
     last_cars: int | None = None  # nor a car count
     gt7_best_ms: int = 0  # GT7's own best, which leaves out a start lap
+    pits: PitStatus = NO_STOPS  # see SessionStore.set_pits
 
 
 class SessionStore:
@@ -261,6 +263,8 @@ class SessionStore:
         _ensure_column(self._db, "sessions", "fuel_use", "INTEGER")
         _ensure_column(self._db, "sessions", "start_type", "TEXT")
         _ensure_column(self._db, "sessions", "posted_at", "REAL")
+        _ensure_column(self._db, "sessions", "pit_stops", "INTEGER")
+        _ensure_column(self._db, "laps", "pit", "TEXT")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
         self._pending: list[Future[float]] = []
@@ -365,6 +369,18 @@ class SessionStore:
         )
         self._db.commit()
 
+    def set_pits(self, status: PitStatus) -> None:
+        """Record the pit detector's view for the open session. Laps written from
+        now on are marked with their part in a stop (in-lap, out-lap)."""
+        s = self.session
+        if s is None:
+            return
+        s.pits = status
+        self._db.execute(
+            "UPDATE sessions SET pit_stops = ? WHERE id = ?", (len(status.stops), s.session_id)
+        )
+        self._db.commit()
+
     def observe(self, prev: RaceState | None, state: RaceState) -> None:
         s = self.session
         if s is None:
@@ -406,6 +422,7 @@ class SessionStore:
             "fuel_end": state.fuel_level,
             "fuel_used": round(s.lap_start_fuel - state.fuel_level, 3),
             "position": state.position,
+            "pit": s.pits.lap_role(lap_no),
             "frames": len(rows),
             "file": path.name,
             "recorded_at": self.clock(),
@@ -414,8 +431,8 @@ class SessionStore:
         s.laps.append(lap)
         self._db.execute(
             "INSERT OR REPLACE INTO laps (session_id, lap, lap_time_ms, complete, fuel_start,"
-            " fuel_end, fuel_used, position, frames, file, recorded_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " fuel_end, fuel_used, position, pit, frames, file, recorded_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 s.session_id,
                 lap_no,
@@ -425,6 +442,7 @@ class SessionStore:
                 lap["fuel_end"],
                 lap["fuel_used"],
                 lap["position"],
+                lap["pit"],
                 lap["frames"],
                 lap["file"],
                 lap["recorded_at"],
@@ -472,6 +490,7 @@ class SessionStore:
             "fuel_at_start": s.fuel_at_start,
             "fuel_at_end": state.fuel_level,
             "fuel_used": round(sum(x["fuel_used"] for x in s.laps), 3),
+            **s.pits.record(),  # stints, pit_stops
             "laps": s.laps,
         }
         (s.dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

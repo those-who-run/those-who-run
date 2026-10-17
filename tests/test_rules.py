@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import make_state
+from those_who_run.pitstop import PitStatus, PitStop
 from those_who_run.rules import build_rules
 from those_who_run.rules.final_lap import FinalLapRule
 from those_who_run.rules.fuel import FuelRule
@@ -572,6 +573,60 @@ def test_fuel_says_nothing_on_the_crossing_into_the_pits():
     assert [c.text for c in ignored.evaluate(frames[-1], frame(3, 4, 22.9))] == [
         "Fuel critical. Less than one lap."
     ]
+
+
+def _stop(in_lap, out_lap, fuel_after=50.0):
+    return PitStop(1, in_lap, out_lap, 0.0, None, 0.0, 10.0, fuel_after, False, 60.0, 1, 1, "test")
+
+
+def test_fuel_in_lap_and_out_lap_are_not_measured():
+    rule = FuelRule({"rolling_laps": 5})
+
+    def frame(t, lap, fuel):
+        return make_state(t=t, current_lap=lap, total_laps=20, fuel_level=fuel)
+
+    # lap 3 is the in-lap and lap 4 the out-lap, without a refuel (tyres only)
+    frames = [frame(i, lap, 100.0 - 10 * (lap - 1)) for i, lap in enumerate(range(1, 7))]
+    rule.evaluate(None, frames[0])
+    for prev, s in zip(frames, frames[1:], strict=False):
+        if s.current_lap == 3:
+            rule.on_pit(PitStatus(True, (_stop(3, None),)))
+        if s.current_lap == 5:
+            rule.on_pit(PitStatus(False, (_stop(3, 4),)))
+        rule.evaluate(prev, s)
+    assert list(rule.consumption) == [10.0, 10.0, 10.0]  # laps 1, 2 and 5
+
+
+def test_fuel_a_stop_starts_a_new_stint_even_without_fuel():
+    """A tyres-only stop: the level does not rise, but the pit call and the thresholds
+    are armed again for the new stint, and the estimate is redone at once."""
+    rule = FuelRule()
+
+    def frame(t, lap, fuel):
+        return make_state(t=t, current_lap=lap, total_laps=20, fuel_level=fuel)
+
+    frames = [frame(0, 1, 30.0), frame(1, 2, 20.0), frame(2, 3, 10.0)]
+    assert "Pit this lap." in run_rule(rule, frames)
+    rule.on_pit(PitStatus(True, (_stop(3, None, fuel_after=10.0),)))
+    rule.on_pit(PitStatus(False, (_stop(3, 4, fuel_after=10.0),)))
+    assert rule.stint == 2 and not rule.pit_announced and not rule.announced
+    assert rule.laps_remaining == pytest.approx(1.0)
+    texts = [c.text for c in rule.evaluate(frame(3, 4, 8.0), frame(4, 5, 0.5))]
+    assert texts == ["Pit this lap.", "Fuel critical. Less than one lap."]
+
+
+def test_fuel_says_nothing_on_a_crossing_in_the_pit_lane():
+    """Circuit Gilles Villeneuve crosses the line in the pit lane, at the limiter,
+    with no loading screen around it."""
+    rule = FuelRule()
+
+    def frame(t, lap, fuel):
+        return make_state(t=t, current_lap=lap, total_laps=12, fuel_level=fuel)
+
+    frames = [frame(0, 1, 50.0), frame(1, 2, 35.0), frame(2, 3, 20.0)]
+    run_rule(rule, frames)
+    rule.on_pit(PitStatus(True, (_stop(3, None),)))
+    assert rule.evaluate(frames[-1], frame(3, 4, 5.0)) == []
 
 
 # situational pools from the script

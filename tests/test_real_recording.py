@@ -6,15 +6,18 @@ no cars on track), a two-lap race from P10 to P6, the chequered flag at
 "lap 3 of 2", the results screen, and the replay blip GT7 emits afterwards.
 """
 
+import json
 import sqlite3
 from pathlib import Path
+
+import pytest
 
 from those_who_run.audio.player import ConsolePlayer
 from those_who_run.callouts import CalloutQueue
 from those_who_run.config import DEFAULT_RULES
 from those_who_run.engine import Engine
 from those_who_run.replay import read_recording, replay
-from those_who_run.rules import build_rules
+from those_who_run.rules import FuelRule, build_rules
 from those_who_run.state import Phase, race_ended, race_restarted, race_started
 from those_who_run.store import SessionStore
 
@@ -22,6 +25,12 @@ FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl
 QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl"
 PIT_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"
 NO_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-no-stop-2026-10-15.jsonl"
+GILLES_STOP = (
+    Path(__file__).parent / "fixtures" / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl"
+)
+WILLOW_STOP = (
+    Path(__file__).parent / "fixtures" / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl"
+)
 
 
 def test_fixture_phases_cover_the_whole_session():
@@ -117,10 +126,13 @@ def test_real_pause_and_resume_is_neither_a_start_nor_an_end():
         assert not race_ended(prev, cur)
 
 
-async def _replay_with_store(path, tmp_path):
+async def _replay_with_store(path, tmp_path, end=False):
     store = SessionStore(tmp_path)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
     spoken = await replay(read_recording(path), engine, ConsolePlayer())
+    if end and engine.prev is not None:  # the fixture stops mid-race: write the summary
+        store.set_pits(engine.pits.status)
+        store.end_session(engine.prev)
     store.close()
     laps = (
         sqlite3.connect(tmp_path / "index.sqlite")
@@ -156,6 +168,80 @@ async def test_real_pit_stop_race(tmp_path):
     ]
     assert engine.races_started == 1
     assert laps == [(1, 57109), (2, 60538), (3, 82544), (4, 69892), (5, 59541), (6, 60310)]
+    # the in-lap and the out-lap are not fuel laps: laps 2, 5 and 6 are averaged,
+    # not the in-lap's 15.0 (lifting after the pit call) nor the refuelled out-lap
+    assert _pit_column(tmp_path) == [None, None, "in", "out", None, None]
+    fuel = _fuel_rule(engine)
+    assert [round(x, 1) for x in fuel.consumption] == [27.7, 18.7, 19.4]
+
+
+def _fuel_rule(engine: Engine) -> FuelRule:
+    return next(r for r in engine.rules if isinstance(r, FuelRule))
+
+
+def _pit_column(tmp_path):
+    rows = sqlite3.connect(tmp_path / "index.sqlite").execute("SELECT pit FROM laps ORDER BY lap")
+    return [pit for (pit,) in rows]
+
+
+def _summary(tmp_path):
+    (path,) = (tmp_path / "sessions").glob("*/summary.json")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp_path):
+    """Circuit Gilles Villeneuve, laps 5 to 8 of twelve, NUC 2026-10-17. The pit call
+    comes after lap 5; lap 6 is the in-lap, crossed in the pit lane after a full
+    tank, and lap 7 the out-lap, which starts in the pit lane at the limiter and
+    used 15.0 against 16.4 for lap 8. Neither is a fuel lap."""
+    engine, texts, laps = await _replay_with_store(GILLES_STOP, tmp_path, end=True)
+    assert texts == [
+        "Eight laps to go. P seven of twenty.",  # the fixture starts on lap 5
+        "Pit this lap.",
+        "Fuel. one lap remaining.",
+        "Lap five. one thirty-eight point four. zero point nine over best.",
+        "Up to sixth.",
+        "Up to fifth.",
+        "Down to seventh.",  # standing in the box
+        "Down to ninth.",
+        "Lap six. two oh zero point one. twenty-two point five over best.",
+        "Down to tenth.",
+        "Up to ninth.",
+        "Lap seven. one forty-two point two. four point seven over best.",
+        "Up to sixth.",
+        "Lap eight. one thirty-seven point eight. zero point three over best.",
+    ]
+    assert [lap for lap, _ in laps] == [5, 6, 7, 8, 9]
+    assert _pit_column(tmp_path) == [None, "in", "out", None, None]
+    fuel = _fuel_rule(engine)
+    assert [round(x, 2) for x in fuel.consumption] == [14.34, 16.35]  # laps 5 and 8
+    assert fuel.stint == 2
+    summary = _summary(tmp_path)
+    assert summary["stints"] == 2
+    (stop,) = summary["pit_stops"]
+    assert (stop["in_lap"], stop["out_lap"], stop["tyres_changed"]) == (6, 7, True)
+    assert stop["fuel_added"] == pytest.approx(91.3, abs=0.1)
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    assert db.execute("SELECT pit_stops FROM sessions").fetchall() == [(1,)]
+
+
+async def test_real_pit_stop_crossed_in_the_exit_cut(tmp_path):
+    """Willow Springs Big Willow, laps 6 to 8 of ten, NUC 2026-10-17. Lap 6 is posted
+    on the loading frame that takes the car out of the pits: the crossing out of the
+    pits, not into them. The out-lap (13.3) is left out; lap 8 (12.6) is the first
+    fuel lap of the new stint."""
+    engine, texts, laps = await _replay_with_store(WILLOW_STOP, tmp_path, end=True)
+    fuel = [t for t in texts if t.startswith(("Fuel", "Pit", "Lap"))]
+    assert fuel == [
+        "Lap six. one thirty-six point six. sixteen point six over best.",
+        "Lap seven. one twenty-four point two. four point three over best.",
+        "Lap eight. one twenty-one point nine. one point nine over best.",
+    ]
+    assert _pit_column(tmp_path) == ["in", "out", None, None]  # lap 9 is cut short
+    assert [round(x, 2) for x in _fuel_rule(engine).consumption] == [12.62]
+    (stop,) = _summary(tmp_path)["pit_stops"]
+    assert (stop["in_lap"], stop["out_lap"]) == (6, 7)
+    assert stop["fuel_after"] == pytest.approx(65.35, abs=0.01)  # a part refuel
 
 
 async def test_real_race_with_the_pit_call_ignored(tmp_path):

@@ -379,6 +379,43 @@ It listens on all addresses and has no login: keep it on the LAN. The image's
 health check probes the engineer's `/healthz` on 9850; for the pit wall use
 `/_stcore/health` on 8501 instead.
 
+### Pit wall on the NUC
+
+On the NUC the pit wall is at **http://pitwall.nuc.home.arpa** (LAN only, no
+login). It's the Deployment `those-who-run-pitwall` in namespace
+`those-who-run`, next to the engineer. It uses the same image and tag, with
+`args: ["web"]`. The manifests are in
+the deployment repo under
+`manifests/those-who-run/` (a kustomize base and `overlays/local`), and
+their layout follows [ADR 0001](docs/adr/0001-data-and-network.md):
+
+- The data volume is mounted read-write at `/data`, so SQLite can create the
+  index's `-shm` and `-wal` files while the engineer is stopped. It's mounted
+  again with `subPath: sessions` at `/data/sessions`, read-only.
+- It uses only the `those-who-run-env` ConfigMap: no Secret, no admin token.
+- It has no hostPort. The only way in is a ClusterIP Service on 8501 and the
+  Traefik Ingress `those-who-run-pitwall-ingress`.
+- Probes are on `/_stcore/health`. Its limits (1 CPU, 768Mi) stay well under
+  the engineer's request, so it can't starve the engineer during a race.
+- It uses `RollingUpdate`. It takes no lock, so restarting it never touches the
+  engineer, and the reverse holds too.
+
+To deploy or upgrade, from a home-lab checkout:
+
+```sh
+# one tag for both Deployments: newTag under images: in base/kustomization.yaml
+kubectl --context=my-cluster apply -k manifests/those-who-run/overlays/local
+kubectl --context=my-cluster -n those-who-run rollout status deploy/those-who-run-pitwall
+
+# check it
+curl -s http://pitwall.nuc.home.arpa/_stcore/health    # ok
+# (or -H 'Host: pitwall.nuc.home.arpa' http://192.0.2.216/... if the name doesn't resolve)
+kubectl --context=my-cluster -n those-who-run exec deploy/those-who-run-pitwall -- \
+  touch /data/sessions/x                               # fails: Read-only file system
+```
+
+The dashboard link lives in the deployment repo.
+
 ## Metrics
 
 Metric names keep the `gt7_` prefix because they describe GT7 telemetry:

@@ -42,7 +42,7 @@ CHANNELS: tuple[tuple[str, str, Literal["linear", "step-after"]], ...] = (
 
 
 def data_dir() -> Path:
-    return Settings.from_env().data_dir
+    return Settings.from_env(check=()).data_dir  # reads no parsed variable
 
 
 def viewer_tz() -> tzinfo | None:

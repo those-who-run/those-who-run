@@ -22,13 +22,17 @@ GT7's flag as reported; it was never set in the sessions between 18:50 and
 19:17 on 2026-10-15, a mode still to be named.
 
 The **start** is read from the fastest the car goes in the first
-``start_window_secs`` of racing: a grid start is near standstill, anything
-else is moving. A moving start is rolling in a lap race (80 to 238 km/h in the
-recordings, the field behind the pace until green) and flying otherwise (out
-of the pits onto a timed lap, 37 to 250 km/h). The window is short because the
-first racing frame after a loading screen can read 0 km/h (Nordschleife,
-2026-10-15), and no car reaches ``grid_kph`` from a standstill inside it. No
-grid start has been recorded yet.
+``start_window_packets`` of racing (18, 0.3 s of GT7's 60 packets a second): a
+grid start is near standstill, anything else is moving. A moving start is
+rolling in a lap race (80 to 238 km/h in the recordings, the field behind the
+pace until green) and flying otherwise (out of the pits onto a timed lap, 37 to
+250 km/h). The window is short because the first racing frames after a loading
+screen can read 0 km/h (Nordschleife, 2026-10-15), and no car reaches
+``grid_kph`` from a standstill inside it. It counts GT7's packets, not the
+clock: packets arrive in bursts, up to 2 s of them in 0.5 s of wall time and
+then a gap (Suzuka, 2026-10-15), so a clock window could close on those first
+standing frames alone and read a rolling start as a grid one. No grid start has
+been recorded yet.
 
 ``total_cars`` is -1 in the frames GT7 replays around the results screen and
 for the whole of a time trial, so -1 says nothing about the field. GT7 can also
@@ -97,14 +101,14 @@ class SessionDetector:
         fuel_drop: float = 0.05,
         moving_kph: float = 20.0,
         max_step_secs: float = 1.0,
-        start_window_secs: float = 0.3,
+        start_window_packets: int = 18,
         grid_kph: float = 30.0,
     ) -> None:
         self.fuel_settle = fuel_settle_secs
         self.fuel_drop = fuel_drop
         self.moving_kph = moving_kph
         self.max_step = max_step_secs  # a pause or a gap is not driving time
-        self.start_window = start_window_secs
+        self.start_window = start_window_packets
         self.grid_kph = grid_kph
         self.reset()
 
@@ -119,7 +123,7 @@ class SessionDetector:
         self._top_fuel: float | None = None
         self._last_t: float | None = None
         self._driving_secs = 0.0
-        self._start_t: float | None = None
+        self._start_packet: int | None = None
         self._start_kph = 0.0
         self._start_known = False
         self._kind: SessionKind = UNKNOWN
@@ -169,10 +173,11 @@ class SessionDetector:
     def _observe_start(self, state: RaceState) -> None:
         if self._start_known:
             return
-        if self._start_t is None:
-            self._start_t = state.t
+        if self._start_packet is None:
+            self._start_packet = state.packet_id
         self._start_kph = max(self._start_kph, state.speed_kph)
-        if state.t - self._start_t >= self.start_window:
+        packets = state.packet_id - self._start_packet
+        if packets >= self.start_window or packets < 0:  # < 0: GT7's counter started over
             self._start_known = True
 
     def _decide(self) -> SessionKind:

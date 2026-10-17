@@ -167,6 +167,13 @@ def test_final_lap_once(sim):
     assert run_rule(FinalLapRule(), frames) == ["Final lap."]
 
 
+def test_final_lap_not_for_a_one_lap_race(sim):
+    # Decided on #157: the start brief already says "One lap." (Suzuka East,
+    # 2026-10-15), so there is no "Final lap" on top of it at the green.
+    frames = sim(total_laps=1).race([100000]).frames
+    assert run_rule(FinalLapRule(), frames) == []
+
+
 def test_final_lap_not_for_timed_races(sim):
     frames = sim(total_laps=0).race([100000] * 3).frames
     assert run_rule(FinalLapRule(), frames) == []

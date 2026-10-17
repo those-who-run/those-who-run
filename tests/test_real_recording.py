@@ -108,6 +108,46 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
     assert laps == [(1, 1), (2, 0), (1, 1), (2, 1), (3, 0)]
 
 
+def test_real_restart_goes_straight_back_to_lap_1():
+    """The one restart recorded (qualifying, 2026-10-14) takes the counter from lap 2
+    to lap 1 in one frame: no lap 0 between, with the car moved and the tank
+    refilled on that frame. So a restart during lap 1 would read lap 1 -> lap 1
+    and is not detected; it waits for a recording (#157)."""
+    states = list(read_recording(QUALI))
+    (i,) = [i for i, s in enumerate(states) if i and race_restarted(states[i - 1], s)]
+    before, after = states[i - 1], states[i]
+    assert (before.current_lap, after.current_lap) == (2, 1)
+    assert before.phase is after.phase is Phase.IN_RACE
+    assert after.fuel_level == 100.0 > before.fuel_level
+    driving = [s for s in states[: i + 1] if s.phase is not Phase.MENU][-60:]
+    assert all(s.current_lap >= 1 for s in driving), "no lap 0 frame before the restart"
+
+
+def test_real_race_entered_from_a_loading_screen():
+    """Nordschleife, 2026-10-15: GT7 goes MENU -> LOADING (lap 1) -> IN_RACE at 0
+    km/h with no field, then shows the menu for two frames before the race proper.
+    LOADING -> IN_RACE is not a start (a pit stop on lap 1 looks the same); the
+    session opens once, on the frame after the menu blip (#157)."""
+    path = (
+        Path(__file__).parent / "fixtures" / "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl"
+    )
+    states = list(read_recording(path))
+    loading_to_race = [
+        cur
+        for prev, cur in zip(states, states[1:], strict=False)
+        if prev.phase is Phase.LOADING and cur.phase is Phase.IN_RACE
+    ]
+    assert [s.packet_id for s in loading_to_race] == [473613]
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
+    opened = []
+    for s in states:
+        before = engine.races_started
+        engine.process(s)
+        if engine.races_started > before:
+            opened.append(s)
+    assert [(s.packet_id, round(s.speed_kph), s.total_cars) for s in opened] == [(473620, 100, 20)]
+
+
 def test_real_pause_and_resume_is_neither_a_start_nor_an_end():
     """The qualifying fixture pauses and resumes three times mid-lap (2026-10-14),
     once after the restart. A pause keeps the race: no start, no end, no restart,

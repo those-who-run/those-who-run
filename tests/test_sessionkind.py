@@ -123,7 +123,10 @@ def test_a_refuel_raises_the_mark_and_no_tank_means_off():
 def test_start_type_from_the_speed_in_the_first_moments():
     def start(speeds, **over):
         det = SessionDetector()
-        feed(det, [frame(i / 60, speed_kph=v, **over) for i, v in enumerate(speeds)])
+        feed(
+            det,
+            [frame(i / 60, packet_id=i, speed_kph=v, **over) for i, v in enumerate(speeds)],
+        )
         return det.kind.start
 
     stationary = [0.0] * 30 + [5.0, 10.0, 15.0]
@@ -133,6 +136,32 @@ def test_start_type_from_the_speed_in_the_first_moments():
     assert start(leftover) == "rolling"
     assert start([190.0] * 30, total_laps=0, total_cars=1) == "flying"
     assert start([190.0] * 5) == "unknown", "the window has not closed yet"
+
+
+def test_start_type_counts_packets_not_the_clock():
+    # Two standing frames, then the rest of the burst 0.4 s later on the clock but
+    # only a couple of packets on: the window is still open when the pace arrives.
+    det = SessionDetector()
+    frames = [frame(0.0, packet_id=0, speed_kph=0.0), frame(0.4, packet_id=1, speed_kph=0.0)]
+    frames += [frame(0.4 + i / 60, packet_id=2 + i, speed_kph=100.0) for i in range(30)]
+    feed(det, frames)
+    assert det.kind.start == "rolling"
+
+
+def test_real_rolling_start_read_through_a_packet_burst():
+    """The Nordschleife rolling start (2026-10-15) opens on frames that read 0 km/h
+    as the loading screen clears. Delay everything after the first of them by 0.4
+    s, as a packet burst does (#157): a clock window would close on the standing
+    frames alone and call it a grid start. The packet window still reads rolling."""
+    from dataclasses import replace
+
+    frames = list(read_recording(FIXTURES / "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl"))
+    first = next(i for i, f in enumerate(frames) if f.phase is Phase.IN_RACE)
+    assert frames[first].speed_kph < 1 and frames[first + 1].speed_kph < 1
+    burst = frames[: first + 1] + [replace(f, t=f.t + 0.4) for f in frames[first + 1 :]]
+    det = SessionDetector()
+    feed(det, burst)
+    assert det.kind.start == "rolling"
 
 
 # real recordings (2026-10-14 and 2026-10-15)

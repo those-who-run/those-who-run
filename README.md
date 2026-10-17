@@ -130,7 +130,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.3.2
+  muldoon/those-who-run:0.4.0
 ```
 
 From source:
@@ -372,7 +372,7 @@ see #26), so the same image runs it with a different command, sharing the
 data volume with the engineer:
 
 ```sh
-podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.3.2 web
+podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.4.0 web
 ```
 
 It listens on all addresses and has no login: keep it on the LAN. The image's
@@ -421,7 +421,7 @@ https://github.com/those-who-run/those-who-run/milestones
 ```sh
 make lint test       # ruff + pytest
 make build           # podman build for linux/amd64
-make release VERSION=0.3.2   # build and push muldoon/those-who-run:0.3.2
+make release VERSION=0.4.0   # build and push muldoon/those-who-run:0.4.0
 ```
 
 Tags matching `v*` are built and pushed to Docker Hub by GitHub Actions. The

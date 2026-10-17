@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "those-who-run"
-version = "0.3.2"
+version = "0.4.0"
 description = "Those Who Run (走り屋): self-hosted voice race engineer for Gran Turismo 7. PS5 telemetry in, rule-based callouts, Piper TTS, Discord voice out"
 readme = "README.md"
 license = { text = "GPL-3.0-only" }

@@ -565,10 +565,13 @@ async def run_live(
     def health() -> dict:
         return {
             # Telemetry and voice are down whenever the PS5 is off, which is
-            # normal; only a dead task makes the engineer unhealthy.
-            "ok": supervisor.ok(),
+            # normal. A dead task, or a telemetry listener that cannot bind,
+            # makes the engineer unhealthy.
+            "ok": supervisor.ok() and telem.healthy,
             "tasks": supervisor.alive(),
             "telemetry_connected": telem.connected(settings.telemetry_timeout_secs),
+            "telemetry_listening": telem.listening,
+            "telemetry_restarts": telem.restarts,
             "voice_connected": player.connected,
             "packets": telem.packets,
             "races_started": engine.races_started,

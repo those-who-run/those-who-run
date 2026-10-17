@@ -465,9 +465,13 @@ Metric names keep the `gt7_` prefix because they describe GT7 telemetry:
 `GET /healthz` returns JSON with telemetry and voice connection state, the
 detected track, the session kind and `tasks`, the liveness of each long-running
 task (`ingest`, `speak`, `watchdog`, `results`). `ok` is false, and the status
-503, while any task is dead; a task that crashes is logged and restarted with
-backoff. Telemetry and voice being down does not make it unhealthy: that is
-normal with the PS5 off.
+503, while any task is dead (a task that crashes is logged and restarted with
+backoff) or while the telemetry listener is down, for example because the UDP
+port is busy. The listener restarts itself with backoff inside `LiveTelemetry`,
+so it is not in `tasks`; `telemetry_listening` and `telemetry_restarts` show
+how it is going. No packets arriving is not unhealthy: that is normal with the
+PS5 off, and shows as `telemetry_connected: false`. Voice being down is not
+unhealthy either.
 
 ## Livery
 

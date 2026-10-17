@@ -102,6 +102,9 @@ class StubSpeech:
     def synthesize(self, text):
         raise AssertionError("should not synthesise in this test")
 
+    def release(self, clip):
+        raise AssertionError("should not release in this test")
+
 
 async def test_start_logs_in_before_waiting_ready():
     client = StubClient()
@@ -171,10 +174,14 @@ class WavSpeech:
     def __init__(self, path):
         self.path = path
         self.texts = []
+        self.released = []
 
     def synthesize(self, text):
         self.texts.append(text)
         return self.path
+
+    def release(self, clip):
+        self.released.append(clip)
 
 
 class FakeSource:
@@ -372,3 +379,53 @@ async def test_idle_clock_starts_at_first_check_when_joined_without_frames():
     assert player.connected
     await player.check_idle(111.0)
     assert not player.connected
+
+
+class RecordingSpeech:
+    """A real PiperSpeech over a fake voice, noting every release."""
+
+    def __init__(self, tmp_path):
+        from tests.test_speech import _speech
+
+        self.inner = _speech(tmp_path)
+        self.released = []
+
+    def synthesize(self, text):
+        return self.inner.synthesize(text)
+
+    def release(self, clip):
+        assert clip is not None, "release(None)"
+        self.released.append(clip)
+        self.inner.release(clip)
+
+
+async def test_nothing_to_say_is_neither_played_nor_released(tmp_path):
+    from those_who_run.audio.player import WavDirPlayer
+    from those_who_run.callouts import Callout
+
+    callout = Callout(text=".", priority=0, rule="say", created_at=0.0)
+    speech = RecordingSpeech(tmp_path / "cache")
+    player = DiscordPlayer("tok", 123, speech, client=StubClient())
+    player._vc = StubVoiceClient(connected=True)
+    await player.play(callout)
+    wavs = WavDirPlayer(speech, tmp_path / "out")
+    await wavs.play(callout)
+    assert speech.released == []
+    assert list((tmp_path / "out").iterdir()) == []
+
+
+async def test_the_clip_is_released_whether_played_or_dropped(tmp_path):
+    vc = FakeVoiceClient("finish")
+    player, _, speech = playing_player(tmp_path, vc)
+    await player.play(fresh())
+    assert speech.released == [speech.path]
+    synthesize = speech.synthesize
+
+    def drop_during_synthesis(text):
+        vc._connected = False
+        return synthesize(text)
+
+    speech.synthesize = drop_during_synthesis
+    await player.play(fresh("Final lap."))
+    assert len(vc.played) == 1, "dropped, not played"
+    assert speech.released == [speech.path, speech.path]

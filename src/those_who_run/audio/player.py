@@ -53,4 +53,7 @@ class WavDirPlayer(ConsolePlayer):
         if src is None:
             return
         dst = self.out_dir / f"{len(self.spoken):03d}-{callout.rule}.wav"
-        dst.write_bytes(src.read_bytes())
+        try:
+            dst.write_bytes(src.read_bytes())
+        finally:
+            self.speech.release(src)

@@ -40,12 +40,15 @@ RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-editable --extra web \
     && useradd --uid 1000 --user-group --home-dir /app --no-create-home engineer \
-    && mkdir -p /data /tmp/those-who-run \
-    && chown -R engineer:engineer /data /tmp/those-who-run
+    && mkdir -p /data \
+    && chown -R engineer:engineer /data
 
+# The speech cache goes to $XDG_CACHE_HOME/those-who-run, outside the /data volume
+# the pit wall can write to (ADR 0001); /tmp is the same place HOME=/tmp gives.
 ENV PATH=/app/.venv/bin:$PATH \
     GT7_VOICE_MODEL=/app/voices/en_GB-alba-medium.onnx \
     GT7_DATA_DIR=/data \
+    XDG_CACHE_HOME=/tmp/.cache \
     GT7_METRICS_PORT=9850 \
     GT7_WEB_PORT=8501 \
     PYTHONUNBUFFERED=1

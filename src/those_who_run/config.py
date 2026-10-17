@@ -136,12 +136,22 @@ class Settings:
     results_channel_id: int | None = None  # a text channel for results cards; None is off
     web_port: int = 8501  # the pit wall, ``those-who-run web``
     pitwall_url: str | None = None  # where the pit wall is served; results cards link there
+    cache_dir: Path | None = None  # the speech cache; None is the XDG cache dir
+    cache_max_mb: int = 100
+
+    @property
+    def speech_cache_dir(self) -> Path:
+        return self.cache_dir if self.cache_dir is not None else default_cache_dir()
+
+    @property
+    def cache_max_bytes(self) -> int:
+        return self.cache_max_mb * 1024 * 1024
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
         e = os.environ if env is None else env
         rules_file = e.get("GT7_RULES_FILE")
-        return cls(
+        settings = cls(
             ps5_ip=e.get("GT7_PS5_IP") or None,
             discord_token=e.get("DISCORD_BOT_TOKEN") or None,
             discord_channel_id=_int_or_none(e, "DISCORD_VOICE_CHANNEL_ID"),
@@ -157,7 +167,22 @@ class Settings:
             results_channel_id=_int_or_none(e, "DISCORD_RESULTS_CHANNEL_ID") or None,
             web_port=int(e.get("GT7_WEB_PORT", "8501")),
             pitwall_url=e.get("PITWALL_URL") or None,
+            cache_dir=Path(e["GT7_CACHE_DIR"]) if e.get("GT7_CACHE_DIR") else default_cache_dir(e),
+            cache_max_mb=int(e.get("GT7_CACHE_MAX_MB", "100")),
         )
+        settings.check_cache_dir()
+        return settings
+
+    def check_cache_dir(self) -> None:
+        """The speech cache must not be under the data dir: the pit wall mounts
+        that read-write (ADR 0001), so it could plant clips the engineer plays."""
+        cache = self.speech_cache_dir.resolve()
+        data = self.data_dir.resolve()
+        if cache == data or cache.is_relative_to(data):
+            raise ConfigError(
+                f"GT7_CACHE_DIR {self.speech_cache_dir} is inside GT7_DATA_DIR {self.data_dir}; "
+                "put the speech cache outside the data volume"
+            )
 
     def require_live(self) -> None:
         missing = [
@@ -171,6 +196,16 @@ class Settings:
         ]
         if missing:
             raise ConfigError(f"missing required environment variables: {', '.join(missing)}")
+
+
+def default_cache_dir(env: Mapping[str, str] | None = None) -> Path:
+    """``$XDG_CACHE_HOME/those-who-run``, else ``~/.cache/those-who-run``."""
+    e = os.environ if env is None else env
+    xdg = e.get("XDG_CACHE_HOME")
+    if xdg:
+        return Path(xdg) / "those-who-run"
+    home = e.get("HOME")
+    return (Path(home) if home else Path.home()) / ".cache" / "those-who-run"
 
 
 def _int_or_none(env: Mapping[str, str], name: str) -> int | None:

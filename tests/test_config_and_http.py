@@ -1,5 +1,6 @@
 import json
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -25,6 +26,33 @@ def test_settings_from_env():
     s.require_live()
     s = Settings.from_env({"GT7_RECORD_DIR": "/data/recordings", "GT7_RECORD_KEEP": "5"})
     assert str(s.record_dir) == "/data/recordings" and s.record_keep == 5
+
+
+def test_settings_speech_cache_dir_and_cap():
+    s = Settings.from_env({"GT7_DATA_DIR": "/data", "HOME": "/tmp"})
+    assert s.speech_cache_dir == Path("/tmp/.cache/those-who-run"), "the NUC: HOME=/tmp"
+    assert s.cache_max_bytes == 100 * 1024 * 1024
+    s = Settings.from_env({"XDG_CACHE_HOME": "/xdg", "HOME": "/tmp"})
+    assert s.speech_cache_dir == Path("/xdg/those-who-run")
+    s = Settings.from_env({"GT7_CACHE_DIR": "/var/cache/gt7", "GT7_CACHE_MAX_MB": "20"})
+    assert s.speech_cache_dir == Path("/var/cache/gt7")
+    assert s.cache_max_bytes == 20 * 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"GT7_DATA_DIR": "/data", "GT7_CACHE_DIR": "/data/cache"},
+        {"GT7_DATA_DIR": "/data", "GT7_CACHE_DIR": "/data"},
+        {"GT7_DATA_DIR": "/data", "GT7_CACHE_DIR": "/data/x/../cache"},
+        {"GT7_DATA_DIR": "/srv", "XDG_CACHE_HOME": "/srv/.cache"},
+    ],
+)
+def test_settings_refuse_a_speech_cache_inside_the_data_dir(env):
+    """The pit wall mounts the data dir read-write (ADR 0001): it must not be able to
+    plant clips the engineer plays into Discord."""
+    with pytest.raises(ConfigError, match="inside GT7_DATA_DIR"):
+        Settings.from_env(env)
 
 
 def test_settings_missing_live_values():

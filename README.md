@@ -110,6 +110,8 @@ is unchanged by the rebrand.
 | `GT7_RULES_FILE` | built-in defaults | YAML overriding any value in `rules.example.yaml`. |
 | `GT7_DATA_DIR` | `./data` | Lap and session output. |
 | `GT7_VOICE_MODEL` | `voices/en_GB-alba-medium.onnx` | Piper voice. |
+| `GT7_CACHE_DIR` | `$XDG_CACHE_HOME/those-who-run`, else `~/.cache/those-who-run` | Synthesised sentence clips, reused across laps. Must be owned by the user running the engineer, and must not be inside `GT7_DATA_DIR` (the pit wall can write there). |
+| `GT7_CACHE_MAX_MB` | `100` | Size cap for the speech cache; the least recently used clips go first. |
 | `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
 | `PITWALL_URL` | unset | Pit wall base URL, e.g. `http://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |

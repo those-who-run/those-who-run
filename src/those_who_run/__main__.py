@@ -402,7 +402,12 @@ async def run_say(settings: Settings, text: str) -> int:
     if not settings.discord_token or not settings.discord_channel_id:
         raise ConfigError("DISCORD_BOT_TOKEN and DISCORD_VOICE_CHANNEL_ID are required")
     rules_cfg = load_rules_config(settings.rules_file)
-    speech = PiperSpeech(settings.voice_model, Path("/tmp/those-who-run/cache"), rules_cfg["voice"])
+    speech = PiperSpeech(
+        settings.voice_model,
+        settings.speech_cache_dir,
+        rules_cfg["voice"],
+        max_cache_bytes=settings.cache_max_bytes,
+    )
     player = DiscordPlayer(settings.discord_token, settings.discord_channel_id, speech)
     await player.start()
     try:
@@ -433,9 +438,10 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     engine = Engine(rules, queue, recorder, metrics)
     speech = PiperSpeech(
         settings.voice_model,
-        Path("/tmp/those-who-run/cache"),
+        settings.speech_cache_dir,
         rules_cfg["voice"],
         on_duration=metrics.speech_seconds.observe,
+        max_cache_bytes=settings.cache_max_bytes,
     )
     player = DiscordPlayer(
         settings.discord_token,

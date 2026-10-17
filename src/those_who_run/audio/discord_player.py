@@ -256,6 +256,12 @@ class DiscordPlayer:
         if wav is None:
             log.info("nothing to say (%s): %r", callout.rule, callout.text)
             return
+        try:
+            await self._speak(wav, callout, deadline)
+        finally:
+            self._speech.release(wav)  # played or dropped: a one-off clip goes
+
+    async def _speak(self, wav: Path, callout: Callout, deadline: float | None) -> None:
         if self._stale(callout, deadline, "synthesis"):
             return
         async with self._play_lock:

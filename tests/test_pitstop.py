@@ -35,7 +35,7 @@ def detect(frames) -> tuple[PitDetector, list[tuple[int, PitStatus]]]:
 def test_real_gilles_villeneuve_stop_crosses_the_line_in_the_pit_lane():
     """Twelve laps, Mazda RX-VISION GT3: in on lap 6 at 8.7 per cent, a full tank and
     tyres, and the line crossed on the way out of the box at the limiter."""
-    frames = list(read_recording(GILLES))
+    frames = list(read_recording(GILLES, strict=True))
     det, changes = detect(frames)
     assert [(lap, st.in_pit_lane, st.stint) for lap, st in changes] == [(6, True, 1), (7, False, 2)]
     (stop,) = det.status.stops
@@ -69,7 +69,7 @@ def test_real_gilles_villeneuve_stop_crosses_the_line_in_the_pit_lane():
 def test_real_willow_springs_stop_crosses_the_line_in_the_exit_cut():
     """Big Willow, Toyota 86 Gr.B: a partial refuel (16 -> 65) with tyres, and lap 7
     posted on the loading frame that puts the car at the pit exit at 80 km/h."""
-    det, changes = detect(read_recording(WILLOW))
+    det, changes = detect(read_recording(WILLOW, strict=True))
     assert [(lap, st.in_pit_lane) for lap, st in changes] == [(6, True), (7, False)]
     (stop,) = det.status.stops
     assert (stop.in_lap, stop.out_lap) == (6, 7)
@@ -83,7 +83,7 @@ def test_real_willow_springs_stop_crosses_the_line_in_the_exit_cut():
 def test_real_suzuka_east_stop_crosses_the_line_in_the_entry_cut():
     """Lap 3 posted on the entry cut: the in-lap is 3 although the car enters the
     pit lane on lap 4's counter. Fuel only, no tyres."""
-    det, changes = detect(read_recording(SUZUKA))
+    det, changes = detect(read_recording(SUZUKA, strict=True))
     assert [(lap, st.in_pit_lane) for lap, st in changes] == [(4, True), (4, False)]
     (stop,) = det.status.stops
     assert (stop.in_lap, stop.out_lap) == (3, 4)
@@ -92,7 +92,7 @@ def test_real_suzuka_east_stop_crosses_the_line_in_the_entry_cut():
 
 
 def test_pit_laps_roles_and_stints():
-    det, _ = detect(read_recording(GILLES))
+    det, _ = detect(read_recording(GILLES, strict=True))
     status = det.status
     assert [lap for lap in range(1, 13) if status.is_pit_lap(lap)] == [6, 7]
     assert [status.lap_role(lap) for lap in (5, 6, 7, 8)] == [None, "in", "out", None]
@@ -103,7 +103,9 @@ def test_pit_laps_roles_and_stints():
 
 def test_an_open_stop_marks_every_lap_from_the_in_lap():
     frames = [
-        f for f in read_recording(GILLES) if f.current_lap < 7 or f.phase is not Phase.IN_RACE
+        f
+        for f in read_recording(GILLES, strict=True)
+        if f.current_lap < 7 or f.phase is not Phase.IN_RACE
     ]
     det, _ = detect(frames)
     assert det.status.in_pit_lane
@@ -115,9 +117,11 @@ def test_an_open_stop_marks_every_lap_from_the_in_lap():
 def test_a_lost_cut_frame_is_seen_as_a_teleport(path):
     """Each pit cut is a single packet. Without the loading frames the car still
     jumps 118 to 330 m between two packets, and the same stop is found."""
-    _, with_cuts = detect(read_recording(path))
+    _, with_cuts = detect(read_recording(path, strict=True))
     det, _ = detect(
-        s for s in read_recording(path) if not (s.phase is Phase.LOADING and s.current_lap >= 1)
+        s
+        for s in read_recording(path, strict=True)
+        if not (s.phase is Phase.LOADING and s.current_lap >= 1)
     )
     (stop,) = det.status.stops
     (expected,) = with_cuts[-1][1].stops
@@ -135,7 +139,7 @@ def test_no_stop_in_any_other_recording(path):
     """Races, time trials, qualifying with a restart and a quit, a pit call ignored:
     no loading screen keeps the lap counter, and packets that arrive in a burst
     are not a teleport."""
-    det, changes = detect(read_recording(path))
+    det, changes = detect(read_recording(path, strict=True))
     assert changes == [] and det.status == NO_STOPS
 
 

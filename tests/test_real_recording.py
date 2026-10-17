@@ -34,7 +34,7 @@ WILLOW_STOP = (
 
 
 def test_fixture_phases_cover_the_whole_session():
-    phases = {s.phase for s in read_recording(FIXTURE)}
+    phases = {s.phase for s in read_recording(FIXTURE, strict=True)}
     assert phases == {Phase.MENU, Phase.LOADING, Phase.AT_TRACK, Phase.IN_RACE, Phase.FINISHED}
 
 
@@ -42,7 +42,7 @@ async def test_real_session_callouts_and_sessions(tmp_path):
     engine = Engine(
         build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), SessionStore(tmp_path)
     )
-    spoken = await replay(read_recording(FIXTURE), engine, ConsolePlayer())
+    spoken = await replay(read_recording(FIXTURE, strict=True), engine, ConsolePlayer())
     texts = [c.text for c in spoken]
     assert texts == [
         # practice session: the engineer started mid-session on lap 7, no brief
@@ -81,7 +81,7 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
     to 1), two more laps, then quit (PAUSED -> LOADING -> AT_TRACK)."""
     store = SessionStore(tmp_path)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
-    spoken = await replay(read_recording(QUALI), engine, ConsolePlayer())
+    spoken = await replay(read_recording(QUALI, strict=True), engine, ConsolePlayer())
     assert [c.text for c in spoken] == [
         # qualifying looks like a timed race to GT7: no lap total, twenty cars
         "Timed race. P one of twenty.",
@@ -152,7 +152,7 @@ def test_real_pause_and_resume_is_neither_a_start_nor_an_end():
     """The qualifying fixture pauses and resumes three times mid-lap (2026-10-14),
     once after the restart. A pause keeps the race: no start, no end, no restart,
     and the paused lap is one lap."""
-    states = list(read_recording(QUALI))
+    states = list(read_recording(QUALI, strict=True))
     resumes = [
         (prev, cur)
         for prev, cur in zip(states, states[1:], strict=False)
@@ -169,7 +169,7 @@ def test_real_pause_and_resume_is_neither_a_start_nor_an_end():
 async def _replay_with_store(path, tmp_path, end=False):
     store = SessionStore(tmp_path)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
-    spoken = await replay(read_recording(path), engine, ConsolePlayer())
+    spoken = await replay(read_recording(path, strict=True), engine, ConsolePlayer())
     if end and engine.prev is not None:  # the fixture stops mid-race: write the summary
         store.set_pits(engine.pits.status)
         store.end_session(engine.prev)

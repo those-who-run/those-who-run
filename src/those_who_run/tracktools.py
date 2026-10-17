@@ -15,7 +15,7 @@ from pathlib import Path
 
 from those_who_run.replay import read_recording
 from those_who_run.state import Phase
-from those_who_run.store import connect_index, exclusive_store, track_record
+from those_who_run.store import connect_index, exclusive_store, track_record, write_summary
 from those_who_run.trackdetect import CONFIDENCE_RANK, LAP_PHASES, TrackDetector, TrackMatch
 
 log = logging.getLogger(__name__)
@@ -239,7 +239,7 @@ def _backfill(data_dir: Path, force: bool) -> list[BackfillResult]:
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
                 summary["track_id"] = match.track_id
                 summary["track"] = track_record(match)
-                summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+                write_summary(summary_path, summary)
             note = "cleared stale guess" if match.confidence == "none" else "updated"
             results.append(BackfillResult(session_id, before, match, True, note))
     finally:

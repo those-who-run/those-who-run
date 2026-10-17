@@ -17,11 +17,11 @@ def test_gzip_recording_roundtrip(tmp_path, sim):
     assert write_recording(path, frames) == len(frames)
     with gzip.open(path) as fh:
         assert fh.read(1) == b"{"
-    assert list(read_recording(path)) == frames
+    assert list(read_recording(path, strict=True)) == frames
     w = RecordingWriter(path)  # append keeps the file readable
     w.write(frames[0])
     w.close()
-    assert list(read_recording(path)) == [*frames, frames[0]]
+    assert list(read_recording(path, strict=True)) == [*frames, frames[0]]
 
 
 def _trace():
@@ -72,7 +72,7 @@ def test_outing_recorder_one_file_per_outing_with_pruning(tmp_path):
 
     outing(10.0)
     (first,) = sorted((tmp_path / "rec").glob("*.jsonl.gz"))
-    frames = list(read_recording(first))
+    frames = list(read_recording(first, strict=True))
     assert [f.phase for f in frames] == [Phase.MENU, Phase.AT_TRACK, Phase.IN_RACE, Phase.MENU]
     assert frames[0] == menu, "the last menu frame opens the file"
     outing(20.0)

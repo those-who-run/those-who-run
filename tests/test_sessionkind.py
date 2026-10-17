@@ -192,7 +192,7 @@ def test_real_rolling_start_read_through_a_packet_burst():
 )
 def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track, start):
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
-    for s in read_recording(FIXTURES / fixture):
+    for s in read_recording(FIXTURES / fixture, strict=True):
         engine.process(s)
     assert engine.kind.kind == kind
     assert engine.kind.fuel_use is fuel_use
@@ -203,7 +203,7 @@ def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track, start):
 def test_real_qualifying_is_a_timed_field():
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
     kinds = set()
-    for s in read_recording(FIXTURES / "real-quali-restart-quit-2026-10-14.jsonl"):
+    for s in read_recording(FIXTURES / "real-quali-restart-quit-2026-10-14.jsonl", strict=True):
         engine.process(s)
         kinds.add(engine.kind.kind)
     assert kinds == {"unknown", "timed_field"}
@@ -231,7 +231,7 @@ def test_engine_records_the_kind_in_the_session_metrics_and_rules(tmp_path):
     spy = Spy()
     engine = Engine([spy], CalloutQueue(max_age=None), store, metrics)
     fixture = FIXTURES / "real-nuc-suzuka-no-stop-2026-10-15.jsonl"
-    asyncio.run(replay(read_recording(fixture), engine, ConsolePlayer()))
+    asyncio.run(replay(read_recording(fixture, strict=True), engine, ConsolePlayer()))
     store.close()
     assert spy.seen[-1] == ("lap_race", True)
     db = sqlite3.connect(tmp_path / "index.sqlite")

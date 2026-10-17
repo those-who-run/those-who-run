@@ -113,7 +113,9 @@ def test_lap_table_partial_lap_and_no_position_in_a_time_trial(store_dir):
 
 
 def test_real_pit_stop_is_flagged(tmp_path):
-    frames = list(read_recording(FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"))
+    frames = list(
+        read_recording(FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl", strict=True)
+    )
     drive(tmp_path, frames)
     (row,) = data.list_sessions(tmp_path)
     laps = data.lap_summaries(tmp_path, row.session_id)
@@ -253,7 +255,9 @@ def test_track_id_only_when_the_detector_is_sure():
 
 
 def test_real_sessions_at_one_track_match(tmp_path):
-    frames = list(read_recording(FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl"))
+    frames = list(
+        read_recording(FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl", strict=True)
+    )
     drive(tmp_path, frames)
     drive(tmp_path, frames, at=T0 + DAY)
     a, b = data.list_sessions(tmp_path)

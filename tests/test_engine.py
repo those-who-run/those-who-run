@@ -127,7 +127,7 @@ def test_recording_roundtrip(tmp_path, sim):
     frames = sim(total_laps=2).menu().race([100000, 100000]).frames
     path = tmp_path / "race.jsonl"
     assert write_recording(path, frames) == len(frames)
-    assert list(read_recording(path)) == frames
+    assert list(read_recording(path, strict=True)) == frames
 
 
 async def test_metrics_follow_state(tmp_path, sim):

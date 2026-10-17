@@ -24,7 +24,7 @@ from typing import Any
 from those_who_run.callouts import CalloutQueue
 from those_who_run.config import DEFAULT_RULES
 from those_who_run.engine import Engine
-from those_who_run.replay import read_recording
+from those_who_run.replay import outing_order, read_recording
 from those_who_run.results import build_card
 from those_who_run.rules import build_rules
 from those_who_run.state import Phase, RaceState, race_restarted
@@ -65,10 +65,11 @@ class RecordedSession:
 
 def recording_started_at(path: Path) -> float:
     """Wall-clock time the outing began. ``OutingRecorder`` names each file after it,
-    in UTC (``20261017-162118.jsonl.gz``; the NUC's container clock is UTC, so files
+    in UTC (``20261017-162118.jsonl.gz``, or ``20261017-162118-2.jsonl.gz`` for a
+    second outing in the same second; the NUC's container clock is UTC, so files
     from before the recorder said so are UTC too); any other file falls back to its
     modification time, which is close enough to date a card."""
-    stamp = path.name.split(".", 1)[0]
+    stamp = outing_order(path)[0]  # without a -N suffix
     try:
         return calendar.timegm(time.strptime(stamp, "%Y%m%d-%H%M%S"))
     except ValueError:
@@ -96,8 +97,9 @@ def summarise_recording(path: Path) -> tuple[list[RecordedSession], bool]:
                 out.append(RecordedSession(begun - (first_t or at), (at - begun) / 60, ended, s))
             pending.clear()
 
+        recording = read_recording(path)
         try:
-            for state in read_recording(path):
+            for state in recording:
                 first_t = state.t if first_t is None else first_t
                 if anchor_t is None and state.phase is not Phase.MENU:
                     anchor_t = state.t
@@ -111,14 +113,19 @@ def summarise_recording(path: Path) -> tuple[list[RecordedSession], bool]:
                 if store.session is not None and (not had_session or len(starts) == 0):
                     starts.append(state.t)
                 prev = state
-        except EOFError:
-            complete = False  # the outing was still being written
-        if store.session is not None and prev is not None:
-            store.end_session(prev)
-            collect("open", prev.t)
-        store.close()
+            # False when the outing was still being written, or cut off by a crash.
+            complete = recording.complete
+            if store.session is not None and prev is not None:
+                store.end_session(prev)
+                collect("open", prev.t)
+        finally:
+            store.close()  # on every path: it owns a writer thread
     return out, complete
 
 
 def list_recordings(directory: Path) -> list[Path]:
-    return sorted(p for p in Path(directory).iterdir() if p.name.endswith((".jsonl", ".jsonl.gz")))
+    """Recordings in ``directory``, oldest outing first."""
+    return sorted(
+        (p for p in Path(directory).iterdir() if p.name.endswith((".jsonl", ".jsonl.gz"))),
+        key=outing_order,
+    )

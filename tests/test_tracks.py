@@ -445,7 +445,7 @@ def test_real_n24h_race_is_probable_before_the_lights_and_confirmed_after_lap_1(
     final, steps = detect_recording(FIXTURE)
     assert final.track_id == N24H and final.confidence == "confirmed"
     assert "a full lap fits" in final.evidence and final.candidates[0].fit > 0.85
-    race_start = next(s.t for s in read_recording(FIXTURE) if s.phase is Phase.IN_RACE)
+    race_start = next(s.t for s in read_recording(FIXTURE, strict=True) if s.phase is Phase.IN_RACE)
     probable = next(
         s for s in steps if s.match.confidence == "probable" and s.match.track_id == N24H
     )
@@ -490,7 +490,7 @@ def test_real_unknown_track_is_reported_as_none_not_as_fuji():
     rules them out."""
     det = TrackDetector(tracks=tuple(t for t in load_tracks() if t.id != SUGO))
     seen: list[int | None] = []
-    for s in read_recording(UNKNOWN_FIXTURE):
+    for s in read_recording(UNKNOWN_FIXTURE, strict=True):
         det.observe(s)
         seen.append(det.match.track_id)
     assert all(tid is None for tid in seen)
@@ -616,7 +616,7 @@ def test_engine_records_the_track_in_the_session(tmp_path):
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store, metrics)
     import asyncio
 
-    asyncio.run(replay(read_recording(FIXTURE), engine, ConsolePlayer()))
+    asyncio.run(replay(read_recording(FIXTURE, strict=True), engine, ConsolePlayer()))
     assert engine.track is not None and engine.track.track_id == N24H
     assert engine.track.confidence == "confirmed"
     sess = store.session
@@ -631,7 +631,7 @@ def test_engine_records_the_track_in_the_session(tmp_path):
         metrics.render()
     )
     # Finish the session: summary carries the verdict.
-    last = list(read_recording(FIXTURE))[-1]
+    last = list(read_recording(FIXTURE, strict=True))[-1]
     store.end_session(last)
     summary = json.loads((tmp_path / "sessions").glob("*/summary.json").__next__().read_text())
     assert summary["track_id"] == N24H
@@ -644,7 +644,7 @@ def test_backfill_restores_a_session_detected_from_parquet(tmp_path):
 
     store = SessionStore(tmp_path)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
-    frames = list(read_recording(FIXTURE))
+    frames = list(read_recording(FIXTURE, strict=True))
     asyncio.run(replay(frames, engine, ConsolePlayer()))
     store.end_session(frames[-1])
     store.close()
@@ -690,7 +690,7 @@ def test_backfill_clears_a_stale_guess_when_nothing_fits(tmp_path, monkeypatch):
     monkeypatch.setattr("those_who_run.trackdetect.load_tracks", lambda: without_sugo)
     store = SessionStore(tmp_path)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
-    frames = list(read_recording(UNKNOWN_FIXTURE))
+    frames = list(read_recording(UNKNOWN_FIXTURE, strict=True))
     asyncio.run(replay(frames, engine, ConsolePlayer()))
     store.end_session(frames[-1])
     store.close()

@@ -27,7 +27,9 @@ def summaries(fixture: str, tmp_path: Path) -> list[dict]:
     out: list[dict] = []
     store = SessionStore(tmp_path, on_end=out.append)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
-    asyncio.run(replay(read_recording(FIXTURES / f"{fixture}.jsonl"), engine, ConsolePlayer()))
+    asyncio.run(
+        replay(read_recording(FIXTURES / f"{fixture}.jsonl", strict=True), engine, ConsolePlayer())
+    )
     if store.session is not None and engine.prev is not None:
         store.end_session(engine.prev)
     store.close()
@@ -307,7 +309,7 @@ def test_store_hands_over_the_summary_and_records_the_post(tmp_path):
 
     store = SessionStore(tmp_path / "b", on_end=boom)
     engine = Engine([], CalloutQueue(max_age=None), store)
-    for state in read_recording(FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl"):
+    for state in read_recording(FIXTURES / "real-nuc-fuji-timed-2026-10-15.jsonl", strict=True):
         engine.process(state)
     store.close()
     assert len(list((tmp_path / "b" / "sessions").glob("*/summary.json"))) == 1

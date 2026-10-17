@@ -258,8 +258,13 @@ def run_recordings(settings: Settings, paths: list[Path], last: int) -> int:
     if last:
         files = files[-last:]
     for f in files:
-        sessions, complete = summarise_recording(f)
-        print(f.name + ("" if complete else "  (still being written)"))
+        try:
+            sessions, complete = summarise_recording(f)
+        except Exception as exc:  # noqa: BLE001 - one bad file must not end the listing
+            log.exception("could not read %s", f)
+            print(f"{f.name}  (unreadable: {exc})")
+            continue
+        print(f.name + ("" if complete else "  (incomplete: still being written or cut off)"))
         for s in sessions:
             print("   " + s.line())
         if not sessions:

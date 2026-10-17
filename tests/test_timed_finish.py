@@ -23,7 +23,9 @@ async def test_real_timed_race_finishes_at_the_line(tmp_path):
     summaries: list[dict] = []
     store = SessionStore(tmp_path, on_end=summaries.append)
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
-    spoken = [c.text for c in await replay(read_recording(FIXTURE), engine, ConsolePlayer())]
+    spoken = [
+        c.text for c in await replay(read_recording(FIXTURE, strict=True), engine, ConsolePlayer())
+    ]
     store.close()
     laps = [t for t in spoken if t.startswith("Lap ")]
     assert laps == [

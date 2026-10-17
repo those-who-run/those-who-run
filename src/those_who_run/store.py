@@ -41,9 +41,9 @@ from __future__ import annotations
 import contextlib
 import csv
 import fcntl
-import functools
 import json
 import logging
+import os
 import sqlite3
 import threading
 import time
@@ -271,6 +271,21 @@ def write_parquet(path: Path, rows: list[tuple[Any, ...]]) -> float:
     return time.perf_counter() - started
 
 
+def write_summary(path: Path, summary: dict[str, Any]) -> None:
+    """Write summary.json atomically: a temporary file next to it, synced, then
+    renamed over it. A crash leaves the old file or the new one, never half of
+    one (a truncated summary would show the session as running for ever)."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            f.write(json.dumps(summary, indent=2))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def track_record(match: TrackMatch) -> dict[str, Any]:
     """The detector verdict as stored in summary.json."""
     return {
@@ -365,21 +380,12 @@ class SessionStore:
         """Block until every queued lap file has been written."""
         pending, self._pending = self._pending, []
         for fut in pending:
-            with contextlib.suppress(Exception):  # already logged by _on_written
+            with contextlib.suppress(Exception):  # already logged by _write_lap
                 fut.result()
 
     @property
     def writes_pending(self) -> int:
         return sum(1 for f in self._pending if not f.done())
-
-    def _on_written(self, path: Path, frames: int, fut: Future[float]) -> None:
-        exc = fut.exception()
-        if isinstance(exc, LapNotIndexed):
-            log.error("wrote %s (%d frames) but could not index it: %s", path, frames, exc)
-        elif exc is not None:
-            log.error("failed to write %s (%d frames): %s", path, frames, exc)
-        else:
-            log.info("wrote %s: %d frames in %.2fs", path.name, frames, fut.result())
 
     def _write(self, sql: str, args: tuple[Any, ...]) -> None:
         """One statement, committed, under the connection's lock."""
@@ -532,7 +538,6 @@ class SessionStore:
         )
         session_row = (sum(1 for x in s.laps if x["complete"]), s.track_id, s.session_id)
         fut = self._writer.submit(self._write_lap, path, rows, lap_row, session_row)
-        fut.add_done_callback(functools.partial(self._on_written, path, len(rows)))
         self._pending.append(fut)
 
     def _write_lap(
@@ -543,7 +548,29 @@ class SessionStore:
         session_row: tuple[Any, ...],
     ) -> float:
         """On the writer thread: the lap file, then its index row. A lap whose
-        file could not be written gets no row (summary.json still lists it)."""
+        file could not be written gets no row (summary.json still lists it).
+
+        The outcome is logged here, before the future resolves, so it is in the
+        log by the time ``wait()`` returns. (A done-callback runs after waiters
+        are woken, so it could log late.)"""
+        try:
+            took = self._write_lap_and_row(path, rows, lap_row, session_row)
+        except LapNotIndexed as exc:
+            log.error("wrote %s (%d frames) but could not index it: %s", path, len(rows), exc)
+            raise
+        except Exception as exc:
+            log.error("failed to write %s (%d frames): %s", path, len(rows), exc)
+            raise
+        log.info("wrote %s: %d frames in %.2fs", path.name, len(rows), took)
+        return took
+
+    def _write_lap_and_row(
+        self,
+        path: Path,
+        rows: list[tuple[Any, ...]],
+        lap_row: tuple[Any, ...],
+        session_row: tuple[Any, ...],
+    ) -> float:
         took = write_parquet(path, rows)
         try:
             with self._db_lock:
@@ -604,7 +631,7 @@ class SessionStore:
             **s.pits.record(),  # stints, pit_stops
             "laps": s.laps,
         }
-        (s.dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        write_summary(s.dir / "summary.json", summary)
         self._write(
             "UPDATE sessions SET ended_at = ?, laps_completed = ?, best_lap_ms = ?, fuel_used = ?,"
             " final_position = ?, track_id = COALESCE(track_id, ?) WHERE id = ?",

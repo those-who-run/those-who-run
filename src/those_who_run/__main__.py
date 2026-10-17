@@ -9,7 +9,9 @@ import os
 import signal
 import sys
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from those_who_run import __version__, brand
 from those_who_run.callouts import CalloutQueue
@@ -19,6 +21,10 @@ from those_who_run.metrics import HealthServer, Metrics
 from those_who_run.rules import build_rules
 from those_who_run.state import Phase, RaceState
 from those_who_run.store import SessionStore
+from those_who_run.supervise import Supervisor
+
+if TYPE_CHECKING:
+    from those_who_run.audio.player import Player
 
 log = logging.getLogger("those_who_run")
 
@@ -439,9 +445,15 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     states: asyncio.Queue[RaceState] = asyncio.Queue(maxsize=600)
     telem = LiveTelemetry(settings.ps5_ip, states, loop)
 
+    stop = asyncio.Event()
+    supervisor = Supervisor(stop)
+
     def health() -> dict:
         return {
-            "ok": True,
+            # Telemetry and voice are down whenever the PS5 is off, which is
+            # normal; only a dead task makes the engineer unhealthy.
+            "ok": supervisor.ok(),
+            "tasks": supervisor.alive(),
             "telemetry_connected": telem.connected(settings.telemetry_timeout_secs),
             "voice_connected": player.connected,
             "packets": telem.packets,
@@ -473,7 +485,6 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
 
     http = HealthServer(settings.metrics_port, metrics, health)
     http.start()
-    stop = asyncio.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
@@ -491,52 +502,42 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
     await player.start()
     telem.start()
 
-    async def ingest() -> None:
-        while True:
-            state = await states.get()
-            if writer is not None:
-                writer.write(state)
-            engine.process(state)
-            await player.on_phase(state.phase, state.t)
-
-    async def speak() -> None:
-        while True:
-            c = queue.pop(time.monotonic())
-            if c is None:
-                await asyncio.sleep(0.05)
-                continue
-            await player.play(c)
+    async def handle(state: RaceState) -> None:
+        if writer is not None:
+            writer.write(state)
+        engine.process(state)
+        await player.on_phase(state.phase, state.t)
 
     async def watchdog() -> None:
         was: bool | None = None
         voice = TelemetryVoice(rules_cfg["rules"].get("telemetry"))
         log.info("telemetry: waiting for packets from %s", settings.ps5_ip)
+        errors = ErrorLog("watchdog tick")
         while True:
-            now_connected = telem.connected(settings.telemetry_timeout_secs)
-            metrics.telemetry_connected.set(1 if now_connected else 0)
-            if now_connected != was and (was is not None or now_connected):
-                log.info("telemetry %s", "connected" if now_connected else "lost")
-            was = now_connected
-            for c in voice.observe(now_connected, engine.prev, time.monotonic()):
-                queue.push(c)
-                metrics.callouts_total.labels(c.rule).inc()
-                log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
+            try:
+                now_connected = telem.connected(settings.telemetry_timeout_secs)
+                metrics.telemetry_connected.set(1 if now_connected else 0)
+                if now_connected != was and (was is not None or now_connected):
+                    log.info("telemetry %s", "connected" if now_connected else "lost")
+                was = now_connected
+                for c in voice.observe(now_connected, engine.prev, time.monotonic()):
+                    queue.push(c)
+                    metrics.callouts_total.labels(c.rule).inc()
+                    log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
+            except Exception:
+                errors.log()
             await asyncio.sleep(1)
 
-    tasks = [
-        asyncio.create_task(ingest(), name="ingest"),
-        asyncio.create_task(speak(), name="speak"),
-        asyncio.create_task(watchdog(), name="watchdog"),
-    ]
+    supervisor.spawn("ingest", lambda: ingest_loop(states, handle))
+    supervisor.spawn("speak", lambda: speak_loop(queue, player))
+    supervisor.spawn("watchdog", watchdog)
     if poster is not None:
-        tasks.append(asyncio.create_task(poster.run(), name="results"))
+        supervisor.spawn("results", poster.run)
     try:
         await stop.wait()
     finally:
         log.info("shutting down")
-        for t in tasks:
-            t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await supervisor.close()
         await player.close()
         await telem.stop()
         http.stop()
@@ -548,7 +549,64 @@ async def run_live(settings: Settings, record: Path | None = None) -> int:
         if writer is not None:
             writer.close()
             log.info("recorded %d frames to %s", writer.count, record or settings.record_dir)
+    if supervisor.failed:
+        log.error("a task could not be kept running: exiting non-zero")
+        return 1
     return 0
+
+
+class ErrorLog:
+    """Logs an error in a loop with its traceback, at most once per
+    ``every_secs``, so a fault on every 60 Hz frame does not flood the log.
+    Errors in between are counted and reported with the next traceback."""
+
+    def __init__(self, what: str, every_secs: float = 10.0) -> None:
+        self._what = what
+        self._every = every_secs
+        self._last: float | None = None
+        self._suppressed = 0
+
+    def log(self, detail: str = "") -> None:
+        now = time.monotonic()
+        if self._last is not None and now - self._last < self._every:
+            self._suppressed += 1
+            return
+        more = f" ({self._suppressed} more since last report)" if self._suppressed else ""
+        log.exception("error in %s%s%s", self._what, f" {detail}" if detail else "", more)
+        self._last, self._suppressed = now, 0
+
+
+async def ingest_loop(
+    states: asyncio.Queue[RaceState], handle: Callable[[RaceState], Awaitable[None]]
+) -> None:
+    """Feed every frame to ``handle``. A frame that raises is logged and
+    skipped; the next frame is still processed."""
+    errors = ErrorLog("processing frame")
+    while True:
+        state = await states.get()
+        try:
+            await handle(state)
+        except Exception:
+            errors.log(f"t={state.t:.2f}")
+
+
+async def speak_loop(
+    queue: CalloutQueue,
+    player: Player,
+    clock: Callable[[], float] = time.monotonic,
+    idle_secs: float = 0.05,
+) -> None:
+    """Speak callouts as they come. A callout that fails to play is logged
+    and the next one is still spoken."""
+    while True:
+        c = queue.pop(clock())
+        if c is None:
+            await asyncio.sleep(idle_secs)
+            continue
+        try:
+            await player.play(c)
+        except Exception:
+            log.exception("error speaking callout (%s): %s", c.rule, c.text)
 
 
 if __name__ == "__main__":

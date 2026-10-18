@@ -39,8 +39,10 @@ mid-lap was near Lago Maggiore's line and the path crossed it; the detector said
 
 Ranking: layouts whose line has been crossed outrank the rest; among those,
 higher overlap between the driven box and the layout's box wins. Confidence
-is reported honestly: some pairs (Fuji vs Fuji Short, Monza vs No Chicane)
-have identical geometry in the table and stay ``ambiguous`` forever.
+is reported honestly: some pairs (Fuji vs Fuji Short, Spa vs Spa 24h, Monza vs
+No Chicane: ``tracks.TWINS``) have identical geometry in the table, and the
+layout stays unknown forever. The circuit is known, though: a pool of crossed
+layouts that is all one circuit is a ``probable`` match named by the circuit.
 
 The detector is pure: feed it frames, read ``match``. It is used live by the
 engine, by ``replay`` and by ``tracks backfill`` over stored Parquet.
@@ -82,8 +84,9 @@ class TrackMatch:
     confidence: Confidence
     candidates: tuple[Candidate, ...]  # best first
     evidence: str
-    # Set when the layout is ambiguous but every crossed candidate is the same
-    # circuit (Fuji and Fuji Short share a line and a box in the table).
+    # Set when the layout is unknown but every crossed candidate is the same
+    # circuit (Fuji and Fuji Short share a line and a box in the table): the
+    # match is then the circuit, ``name`` is this, and ``candidates`` the layouts.
     family: str | None = None
 
     @property
@@ -187,7 +190,17 @@ class TrackDetector:
         pre-race phase (a rolling start drives most of a kilometre before lap
         1 begins) and across pauses. Coming back from a menu or a loading
         screen means a new venue, so the next positioned frame starts over.
+
+        Except a loading screen that keeps the lap counter: that is GT7's pit
+        cut-scene in the middle of a race (SUGO, Suzuka, Willow Springs, Gilles
+        Villeneuve; at Spa on 2026-10-18 it wiped the track after five laps,
+        #275). The car is at the same circuit, often a few hundred metres on, so
+        the lap it is on is not a whole lap of driving and is judged on its line
+        only. A restart, a quit or a new event loads at lap 0.
         """
+        if state.phase is Phase.LOADING and state.current_lap >= 1:
+            self._partial = True
+            return None
         if state.phase in (Phase.MENU, Phase.LOADING):
             self._pending_reset = True
             return None
@@ -435,16 +448,12 @@ class TrackDetector:
                 conf = "probable"
                 why = "finish line crossed in the right direction, no full lap yet"
             else:
+                families = {c.track.family for c in crossed}
+                if len(families) == 1:
+                    return self._family(families.pop(), crossed, tuple(cands))
                 conf = "ambiguous"
                 names = ", ".join(c.track.name for c in crossed[1:])
                 why = f"finish line shared with {names}; bounds do not separate them"
-                families = {family_name(c.track.name) for c in crossed}
-                if len(families) == 1:
-                    family = families.pop()
-                    why += f"; all {family}"
-                    return TrackMatch(
-                        best.track.id, best.track.name, conf, tuple(cands), why, family
-                    )
             return TrackMatch(best.track.id, best.track.name, conf, tuple(cands), why)
         if len(cands) == 1 and self._distance >= self.min_distance:
             km = self._distance / 1000
@@ -454,14 +463,18 @@ class TrackDetector:
         why = f"{len(cands)} layouts near the start still fit, line not yet crossed"
         return TrackMatch(None, None, "ambiguous", tuple(cands[:MAX_REPORTED_CANDIDATES]), why)
 
-
-def family_name(name: str) -> str:
-    """The circuit a layout belongs to: the name without its layout part.
-
-    "Fuji International Speedway (Short)" and "Tokyo Expressway - East Clockwise"
-    give "Fuji International Speedway" and "Tokyo Expressway".
-    """
-    return name.split(" (")[0].split(" - ")[0].strip()
+    @staticmethod
+    def _family(family: str, crossed: list[Candidate], cands: tuple[Candidate, ...]) -> TrackMatch:
+        """Every crossed layout is one circuit and the geometry cannot pick one (Spa
+        and Spa 24h, Fuji and Fuji Short: ``tracks.TWINS``). The circuit is what is
+        known, so that is the match: probable, named by the circuit, on the layout
+        that carries its name (else the lowest id), so the answer holds still while
+        the fit of each twin swaps by a thousandth from frame to frame (#275)."""
+        named = [c.track for c in crossed if c.track.name == family]
+        base = named[0] if named else min((c.track for c in crossed), key=lambda t: t.id)
+        names = ", ".join(sorted(c.track.name for c in crossed))
+        why = f"finish line shared by {names}; bounds do not separate them; all {family}"
+        return TrackMatch(base.id, family, "probable", cands, why, family)
 
 
 # geometry

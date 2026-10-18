@@ -250,13 +250,18 @@ The verdict carries a confidence: `confirmed` (line crossed and a full lap
 fits, nothing else left), `probable` (line crossed but no full lap yet, or a
 single layout left), `ambiguous` (several still fit; no track is named unless
 a line was crossed) or `none` (nothing fits: a new track, or one the table has
-wrong). When the layouts still in the running all belong to one circuit (Fuji
-and Fuji Short are identical in the table), the start brief says the circuit's
-name. A race with a rolling start is probable before the lights and confirmed
-at the end of lap 1; a flying lap from the pits is probable within a minute and
-confirmed at the end of the lap; a one-lap race confirms at the flag. The
+wrong). When the layouts whose line was crossed all belong to one circuit and
+their bounds cannot split them (Fuji and Fuji Short, Spa and Spa 24h, Monza,
+Le Mans and Barcelona with and without their chicanes are identical in the
+table), the verdict is the circuit: `probable`, named "Circuit de
+Spa-Francorchamps" in the brief, on the card and on the pit wall. A race with a
+rolling start is probable before the lights and confirmed at the end of lap 1;
+a flying lap from the pits is probable within a minute and confirmed at the end
+of the lap; a one-lap race confirms at the flag. The
 verdict never drops on a blip, but a layout that has been ruled out is
-replaced, so a wrong early guess does not stick to the session.
+replaced, so a wrong early guess does not stick to the session. A pit stop's
+loading cut-scene keeps the lap counter, and the verdict with it; a quit, a
+restart or a new event loads at lap 0 and starts over.
 
 The verdict is logged, stored with the session (`track_id` and
 `track_confidence` in the index, a `track` block with the candidates in

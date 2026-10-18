@@ -23,12 +23,11 @@ from those_who_run.trackdetect import (
     box_contains,
     box_iou,
     distance_to_segment,
-    family_name,
     segment_crosses,
     travel_direction,
     widen_segment,
 )
-from those_who_run.tracks import Track, load_tracks, track_by_id, track_name
+from those_who_run.tracks import Track, family_name, load_tracks, track_by_id, track_name
 from those_who_run.tracktools import backfill, detect_recording, detect_session, learn_track
 
 FIXTURE = Path(__file__).parent / "fixtures" / "real-n24h-race-lap1-positions-2026-10-14.jsonl.gz"
@@ -236,9 +235,17 @@ def test_menu_or_loading_frame_starts_over_but_a_pause_does_not():
     det.observe(frame(Phase.PAUSED, 700, 10))
     det.observe(frame(Phase.IN_RACE, 700, 10))
     assert det.distance_m > 500  # pause kept everything
-    det.observe(frame(Phase.LOADING, 0, 0))
+    det.observe(frame(Phase.LOADING, 700, 10))  # a pit cut-scene keeps the lap counter
+    det.observe(frame(Phase.IN_RACE, 700, 10))
+    assert det.distance_m > 500
+    det.observe(frame(Phase.LOADING, 0, 0, lap=0))  # a quit, restart or new event
     det.observe(frame(Phase.AT_TRACK, 140, 10, lap=0))
     assert det.distance_m == 0  # new venue: start over
+    for x in range(140, 300, 10):
+        det.observe(frame(Phase.IN_RACE, x, 10))
+    det.observe(frame(Phase.MENU, 0, 0, lap=-1))
+    det.observe(frame(Phase.AT_TRACK, 140, 10, lap=0))
+    assert det.distance_m == 0  # a menu too
 
 
 def test_family_name_drops_the_layout_part():
@@ -521,12 +528,13 @@ def _named(steps) -> set[int]:
 def test_real_fuji_from_the_pits_is_never_tokyo_east():
     """A timed session at Fuji: the pit exit crosses Tokyo East's recorded line, 118 m
     from Fuji's, and that was announced. Fuji and Fuji Short share a line and a box in
-    the table, so the honest answer is the ambiguous pair, named by the circuit."""
+    the table, so the honest answer is the circuit, on the layout named after it
+    (#275), with both layouts as the candidates."""
     final, steps = detect_recording(FUJI_FIXTURE)
     assert _named(steps) <= {FUJI, FUJI_SHORT}
-    assert final.confidence == "ambiguous" and final.track_id in (FUJI, FUJI_SHORT)
+    assert final.confidence == "probable" and final.track_id == FUJI
     assert {c.track.id for c in final.candidates if c.line_crossed} == {FUJI, FUJI_SHORT}
-    assert final.family == "Fuji International Speedway"  # what the start brief says
+    assert final.name == final.family == "Fuji International Speedway"  # what the brief says
 
 
 def test_real_tokyo_east_is_never_suzuka_mid_lap():

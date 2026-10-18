@@ -19,6 +19,7 @@ GILLES = FIXTURES / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl.gz"
 WILLOW = FIXTURES / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz"
 SUZUKA = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 SUGO = FIXTURES / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
+SPA = FIXTURES / "real-nuc-spa-pit-cut-quit-2026-10-18.jsonl.gz"
 STOPS = (GILLES, WILLOW, SUZUKA)
 
 
@@ -155,7 +156,7 @@ def test_a_lost_cut_frame_is_seen_as_a_teleport(path):
 
 @pytest.mark.parametrize(
     "path",
-    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in (*STOPS, SUGO)),
+    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in (*STOPS, SUGO, SPA)),
     ids=lambda p: p.stem,
 )
 def test_no_stop_in_any_other_recording(path):
@@ -164,6 +165,15 @@ def test_no_stop_in_any_other_recording(path):
     are not a teleport."""
     det, changes = detect(read_recording(path, strict=True))
     assert changes == [] and det.status == NO_STOPS
+
+
+def test_real_spa_stop_quit_from_the_box_stays_open():
+    """Spa, 2026-10-18: into the pits just after the line at the end of lap 4, the
+    entry cut straight to the box, then a quit 13 s later: no exit (#275)."""
+    det, changes = detect(read_recording(SPA, strict=True))
+    assert [(lap, st.in_pit_lane) for lap, st in changes] == [(5, True)]
+    (stop,) = det.status.stops
+    assert stop.out_lap is None and stop.evidence == "entry loading cut at 0.0 km/h"
 
 
 def _frame(t, lap=3, speed=150.0, x=0.0, phase=Phase.IN_RACE, fuel=50.0, **over):

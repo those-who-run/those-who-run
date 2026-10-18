@@ -364,6 +364,42 @@ fixtures:
         start, and the session is stored as joined on lap 7.
     tests: [test_joined]
 
+  - file: real-nuc-spa-pit-cut-quit-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Circuit de Spa-Francorchamps (or Spa 24h Layout, the table cannot tell)
+    car: Porsche 962 C '88
+    kind: [timed_field (flying)]
+    outing: "20261018-141557"
+    source: >-
+      NUC outing 20261018-141557, the whole outing thinned at 2 Hz: a timed race
+      at Spa from the pit box, four laps, into the pits at the end of lap 4 (a
+      loading cut-scene that keeps the lap counter) and quit 13 s later from
+      the box.
+    pins:
+      - Spa and Spa 24h are named as the circuit, probable, on the Spa row (#275).
+      - A pit entry cut-scene straight to the box, and no exit: quit from the box.
+      - The pit cut-scene neither resets the detector nor costs the session its
+        track, and the quit after it stores "Circuit de Spa-Francorchamps" on
+        the card, the pit wall and the index.
+    tests: [test_pitstop, test_twins]
+
+  - file: real-nuc-spa-time-trial-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Circuit de Spa-Francorchamps (or Spa 24h Layout, the table cannot tell)
+    car: Dodge SRT Tomahawk VGT (Gr.1)
+    kind: [solo_timed (flying)]
+    outing: "20261018-142627"
+    source: >-
+      NUC outing 20261018-142627, the whole outing thinned at 2 Hz: a time trial
+      at Spa with a flying start, two laps and a quit from the pause menu on
+      lap 3.
+    pins:
+      - The detector names the circuit from the first line crossing and holds
+        still, where it swapped between the twins, ambiguous (#275).
+      - The brief names the circuit, and the pit wall shows it while the
+        session is open and on the card after it.
+    tests: [test_twins]
+
 outings:
   - id: "20261016-183946"
     date: 2026-10-16
@@ -586,6 +622,35 @@ outings:
       named two Lago Maggiore layouts. Then more timed races at Suzuka. Source of
       real-nuc-suzuka-joined-mid-race-2026-10-18.
     cited_by: [265]
+
+  - id: "20261018-141557"
+    date: 2026-10-18
+    track: [Circuit de Spa-Francorchamps]
+    car: ["Porsche 962 C '88"]
+    kind: [timed_field (flying)]
+    frames: 34245
+    sha256: afc474e2768e9a088edfbab7744e4c0bd12619792df057bd47be8daeb66cea8a
+    note: >-
+      Spa timed race in the Porsche 962 C '88 against 17 cars, four laps from
+      the pit box, best 2:09.918 on lap 3, into the pits at the end of lap 4 and
+      quit from the box. The pit cut-scene reset the track detector and session
+      20261018-141626 was saved with no track. Source of
+      real-nuc-spa-pit-cut-quit-2026-10-18.
+    cited_by: [275]
+
+  - id: "20261018-142627"
+    date: 2026-10-18
+    track: [Circuit de Spa-Francorchamps]
+    car: [Dodge SRT Tomahawk VGT (Gr.1)]
+    kind: [solo_timed (flying)]
+    frames: 17692
+    sha256: 6804a2cdd90b96e267974ae8b01f7f6574059bca450b2dff11bc2e06691660c2
+    note: >-
+      Spa time trial in the Dodge SRT Tomahawk VGT, two laps, best 2:04.754 on
+      lap 2, quit on lap 3. Saved as session 20261018-142654, "Circuit de
+      Spa-Francorchamps (ambiguous)", shown as an unknown track. Source of
+      real-nuc-spa-time-trial-2026-10-18.
+    cited_by: [275]
 
 lost:
   - id: "20261016-180243"

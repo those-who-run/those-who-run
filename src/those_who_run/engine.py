@@ -46,6 +46,11 @@ def joined_part_way(prev: RaceState | None, state: RaceState) -> bool:
     return prev is None and state.in_race and state.current_lap > 1
 
 
+def track_rank(match: TrackMatch) -> tuple[int, bool]:
+    """How good a track verdict is: its confidence, then whether it names a layout."""
+    return CONFIDENCE_RANK[match.confidence], match.track_id is not None
+
+
 # The pit lane is quiet from entry to exit (#244), apart from the rules whose
 # ``pit_lane`` is "speak" (fuel: its calls are about the stop). Each other rule
 # says whether a callout raised in the lane, or still queued at the entry, is
@@ -457,10 +462,13 @@ class Engine:
 
     def _apply_track(self, match: TrackMatch) -> None:
         """Keep the best answer the session has had; never downgrade on a blip. A
-        layout the detector has ruled out is not a blip: the answer was wrong."""
+        layout the detector has ruled out is not a blip: the answer was wrong. No
+        layout at all is below a named one as unsure: at Spa (2026-10-18, #275) an
+        ambiguous pair gave way to an ambiguous nothing, and the session was saved
+        without a track."""
         if (
             self.track is not None
-            and CONFIDENCE_RANK[match.confidence] < CONFIDENCE_RANK[self.track.confidence]
+            and track_rank(match) < track_rank(self.track)
             and (self.track.track_id is None or self.tracks.is_alive(self.track.track_id))
         ):
             return

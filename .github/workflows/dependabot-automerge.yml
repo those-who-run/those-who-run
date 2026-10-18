@@ -1,0 +1,106 @@
+name: Dependabot auto-merge
+
+# Squash-merges the Dependabot updates that are safe to take unreviewed, once CI has
+# passed on the PR's head commit. The repo has no branch protection or required
+# checks (private, free plan), so `gh pr merge --auto` cannot wait for CI: this does.
+#
+#   Merged:  patch updates; minor updates of packages at >= 1.0; minor updates of
+#            GitHub Actions.
+#   Left for a human: majors, 0.x minors, anything in the Docker ecosystem (the
+#            Python base image and the uv image).
+#
+# Two jobs, each from this file on main (never the PR's copy), neither checking out
+# or running PR code:
+#   classify  on pull_request_target: dependabot/fetch-metadata reads the update and,
+#             when every dependency in it is safe, posts the commit status
+#             `dependabot/auto-merge` on the PR's head SHA.
+#   merge     on CI completing: when CI passed on a Dependabot PR from this repo and
+#             that same SHA carries the status, squash-merges it, pinned to the SHA.
+# fetch-metadata needs a pull_request payload, which workflow_run does not have; the
+# status ties the verdict to the exact commit CI tested.
+on:
+  # Both triggers are deliberate (zizmor flags them): no job checks out or runs PR code.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, synchronize, reopened]
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [CI]
+    types: [completed]
+
+# Least privilege: nothing by default, each job asks for what it uses.
+permissions: {}
+
+# Actions are pinned by commit SHA (the tag in the comment); Dependabot bumps them.
+jobs:
+  classify:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read # fetch-metadata lists the PR's commits
+      statuses: write # the verdict, on the head SHA
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      # Every dependency must pass: one major or 0.x minor in a group holds the group.
+      - name: Apply the rules
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPS: ${{ steps.meta.outputs.updated-dependencies-json }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          verdict=$(jq -r '
+            def major: ltrimstr("v") | split(".")[0] | tonumber? // -1;
+            def safe:
+              .packageEcosystem != "docker" and (
+                .updateType == "version-update:semver-patch" or (
+                  .updateType == "version-update:semver-minor" and (
+                    .packageEcosystem == "github_actions" or
+                    ((.prevVersion // "") | major) >= 1)));
+            if length > 0 and all(.[]; safe) then "safe" else "hold" end
+          ' <<<"$DEPS")
+          jq -r '.[] | "- \(.dependencyName) \(.prevVersion) -> \(.newVersion) (\(.packageEcosystem), \(.updateType))"' \
+            <<<"$DEPS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Verdict: $verdict" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$verdict" = safe ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+              -f state=success -f context=dependabot/auto-merge \
+              -f description="Safe update: merges once CI passes" > /dev/null
+          fi
+
+  merge:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the squash merge
+      pull-requests: write
+      statuses: read
+    steps:
+      - name: Merge if classified safe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # The open Dependabot PR, from this repo, whose head is the commit CI passed on.
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq "
+            [.[] | select(.state == \"open\" and .head.sha == \"$SHA\"
+              and .user.login == \"dependabot[bot]\"
+              and .head.repo.full_name == \"$GITHUB_REPOSITORY\")][0].number // empty")
+          if [ -z "$pr" ]; then
+            echo "No open Dependabot PR has head $SHA." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          # The newest verdict classify posted on this SHA, from this repo's Actions token only.
+          state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/statuses" --jq '
+            [.[] | select(.context == "dependabot/auto-merge"
+              and .creator.login == "github-actions[bot]")][0].state // empty')
+          if [ "$state" != success ]; then
+            echo "#$pr is not classified safe: left for review." >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --match-head-commit "$SHA"
+          echo "Merged #$pr ($SHA)." >> "$GITHUB_STEP_SUMMARY"

@@ -936,3 +936,43 @@ def test_max_age_seconds_zero_means_zero_not_unset():
     assert FinalLapRule({"max_age_seconds": 0}).max_age == 0.0
     assert FinalLapRule({"max_age_seconds": 3}).max_age == 3.0
     assert FinalLapRule({}).max_age is None
+
+
+# pit laps (#244)
+
+
+def _pit_laps(rule, in_lap, out_lap):
+    """``rule`` told of one stop done, from ``in_lap`` to ``out_lap``."""
+    stop = PitStop(1, in_lap, out_lap, 0.0, 1.0, 5.0, 10.0, 50.0, False, 60.0, 5, 5, "test")
+    rule.on_pit(PitStatus(False, (stop,)))
+    return rule
+
+
+def test_lap_time_a_lap_holding_a_stop_has_no_delta(sim):
+    rule = _pit_laps(LapTimeRule(), 3, 4)
+    frames = sim(total_laps=6).race([100000, 99000, 101000, 125000, 112000, 98500]).frames
+    assert run_rule(rule, frames)[2:] == [
+        "In lap, one forty-one point zero.",
+        "Out lap, two oh five point zero.",
+        "Lap five. one fifty-two point zero. thirteen point zero over best.",
+        "Lap six. one thirty-eight point five. New best by zero point five.",
+    ]
+
+
+def test_lap_time_in_and_out_on_one_lap(sim):
+    rule = _pit_laps(LapTimeRule(), 2, 2)
+    frames = sim(total_laps=3).race([100000, 120000, 99000]).frames
+    assert run_rule(rule, frames)[1] == "Pit lap, two oh zero point zero."
+
+
+def test_pit_lap_templates_are_configurable(sim):
+    rule = _pit_laps(LapTimeRule({"template_in_lap": "Lap {lap} in. {time}."}), 1, 2)
+    frames = sim(total_laps=2).race([100000, 101000]).frames
+    assert run_rule(rule, frames)[0] == "Lap one in. one forty point zero."
+
+
+def test_pit_lane_choice_is_checked():
+    assert PositionRule({"pit_lane": "drop", "hold_secs": 1}).pit_lane == "drop"
+    assert LapTimeRule().pit_lane == "hold"
+    with pytest.raises(ValueError, match="pit_lane"):
+        LapTimeRule({"pit_lane": "mute"})

@@ -176,10 +176,37 @@ async def test_track_verdict_reaches_the_brief_through_the_engine(tmp_path, sim)
     assert [c.text for c in spoken][0] == "Tsukuba Circuit. Two laps. P three of eight."
 
 
+def _pit_lane(entry, rest_secs=5, **over):
+    """From the driving frame after the entry cut: the limiter, ``rest_secs`` in the
+    box filling the tank, the drive off, the exit cut and the pit exit at 80 km/h.
+    ``over`` applies to every frame (a position change in the box, say)."""
+    from dataclasses import replace
+
+    from those_who_run.state import Phase
+
+    t, pid = entry.t, entry.packet_id
+    frames = []
+
+    def push(dt, **kw):
+        nonlocal t, pid
+        t, pid = t + dt, pid + 1
+        frames.append(replace(entry, t=t, packet_id=pid, **{"phase": Phase.IN_RACE, **over, **kw}))
+
+    push(0.1, speed_kph=60.0)
+    for i in range(rest_secs):
+        push(1.0, speed_kph=0.0, fuel_level=min(entry.fuel_level + 20 * (i + 1), 100.0))
+    push(1.0, speed_kph=40.0, fuel_level=100.0)
+    push(1.0, phase=Phase.LOADING, speed_kph=0.0, fuel_level=100.0)
+    push(0.02, speed_kph=80.0, fuel_level=100.0)
+    push(1.0, speed_kph=120.0, fuel_level=100.0)
+    return frames
+
+
 async def test_a_lap_posted_on_a_loading_frame_is_still_called(tmp_path, sim):
     """GT7 crosses the line into the pit cut-scene: the lap time and the counter
     bump arrive on a LOADING frame (Suzuka East, 2026-10-15). The engine compares
-    the next driving frame with the last one before the loading screen."""
+    the next driving frame with the last one before the loading screen. That cut
+    is the pit entry, so the lap is the in-lap and is called once out of the lane."""
     from dataclasses import replace
 
     from those_who_run.state import Phase
@@ -187,10 +214,13 @@ async def test_a_lap_posted_on_a_loading_frame_is_still_called(tmp_path, sim):
     s = sim(total_laps=3)
     s.race([60000], finish=False)
     crossing = replace(s.frames[-1], phase=Phase.LOADING, t=s.frames[-1].t)
-    frames = s.frames[:-1] + [crossing, replace(crossing, phase=Phase.IN_RACE, t=crossing.t + 0.1)]
+    frames = s.frames[:-1] + [crossing, *_pit_lane(crossing)]
     engine, _ = make_engine(tmp_path)
     spoken = await replay(iter(frames), engine, ConsolePlayer())
-    assert "Lap one. one oh zero point zero." in [c.text for c in spoken]
+    (lap,) = [c for c in spoken if c.rule == "lap_time"]
+    assert lap.text == "In lap, one oh zero point zero."
+    exit_t = engine.pits.status.stops[-1].exit_t
+    assert lap.created_at == exit_t, "held in the lane, spoken at the exit"
     assert [lap["lap"] for lap in engine.recorder.session.laps] == [1], "lap 1 stored on its own"
     engine.recorder.close()
 
@@ -247,3 +277,57 @@ async def test_an_unflagged_race_with_no_fuel_use_is_driven(tmp_path, sim):
     assert spoken[0] == "Three laps."
     assert engine.races_started == 1
     assert len(list((tmp_path / "sessions").iterdir())) == 1
+
+
+async def test_the_pit_lane_is_quiet_from_entry_to_exit(tmp_path, sim):
+    """#244: the lane crosses the line (SUGO, 2026-10-18). The lap call due in the
+    lane waits for the exit; a place lost a moment before the entry cut is dropped;
+    the net change follows the exit as before."""
+    from dataclasses import replace
+
+    from those_who_run.state import Phase
+
+    s = sim(total_laps=4, position=5)
+    s.race([60000], finish=False)
+    s.drive(20)  # past the start grace
+    s.drive(4, race_start_pos=6)  # stopped at the lane mouth: a place lost, called after settling
+    last = s.frames[-1]
+    entry = replace(last, t=last.t + 0.5, packet_id=last.packet_id + 1)
+    cut = replace(entry, phase=Phase.LOADING, current_lap=3, last_lap_ms=61000, best_lap_ms=60000)
+    lane = _pit_lane(replace(cut, phase=Phase.IN_RACE, speed_kph=60.0), race_start_pos=12)
+    out = lane[-1]
+    track = [replace(out, t=out.t + i, packet_id=out.packet_id + i) for i in range(1, 6)]
+    engine, queue = make_engine(tmp_path)
+    spoken = await replay(iter([*s.frames, cut, *lane, *track]), engine, ConsolePlayer())
+    (stop,) = engine.pits.status.stops
+    in_lane = [c.text for c in spoken if stop.entry_t <= c.created_at < stop.exit_t]
+    assert in_lane == []
+    after = [c.text for c in spoken if c.created_at >= stop.exit_t]
+    assert after == ["In lap, one oh one point zero.", "Down to twelfth."]
+    assert "Down to sixth." not in [c.text for c in spoken], "dropped at the entry"
+    assert queue.dropped == 1
+    engine.recorder.close()
+
+
+async def test_the_flag_in_the_lane_still_gets_the_held_calls(tmp_path, sim):
+    """Pitting at the end of the last lap where the lane crosses the line: there is
+    no exit to wait for, so the flag lets the held lap call go with the summary."""
+    from dataclasses import replace
+
+    from those_who_run.state import Phase
+
+    s = sim(total_laps=2)
+    s.race([60000], finish=False)
+    last = s.frames[-1]
+    cut = replace(last, t=last.t + 1, packet_id=last.packet_id + 1, phase=Phase.LOADING)
+    lane = replace(cut, t=cut.t + 0.1, packet_id=cut.packet_id + 1, phase=Phase.IN_RACE)
+    lane = replace(lane, speed_kph=60.0)
+    flag = replace(lane, t=lane.t + 1, packet_id=lane.packet_id + 1, current_lap=3)
+    flag = replace(flag, phase=Phase.FINISHED, last_lap_ms=70000)
+    engine, _ = make_engine(tmp_path)
+    await replay(iter([*s.frames, cut, lane]), engine, ConsolePlayer())
+    assert engine.in_pit_lane
+    texts = [c.text for c in engine.process(flag)]
+    assert texts[0] == "In lap, one ten point zero."
+    assert texts[1].startswith("Chequered flag.")
+    engine.recorder.close()

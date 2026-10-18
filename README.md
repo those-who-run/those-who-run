@@ -30,16 +30,23 @@ No cloud required. No subscription. One small box on your LAN.
 |---|---|---|
 | `start_brief` | two seconds into a race: track (if known), distance, grid slot | "Sportsland SUGO. Two laps. P ten of twenty." |
 | `start_brief` | the detector names the track after the brief, still on the first lap | "Nurburgring twenty-four hour." |
-| `lap_time` | every completed lap, including the in-lap to a pit stop | "Lap three. One forty-one point zero. One point five over best." |
+| `lap_time` | every completed lap | "Lap three. One forty-one point zero. One point five over best." |
+| `lap_time` | the in-lap and out-lap of a pit stop: no delta, no coaching | "In lap, one thirty point one." / "Out lap, one forty-seven point three." |
 | `lap_time` | a lap beats the best so far (own template and priority); in a lap-count race lap 2 is not measured against lap 1, the start | "Lap three. One thirty-nine point zero. New best by one point zero." |
 | `fuel` | estimate crosses 10, 5, 3, 2, 1 laps | "Fuel. Three laps remaining." |
 | `fuel` | the lap after this one cannot be completed, once per stint | "Pit this lap." |
 | `final_lap` | last lap of a lap-count race starts | "Final lap." |
-| `position` | a place is gained or lost (races only), after a 3 s settle, at most every 10 s, quiet for the first 15 s | "Up to sixth." |
+| `position` | a place is gained or lost (races only), after a 3 s settle and a 1 s hold, at most every 10 s, quiet for the first 15 s | "Up to sixth." |
 | `temps` | a tyre stays over 120 °C for five seconds (corners already over join it in one phrase); water or oil high; cold tyres at the start | "Rear tyres hot." |
 | `telemetry` | packets stop for 3 s mid-race or mid-pause, and when they return | "Lost telemetry." / "Telemetry back." |
 | `race_summary` | the chequered flag, or the end of a timed race (kept for 30 s, so it waits behind the final lap time) | "Chequered flag. Finished sixth. Best lap fifty-three point one." |
 | `race_summary` | leaving a time trial, practice or solo run, which have no flag (`quit_kinds`) | "Session done. Seven laps. Best lap forty-nine point seven." |
+
+The pit lane is quiet from entry to exit. Only fuel calls are spoken there.
+A lap call that falls due in the lane, where the lane crosses the line, is
+held and spoken at the exit. A position call still waiting in the queue at
+the entry is dropped: one call after the exit gives the net change. Each rule's
+`pit_lane` setting (`speak`, `hold` or `drop`) chooses what happens to it.
 
 The telemetry callout is the one thing not driven by frames: the live
 watchdog (`GT7_TELEMETRY_TIMEOUT_SECS`, 3 s) raises it, so a quiet headset is

@@ -47,3 +47,23 @@ def test_replay_queue_never_drops_even_with_a_callout_limit():
     q = CalloutQueue(max_age=None)
     q.push(Callout(text="summary", priority=25, rule="r", created_at=0.0, max_age=1.0))
     assert q.pop(100.0).text == "summary"
+
+
+def test_a_held_callout_waits_and_others_go_ahead():
+    q = CalloutQueue(max_age=None)
+    q.push(Callout(text="place", priority=12, rule="position", created_at=0.0, hold=1.0))
+    q.push(c("lap", 20, at=0.5))
+    assert q.pop(0.5).text == "lap", "the place is not due yet"
+    assert q.pop(0.9) is None
+    assert q.pop(1.0).text == "place"
+
+
+def test_queued_callouts_can_be_taken_back():
+    q = CalloutQueue(max_age=None)
+    q.push(c("place", 12, rule="position", at=1.0))
+    q.push(c("fuel", 15, rule="fuel", at=0.0))
+    q.push(c("place before", 12, rule="position", at=0.5))
+    taken = q.remove(lambda x: x.rule == "position")
+    assert [x.text for x in taken] == ["place before", "place"]
+    assert q.remove(lambda x: x.rule == "position") == []
+    assert q.pop(2.0).text == "fuel" and q.pop(2.0) is None

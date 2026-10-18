@@ -32,6 +32,13 @@ rules:
     small_gap_ms: 200       # template_new_best_small for a new best by less than this
     # template_new_best: "Lap {lap}. {time}. New best by {gap}."   # replaces the plain phrase
     new_best_priority: 11   # {gap} is the bare margin, {delta} the delta_faster wording
+    # A lap that holds a pit stop gets no delta and no coaching tag:
+    # template_in_lap: "In lap, {time}."     # the lap the car entered the pits on
+    # template_out_lap: "Out lap, {time}."   # the lap it left them on
+    # template_pit_lap: "Pit lap, {time}."   # both on one lap
+    # Between pit entry and exit: speak, hold (until the exit) or drop. Every
+    # rule takes it; fuel and race_summary speak, position drops, the rest hold.
+    pit_lane: hold          # a lap call due where the lane crosses the line waits for the exit
   fuel:
     enabled: true
     priority: 15
@@ -51,6 +58,7 @@ rules:
     tight_margin_laps: 0.5  # the fuel covers the race by less than this: one call a stint
     # template_tight: "Fuel to the flag, just. Save a little."
     # template_last_lap_enough: "Fuel is fine to the end."   # the final lap, after a warning
+    pit_lane: speak        # its calls are about the stop
   final_lap:
     enabled: true
     priority: 10
@@ -61,6 +69,8 @@ rules:
     settle_secs: 3         # wait for a burst of place changes to settle
     min_interval_secs: 10
     start_grace_secs: 15   # quiet while the field sorts itself out after the start
+    hold_secs: 1           # queued this long first: a pit entry seen meanwhile drops the call
+    pit_lane: drop         # the order before the stop; the net change follows the exit
     # template_gained: "Up to {position}."
     # template_lost: "Down to {position}."
   start_brief:
@@ -87,6 +97,7 @@ rules:
     quit_kinds: [solo_timed, solo_laps]
     quit_min_laps: 1
     # template_quit: "Session done. {laps}. {best}"
+    pit_lane: speak          # the flag can fall in a lane that crosses the line
   temps:
     enabled: true
     priority: 14

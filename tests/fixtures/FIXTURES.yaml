@@ -274,6 +274,9 @@ fixtures:
       - Fuel calls after a stop are rounded, not floored, "box next lap" comes
         before "box this lap" on the real in-lap, and a tight last stint gets
         one call.
+      - Nothing is spoken from pit entry to exit. The in-lap call is held until
+        the exit, a place lost 0.7 s before the entry is dropped, and in and out
+        laps get no delta (#244).
     tests: [test_pitstop, test_real_recording]
 
   - file: real-nuc-sugo-replay-2026-10-18.jsonl.gz

@@ -38,6 +38,10 @@ DEFAULT_RULES: dict[str, Any] = {
             "small_gap_ms": 200,
             "template_new_best": "Lap {lap}. {time}. New best by {gap}.",
             "new_best_priority": 11,
+            "template_in_lap": "In lap, {time}.",
+            "template_out_lap": "Out lap, {time}.",
+            "template_pit_lap": "Pit lap, {time}.",
+            "pit_lane": "hold",
         },
         "fuel": {
             "enabled": True,
@@ -58,6 +62,7 @@ DEFAULT_RULES: dict[str, Any] = {
             "tight_margin_laps": 0.5,
             "template_tight": "Fuel to the flag, just. Save a little.",
             "template_last_lap_enough": "Fuel is fine to the end.",
+            "pit_lane": "speak",
         },
         "final_lap": {"enabled": True, "priority": 10, "template": "Final lap."},
         "position": {
@@ -66,6 +71,8 @@ DEFAULT_RULES: dict[str, Any] = {
             "settle_secs": 3.0,
             "min_interval_secs": 10.0,
             "start_grace_secs": 15.0,
+            "hold_secs": 1.0,
+            "pit_lane": "drop",
             "template_gained": "Up to {position}.",
             "template_lost": "Down to {position}.",
         },
@@ -92,6 +99,7 @@ DEFAULT_RULES: dict[str, Any] = {
             "quit_kinds": ["solo_timed", "solo_laps"],
             "quit_min_laps": 1,
             "template_quit": "Session done. {laps}. {best}",
+            "pit_lane": "speak",
         },
         "temps": {
             "enabled": True,

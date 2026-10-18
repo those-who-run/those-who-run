@@ -15,6 +15,10 @@ Quiet in the pit lane. Places drop one by one while the car stands in the box
 (P5 to P11 at Circuit Gilles Villeneuve, 2026-10-17) and calling each is noise
 when the driver most needs quiet. The last position called is kept, so once
 the car is out and the order has settled, one call gives the net change.
+GT7 gives no warning of the entry: at SUGO (2026-10-18) the car stopped at
+the lane mouth and lost a place, and "Dropped back to eighth" was spoken 0.6 s
+before the entry cut. So a call waits ``hold_secs`` in the queue first, and the
+engine drops it if the entry comes in that time (``pit_lane: drop``, #244).
 
 Situational pools, used when configured: ``template_gained_lead`` (into first),
 ``template_gained_podium`` (into second or third), ``template_lost_lead``.

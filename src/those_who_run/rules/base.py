@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Literal, cast
 
 from those_who_run.callouts import Callout
 from those_who_run.phrasing import Phrasebook
@@ -13,6 +13,12 @@ from those_who_run.sessionkind import SessionKind
 from those_who_run.state import Phase, RaceState
 from those_who_run.trackdetect import TrackMatch
 from those_who_run.verbalise import tidy_sentence
+
+# What the engine does with a rule's callouts between pit entry and pit exit
+# (#244): speak them, hold them until the exit, or drop them. A callout still
+# queued at the entry is treated the same way.
+PitLane = Literal["speak", "hold", "drop"]
+PIT_LANE_CHOICES: tuple[PitLane, ...] = ("speak", "hold", "drop")
 
 
 class Rule(ABC):
@@ -24,6 +30,11 @@ class Rule(ABC):
         self.priority: int = int(self.cfg.get("priority", self.default_priority))
         max_age = self.cfg.get("max_age_seconds")
         self.max_age: float | None = float(max_age) if max_age is not None else None
+        self.hold_secs = float(self.cfg.get("hold_secs", 0.0))  # see Callout.hold
+        pit_lane = self.cfg.get("pit_lane", "hold")
+        if pit_lane not in PIT_LANE_CHOICES:
+            raise ValueError(f"{self.name}: pit_lane must be one of {PIT_LANE_CHOICES}")
+        self.pit_lane = cast(PitLane, pit_lane)
         self.phrases = Phrasebook(self.cfg, random.Random())
         self.session: SessionKind | None = None  # the engine's verdict, see on_session
         self.pits: PitStatus = NO_STOPS  # the engine's pit detector, see on_pit
@@ -89,6 +100,7 @@ class Rule(ABC):
             rule=self.name,
             created_at=state.t,
             max_age=self.max_age,
+            hold=self.hold_secs,
         )
 
     def template(self, key: str, default: str) -> str:

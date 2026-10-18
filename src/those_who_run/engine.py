@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.metrics import Metrics
@@ -33,6 +34,13 @@ log = logging.getLogger(__name__)
 FINISH_GRACE_SECS = 0.5  # inputs right at the line still count as the driver's
 FINISH_COAST_SECS = 3.0
 
+# The pit lane is quiet from entry to exit (#244), apart from the rules whose
+# ``pit_lane`` is "speak" (fuel: its calls are about the stop). Each other rule
+# says whether a callout raised in the lane, or still queued at the entry, is
+# held and spoken after the exit ("hold": a lap call where the lane crosses the
+# line, SUGO 2026-10-18) or dropped ("drop": a place called a moment before the
+# entry is the order before the stop, and the net change follows the exit).
+
 
 class Engine:
     def __init__(
@@ -60,6 +68,8 @@ class Engine:
         self.replay = False  # watching a GT7 replay: ignored until the next start
         self._held: list[RaceState] = []  # an unflagged start, until ReplayCheck decides
         self._held_prev: RaceState | None = None
+        self.in_pit_lane = False  # as the rules were last told, see _apply_pits
+        self.pit_held: list[Callout] = []  # raised in the pit lane, spoken after the exit
 
     def process(self, state: RaceState) -> list[Callout]:
         """Feed one frame. A session that starts with GT7's cars-on-track flag off is
@@ -128,6 +138,8 @@ class Engine:
             self.last_driving = None
             self.kinds.reset()
             self.pits.reset()
+            self.in_pit_lane = False
+            self.pit_held.clear()
             self.finished = False
             self._crossing = None
             self._coast_since = None
@@ -141,8 +153,9 @@ class Engine:
         # Before the rules: the crossing that closes an in-lap can come on the very
         # frame after the pit cut, and the fuel rule must know it was in the pits.
         pit = self.pits.observe(state)
+        released = []  # held in the pit lane, out now
         if pit is not None and self.session_open:
-            self._apply_pits(pit, state)
+            released = self._apply_pits(pit, state)
 
         # Rules and the lap store compare against the last driving frame. A pause or
         # a loading screen in between hides nothing: GT7 posts a lap on a loading
@@ -164,7 +177,7 @@ class Engine:
                 except Exception:  # noqa: BLE001
                     log.exception("rule %s failed on bridge", rule.name)
 
-        callouts: list[Callout] = []
+        callouts: list[Callout] = released
         if state.in_race or racing_frame(seen, state):
             for rule in self.rules:
                 try:
@@ -172,8 +185,12 @@ class Engine:
                 except Exception:  # noqa: BLE001
                     log.exception("rule %s failed", rule.name)
         callouts.extend(self._timed_finish(seen, state))
+        if self.in_pit_lane:
+            callouts = self._quiet(callouts)
         if state.phase is Phase.FINISHED:
             self.finished = True
+        if self.finished and self.pit_held:
+            callouts = self._release(state) + callouts  # finished in the lane: no exit
         if (
             race_ended(prev, state)
             and state.phase is not Phase.FINISHED
@@ -186,10 +203,7 @@ class Engine:
                 except Exception:  # noqa: BLE001
                     log.exception("rule %s failed at the end", rule.name)
         for c in callouts:
-            self.queue.push(c)
-            log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
-            if self.metrics is not None:
-                self.metrics.callouts_total.labels(c.rule).inc()
+            self._push(c)
 
         match = self.tracks.observe(state)
         if match is not None and self.session_open:
@@ -221,6 +235,12 @@ class Engine:
             self.last_driving = None
         self.prev = state
         return callouts
+
+    def _push(self, c: Callout) -> None:
+        self.queue.push(c)
+        log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
+        if self.metrics is not None:
+            self.metrics.callouts_total.labels(c.rule).inc()
 
     def _timed_finish(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         """Spot the end of a timed race with a field, see FINISH_COAST_SECS."""
@@ -282,7 +302,34 @@ class Engine:
             except Exception:  # noqa: BLE001
                 log.exception("rule %s failed on session update", rule.name)
 
-    def _apply_pits(self, status: PitStatus, state: RaceState) -> None:
+    def _policy(self, callout: Callout) -> str:
+        return next((r.pit_lane for r in self.rules if r.name == callout.rule), "hold")
+
+    def _quiet(self, callouts: list[Callout]) -> list[Callout]:
+        """Sort out callouts raised or queued in the pit lane: the ones to speak now
+        are returned, the rest held for the exit or dropped (see the top)."""
+        out = []
+        for c in callouts:
+            policy = self._policy(c)
+            if policy == "speak":
+                out.append(c)
+            elif policy == "hold":
+                self.pit_held.append(c)
+                log.info("callout held for the pit exit (%s): %s", c.rule, c.text)
+            else:
+                self.queue.dropped += 1
+                log.info("callout dropped in the pit lane (%s): %s", c.rule, c.text)
+        return out
+
+    def _release(self, state: RaceState) -> list[Callout]:
+        """The held callouts, as raised now: the time in the lane does not age them."""
+        out = [replace(c, created_at=state.t, hold=0.0) for c in self.pit_held]
+        self.pit_held.clear()
+        return out
+
+    def _apply_pits(self, status: PitStatus, state: RaceState) -> list[Callout]:
+        """Tell the rules, and quieten the queue at the entry. Returns the callouts
+        held in the lane, to speak now it is left."""
         if status.teleports and status.teleports[-1].t == state.t:
             jump = status.teleports[-1]
             log.info("teleport on lap %d, not a pit stop: %s", jump.lap, jump.evidence)
@@ -302,11 +349,18 @@ class Engine:
             )
         if self.recorder is not None and self.recorder.session is not None:
             self.recorder.set_pits(status)
+        released = []
+        if status.in_pit_lane and not self.in_pit_lane:
+            self._quiet(self.queue.remove(lambda c: self._policy(c) != "speak"))
+        elif not status.in_pit_lane:
+            released = self._release(state)
+        self.in_pit_lane = status.in_pit_lane
         for rule in self.rules:
             try:
                 rule.on_pit(status)
             except Exception:  # noqa: BLE001
                 log.exception("rule %s failed on pit update", rule.name)
+        return released
 
     def _apply_track(self, match: TrackMatch) -> None:
         """Keep the best answer the session has had; never downgrade on a blip. A

@@ -34,6 +34,9 @@ PLACEHOLDERS = {
         "delta_slower_large": {"delta"},
         "delta_faster": {"delta"},
         "delta_equal": set(),
+        "template_in_lap": {"lap", "time"},
+        "template_out_lap": {"lap", "time"},
+        "template_pit_lap": {"lap", "time"},
     },
     "fuel": {
         "template": {"laps"},

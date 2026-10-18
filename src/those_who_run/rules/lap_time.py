@@ -21,11 +21,20 @@ against lap 1 gets no delta, like the first lap. In a timed session lap 1
 counts only if GT7 counts it: it does in qualifying (out of the pits onto the
 line) and does not in a timed race with a grid ahead of the line (Suzuka
 East, 2026-10-16: 1:02.0 against 1:07.6 laps, GT7's best stayed blank).
+
+A lap that holds a pit stop (the pit detector's in-lap or out-lap) is not a
+slow lap: SUGO's out-laps hold some twenty seconds in the box and were called
+"twenty-five point one off best" (2026-10-18, #244). It gets its own phrase,
+``template_in_lap``, ``template_out_lap`` or ``template_pit_lap`` (one lap
+that is both), with no delta and no coaching tag, and is not a best. Where
+the lane crosses the line the call is due in the lane; the engine holds it
+until the exit (``pit_lane``).
 """
 
 from __future__ import annotations
 
 from those_who_run.callouts import Callout
+from those_who_run.pitstop import LapRole
 from those_who_run.rules.base import Rule
 from those_who_run.state import RaceState, lap_time_posted, posted_lap
 from those_who_run.verbalise import (
@@ -35,6 +44,12 @@ from those_who_run.verbalise import (
     spoken_delta_ms,
     tidy_sentence,
 )
+
+PIT_LAPS: dict[LapRole, tuple[str, str]] = {
+    "in": ("template_in_lap", "In lap, {time}."),
+    "out": ("template_out_lap", "Out lap, {time}."),
+    "in_out": ("template_pit_lap", "Pit lap, {time}."),
+}
 
 
 class LapTimeRule(Rule):
@@ -64,11 +79,16 @@ class LapTimeRule(Rule):
         prev_best = prev.best_lap_ms if prev.best_lap_ms > 0 else self.own_best_ms
         # GT7 leaves a start lap out of its best: posted, best still blank. Follow it.
         start_lap = lap_no == 1 and (state.has_lap_count or state.best_lap_ms <= 0)
-        counts = not start_lap
+        role = self.pits.lap_role(lap_no)
+        counts = not start_lap and role is None
         if counts and (self.own_best_ms <= 0 or state.last_lap_ms < self.own_best_ms):
             self.own_best_ms = state.last_lap_ms
         if lap_no == 1:
             self.lap1_ms = state.last_lap_ms
+        if role is not None:
+            key, default = PIT_LAPS[role]
+            text = self.template(key, default).format(lap=number_words(lap_no), time=time_words)
+            return [self.callout(tidy_sentence(text), state)]
         only_lap_1 = state.has_lap_count and lap_no == 2 and prev_best == self.lap1_ms
         if prev_best <= 0 or only_lap_1:
             delta = self.template("delta_first", "")

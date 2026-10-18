@@ -53,6 +53,17 @@ rules:
       - "Squeaked a new best. {time}. Up {gap}."
       - "New best by a hair. {time}. {gap} quicker."
       - "Marginal improvement. {time}. Up {gap}."
+    template_in_lap:           # a lap that holds a pit stop: no delta, no coaching
+      - "In lap, {time}."
+      - "That is the in lap. {time}."
+      - "In lap done, {time}."
+    template_out_lap:
+      - "Out lap, {time}."
+      - "Out lap done. {time}."
+      - "That was the out lap. {time}."
+    template_pit_lap:          # in and out on one lap
+      - "Pit lap, {time}."
+      - "In and out that lap. {time}."
   fuel:
     template:
       - "Fuel. {laps} remaining."

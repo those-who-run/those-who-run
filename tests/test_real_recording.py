@@ -36,6 +36,71 @@ SUGO_STOPS = Path(__file__).parent / "fixtures" / "real-nuc-sugo-two-stops-2026-
 SUGO_REPLAY = Path(__file__).parent / "fixtures" / "real-nuc-sugo-replay-2026-10-18.jsonl.gz"
 
 
+def _spoken_when(path):
+    """Replay ``path``; each callout with the frame time it was spoken at, and the
+    engine. The replay speaks a callout on the frame it is due."""
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
+    spoken = []
+    for s in read_recording(path, strict=True):
+        engine.process(s)
+        while (c := engine.queue.pop(s.t)) is not None:
+            spoken.append((s.t, c))
+    return engine, spoken
+
+
+def _in_the_lane(engine, spoken):
+    return [
+        c.text
+        for t, c in spoken
+        for stop in engine.pits.status.stops
+        if stop.entry_t <= t < (stop.exit_t or float("inf"))
+    ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [SUGO_STOPS, GILLES_STOP, WILLOW_STOP, PIT_STOP],
+    ids=["sugo", "gilles", "willow", "suzuka"],
+)
+def test_real_pit_lane_is_quiet_from_entry_to_exit(path):
+    """#244 AC1 (SUGO) and #155 AC1 (Gilles Villeneuve, Willow Springs): nothing is
+    spoken between pit entry and pit exit, whether the line is crossed in the entry
+    cut, the lane itself or the exit cut."""
+    engine, spoken = _spoken_when(path)
+    assert engine.pits.status.stops
+    assert _in_the_lane(engine, spoken) == []
+
+
+def test_real_sugo_two_stops_lane_across_the_line():
+    """Sportsland SUGO, twelve laps, NUC 2026-10-18 (outing 20261018-094323). The
+    lane crosses the line, so the in-laps (4 and 8) end at the entry cut and the
+    box falls on the out-laps (5 and 9). Live, "Dropped back to eighth" came 0.6 s
+    before the first entry (the car stopped at the lane mouth), lap 4 was called in
+    the lane with "slower by seven point nine, let's find the rhythm", and the
+    out-laps were "twenty-five point one off best" (#244)."""
+    engine, spoken = _spoken_when(SUGO_STOPS)
+    first, second = engine.pits.status.stops
+    assert [(s.in_lap, s.out_lap) for s in (first, second)] == [(4, 5), (8, 9)]
+    # AC1: after each exit, the held in-lap call and then the net position call
+    for stop, net in ((first, "Down to eighteenth."), (second, "Down to twentieth.")):
+        after = [c.text for t, c in spoken if stop.exit_t <= t < stop.exit_t + 10]
+        assert after[1] == net, after
+        assert after[0].startswith("In lap, ")
+    # R2: the place lost at the lane mouth, 0.7 s before the entry cut, is dropped
+    before = [c.text for t, c in spoken if first.entry_t - 5 <= t < first.entry_t]
+    assert before == []
+    # AC2: laps 4, 5, 8 and 9 hold a stop: no delta to best, no coaching tag
+    laps = [c.text for _, c in spoken if c.rule == "lap_time"]
+    assert laps[3:9] == [
+        "In lap, one thirty point one.",
+        "Out lap, one forty-seven point three.",
+        "Lap six. one twenty-two point nine. zero point seven over best.",
+        "Lap seven. one twenty-three point two. one point zero over best.",
+        "In lap, one forty-seven point seven.",
+        "Out lap, one forty-seven point five.",
+    ]
+
+
 def test_fixture_phases_cover_the_whole_session():
     phases = {s.phase for s in read_recording(FIXTURE, strict=True)}
     assert phases == {Phase.MENU, Phase.LOADING, Phase.AT_TRACK, Phase.IN_RACE, Phase.FINISHED}
@@ -211,9 +276,10 @@ async def test_real_pit_stop_race(tmp_path):
         "Pit this lap.",
         "Fuel. one lap remaining.",
         "Lap two. one oh zero point five.",
-        # the in-lap, posted on the loading frame; no fuel call on the way into the pits
-        "Lap three. one twenty-two point five. twenty-two point zero over best.",
-        "Lap four. one oh nine point nine. nine point four over best.",
+        # the in-lap, posted on the loading frame; no fuel call on the way into the
+        # pits, and no delta for a lap that holds a stop (#244): held to the exit
+        "In lap, one twenty-two point five.",
+        "Out lap, one oh nine point nine.",
         "Final lap.",
         "Lap five. fifty-nine point five. New best by one point zero.",
         "Lap six. one oh zero point three. zero point eight over best.",
@@ -256,11 +322,12 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
         "Lap five. one thirty-eight point four. zero point nine over best.",
         "Up to sixth.",
         "Up to fifth.",
-        # quiet in the pit lane while P5 drops to P11 in the box
-        "Lap six. two oh zero point one. twenty-two point six over best.",
+        # quiet in the pit lane while P5 drops to P11 in the box; lap 6 ends in the
+        # lane, so its call waits for the exit (#244)
+        "In lap, two oh zero point one.",
         "Down to tenth.",  # the net change, once out of the pits
         "Up to ninth.",
-        "Lap seven. one forty-two point two. four point seven over best.",
+        "Out lap, one forty-two point two.",
         "Up to sixth.",
         "Fuel to the flag, just. Save a little.",  # 4.47 laps of fuel for the last four
         "Lap eight. one thirty-seven point eight. zero point three over best.",
@@ -285,10 +352,10 @@ async def test_real_pit_stop_crossed_in_the_exit_cut(tmp_path):
     pits, not into them. The out-lap (13.3) is left out; lap 8 (12.6) is the first
     fuel lap of the new stint."""
     engine, texts, laps = await _replay_with_store(WILLOW_STOP, tmp_path, end=True)
-    fuel = [t for t in texts if t.startswith(("Fuel", "Pit", "Lap"))]
+    fuel = [t for t in texts if t.startswith(("Fuel", "Pit", "Lap", "In lap", "Out lap"))]
     assert fuel == [
-        "Lap six. one thirty-six point six. sixteen point seven over best.",
-        "Lap seven. one twenty-four point two. four point three over best.",
+        "In lap, one thirty-six point six.",
+        "Out lap, one twenty-four point two.",
         "Lap eight. one twenty-one point nine. two point zero over best.",
     ]
     assert _pit_column(tmp_path) == ["in", "out", None, None]  # lap 9 is cut short
@@ -304,7 +371,7 @@ async def test_real_fuel_calls_through_two_stops(tmp_path):
     lap early on 1.83, then nothing on the real box lap, and nothing in a last
     stint that made the flag by 0.13 of a lap (#247)."""
     _, texts, _ = await _replay_with_store(SUGO_STOPS, tmp_path)
-    calls = [t for t in texts if t.startswith(("Fuel", "Pit", "Box", "Lap"))]
+    calls = [t for t in texts if t.startswith(("Fuel", "Pit", "Box", "Lap", "In lap", "Out lap"))]
     assert calls == [
         # stint 1, as before, and "box next lap" with 2.06 laps (in on lap 4)
         "Fuel. three laps remaining.",  # 3.51
@@ -315,20 +382,20 @@ async def test_real_fuel_calls_through_two_stops(tmp_path):
         "Pit this lap.",
         "Fuel critical. Less than one lap.",  # 0.89
         "Lap three. one twenty-three point seven. one point five over best.",
-        "Lap four. one thirty point one. seven point nine over best.",
+        "In lap, one thirty point one.",  # due in the lane, held to the exit (#244)
         # stint 2: the out-lap is not measured, stint 1's laps still weigh in
         "Fuel. Just under three laps.",  # 2.99, laps 6, 7 and 8
-        "Lap five. one forty-seven point three. twenty-five point one over best.",
+        "Out lap, one forty-seven point three.",
         "Box next lap.",
         "Fuel. Just under two laps.",  # 1.83
         "Lap six. one twenty-two point nine. zero point seven over best.",
         "Pit this lap.",  # lap 8, the in-lap
         "Fuel. one lap remaining.",  # 1.06
         "Lap seven. one twenty-three point two. one point zero over best.",
-        "Lap eight. one forty-seven point seven. twenty-five point five over best.",
+        "In lap, one forty-seven point seven.",
         # stint 3: 3.17 laps for three, then quiet to the flag on 3.3 per cent
         "Fuel to the flag, just. Save a little.",
-        "Lap nine. one forty-seven point five. twenty-five point three over best.",
+        "Out lap, one forty-seven point five.",
         "Lap ten. one twenty-three point six. one point four over best.",
         "Lap eleven. one twenty-two point eight. zero point six over best.",
         "Lap twelve. one twenty-three point four. one point two over best.",

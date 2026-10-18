@@ -100,9 +100,6 @@ flowchart LR
 
 ## Open decisions
 
-- HTTPS for the pit wall (#252). An installable dashboard and the screen wake
-  lock need a secure context (ADR 0003, #240); the pit wall is plain HTTP
-  today.
 - Pit wall access: LAN only like the other home-lab apps (current
   assumption), or behind a login.
 - AI coach: local model only, or allow an optional hosted model. Planned as
@@ -128,6 +125,11 @@ flowchart LR
   wall and the wheel dashboards.
 - Own the GT7 decoder (#235, ADR 0003 point 8): Salsa20 and the packet
   layouts in our own code; gt-telem is dropped in 0.6.
+- HTTPS for the pit wall (#252): cert-manager with a home-lab CA (option B).
+  Traefik serves `https://pitwall.nuc.home.arpa` and redirects HTTP to it;
+  phones and tablets trust the CA once (home-lab
+  `manifests/cert-manager/README.md`, the deployment repo). This
+  gives #240 the secure context for install and the screen wake lock.
 
 ## Milestones before 2026-10-17
 

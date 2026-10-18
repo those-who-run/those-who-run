@@ -121,7 +121,7 @@ is unchanged by the rebrand.
 | `GT7_CACHE_MAX_MB` | `100` | Size cap for the speech cache; the least recently used clips go first. |
 | `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
-| `PITWALL_URL` | unset | Pit wall base URL, e.g. `http://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
+| `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
@@ -450,8 +450,10 @@ on `GT7_METRICS_PORT` for `run`, and the pit wall's `/_stcore/health` on
 
 ### Pit wall on the NUC
 
-On the NUC the pit wall is at **http://pitwall.nuc.home.arpa** (LAN only, no
-login). It's the Deployment `those-who-run-pitwall` in namespace
+On the NUC the pit wall is at **https://pitwall.nuc.home.arpa** (LAN only, no
+login). The certificate is from the home lab's own CA, which each phone or
+tablet trusts once (home-lab `manifests/cert-manager/README.md`); plain
+HTTP redirects to HTTPS. It's the Deployment `those-who-run-pitwall` in namespace
 `those-who-run`, next to the engineer. It uses the same image and tag, with
 `args: ["web"]`. The manifests are in
 the deployment repo under
@@ -477,8 +479,8 @@ kubectl --context=my-cluster apply -k manifests/those-who-run/overlays/local
 kubectl --context=my-cluster -n those-who-run rollout status deploy/those-who-run-pitwall
 
 # check it
-curl -s http://pitwall.nuc.home.arpa/_stcore/health    # ok
-# (or -H 'Host: pitwall.nuc.home.arpa' http://192.0.2.216/... if the name doesn't resolve)
+curl -s --cacert local-ca.crt https://pitwall.nuc.home.arpa/_stcore/health    # ok
+# (add --resolve pitwall.nuc.home.arpa:443:192.0.2.216 if the name doesn't resolve)
 kubectl --context=my-cluster -n those-who-run exec deploy/those-who-run-pitwall -- \
   touch /data/sessions/x                               # fails: Read-only file system
 ```

@@ -29,7 +29,12 @@ jobs:
           enable-cache: true
       - run: make venv
       # The same command as locally: lint, mypy, and tests with the coverage floor.
+      # Tests that replay an archived outing fetch it from the `outings` release
+      # with gh (ADR 0002), which needs a token; without one they skip, and a skip
+      # fails make check.
       - run: make check
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   image:
     runs-on: ubuntu-latest

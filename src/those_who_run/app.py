@@ -210,7 +210,9 @@ class App:
         self._store_open = True
         stack.callback(self._close_store)  # only if what follows fails to build
         self.voice_model = settings.require_voice_model()  # before any socket or Discord
-        self.engine = Engine(rules, self.queue, self.store, self.metrics)
+        self.engine = Engine(
+            rules, self.queue, self.store, self.metrics, self.settings.pause_limit_secs
+        )
         self.speech = self._make_speech(self)
         self.player = self._make_player(self)
         self.states: asyncio.Queue[RaceState] = asyncio.Queue(maxsize=600)
@@ -279,7 +281,7 @@ class App:
         self.store.on_end = None  # the loop is going: no card for a session cut short here
         if self.store.session is not None and self.engine.prev is not None:
             log.info("closing session %s", self.store.session.session_id)
-            self.store.end_session(self.engine.prev)
+            self.engine.close_session()  # in a pause, it ends paused (#229)
         self._close_store()
 
     def _close_store(self) -> None:
@@ -324,6 +326,8 @@ class App:
                 metrics.telemetry_connected.set(1 if now_connected else 0)
                 if now_connected != was and (was is not None or now_connected):
                     log.info("telemetry %s", "connected" if now_connected else "lost")
+                    if not now_connected:
+                        self.engine.feed_lost()  # in a pause, the session ends paused (#229)
                 was = now_connected
                 for c in voice.observe(now_connected, self.engine.prev, time.monotonic()):
                     self.queue.push(c)

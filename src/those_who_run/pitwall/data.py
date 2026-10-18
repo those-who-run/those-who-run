@@ -32,6 +32,7 @@ from those_who_run.results import (
     best_lap,
     build_card,
     kind_label,
+    paused_result,
     position_shown,
     race_time,
     track_label,
@@ -71,6 +72,7 @@ class SessionRow:
     laps_completed: int
     closed: bool  # summary.json written: the session has ended
     track_id: int | None = None  # only when the detector is sure: probable or confirmed
+    driving_ms: int | None = None  # time not paused (#229); None for older sessions
 
     @property
     def kind_name(self) -> str:
@@ -78,6 +80,9 @@ class SessionRow:
 
     @property
     def minutes(self) -> float | None:
+        """How long the session ran, pauses left out (#229)."""
+        if self.driving_ms is not None:
+            return self.driving_ms / 60000
         return None if self.ended_at is None else (self.ended_at - self.started_at) / 60
 
     def started(self, tz: tzinfo | None = None) -> datetime:
@@ -321,6 +326,9 @@ def _row(summary: dict[str, Any], closed: bool) -> SessionRow:
         # No full lap: no card either, but still a row.
         title = f"{track_label(summary.get('track'))} · {kind_label(kind, total_laps, summary)}"
         result = "no full lap" if closed else "Running, no full lap yet"
+        if closed and summary.get("ended_paused"):
+            position = summary.get("final_position") if position_shown(kind_rec) else None
+            result = f"{paused_result(summary, position)}, no full lap"
         car = summary.get("car_name")
         facts = (("Car", car),) if car else ()
     return SessionRow(
@@ -336,6 +344,7 @@ def _row(summary: dict[str, Any], closed: bool) -> SessionRow:
         laps_completed=laps,
         closed=closed,
         track_id=sure_track_id(summary.get("track")),
+        driving_ms=summary.get("driving_ms"),
     )
 
 

@@ -405,6 +405,7 @@ class Session:
     last_cars: int | None = None  # nor a car count
     gt7_best_ms: int = 0  # GT7's own best, which leaves out a start lap
     pits: PitStatus = NO_STOPS  # see SessionStore.set_pits
+    start_t: float = 0.0  # frame time of the first frame, for the driving time
 
 
 class SessionStore:
@@ -432,6 +433,9 @@ class SessionStore:
         _ensure_column(self._db, "sessions", "start_type", "TEXT")
         _ensure_column(self._db, "sessions", "posted_at", "REAL")
         _ensure_column(self._db, "sessions", "pit_stops", "INTEGER")
+        _ensure_column(self._db, "sessions", "paused_ms", "INTEGER")
+        _ensure_column(self._db, "sessions", "driving_ms", "INTEGER")
+        _ensure_column(self._db, "sessions", "ended_paused", "INTEGER")
         _ensure_column(self._db, "laps", "pit", "TEXT")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
@@ -483,6 +487,7 @@ class SessionStore:
             total_laps=state.total_laps,
             fuel_at_start=state.fuel_level,
             lap_start_fuel=state.fuel_level,
+            start_t=state.t,
         )
         self._write(
             "INSERT INTO sessions (id, started_at, type, track_id, car_code, total_laps)"
@@ -662,12 +667,29 @@ class SessionStore:
             raise LapNotIndexed(str(exc)) from exc
         return took
 
-    def end_session(self, state: RaceState, finished: bool = False) -> Path | None:
+    def end_session(
+        self,
+        state: RaceState,
+        finished: bool = False,
+        paused_secs: float = 0.0,
+        paused_since: float | None = None,
+    ) -> Path | None:
         """Close the open session. ``finished``: it ended at the line (the engine's
-        timed-race finish); a FINISHED frame counts on its own."""
+        timed-race finish); a FINISHED frame counts on its own.
+
+        Time paused is not driving time (#229): ``paused_secs`` is the session's
+        time paused up to ``state``, and ``driving_ms`` the rest. ``paused_since``
+        (frame time) is the pause the session ends in, when the feed was lost or the
+        engineer stopped during it; such a session ``ended_paused``, and its
+        wall-clock ``ended_at`` is when that pause began."""
         s = self.session
         if s is None:
             return None
+        driving_ms = max(round((state.t - s.start_t - paused_secs) * 1000), 0)
+        paused_ms = round(paused_secs * 1000)
+        ended_at = self.clock()
+        if paused_since is not None:
+            ended_at = min(ended_at, s.started_at + max(paused_since - s.start_t, 0.0))
         if s.buffer:
             # Partial lap at the end of a session (quit, or the lap in progress).
             self._flush_lap(s.buffer[-1][2], state, complete=False)
@@ -680,7 +702,10 @@ class SessionStore:
             "session_id": s.session_id,
             "type": s.type,
             "started_at": s.started_at,
-            "ended_at": self.clock(),
+            "ended_at": ended_at,
+            "driving_ms": driving_ms,  # frame time from start to end, less the pauses
+            "paused_ms": paused_ms,
+            "ended_paused": paused_since is not None,  # the feed went in a pause
             "track_id": s.track_id,
             "track": s.track,
             "session_kind": s.kind,
@@ -707,7 +732,8 @@ class SessionStore:
         write_summary(s.dir / "summary.json", summary)
         self._write(
             "UPDATE sessions SET ended_at = ?, laps_completed = ?, best_lap_ms = ?, fuel_used = ?,"
-            " final_position = ?, track_id = COALESCE(track_id, ?) WHERE id = ?",
+            " final_position = ?, track_id = COALESCE(track_id, ?), driving_ms = ?,"
+            " paused_ms = ?, ended_paused = ? WHERE id = ?",
             (
                 summary["ended_at"],
                 len(completed),
@@ -715,6 +741,9 @@ class SessionStore:
                 summary["fuel_used"],
                 summary["final_position"],
                 s.track_id,
+                driving_ms,
+                paused_ms,
+                int(paused_since is not None),
                 s.session_id,
             ),
         )

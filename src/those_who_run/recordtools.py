@@ -3,7 +3,8 @@
 Each outing recording (``GT7_RECORD_DIR``) is replayed through the engine and a
 throwaway session store, so the answer is exactly what the live engineer would
 have stored: session kind, track, car, laps, best lap and how it ended (the
-flag, a quit, a restart, or still open when the recording stops).
+flag, a quit, a restart, in a pause the recording stops in, or still open when
+it stops). The minutes are the time not paused (#229).
 
 Frames carry the PS5 link's own clock, which is not the time of day (it reads
 as March 1970), so the throwaway store is given wall-clock time instead: the
@@ -34,8 +35,8 @@ from those_who_run.store import SessionStore
 @dataclass(frozen=True, slots=True)
 class RecordedSession:
     offset_secs: float  # from the first frame of the recording
-    minutes: float
-    ended: str  # flag | quit | restart | open
+    minutes: float  # pauses left out
+    ended: str  # flag | quit | restart | paused | open
     summary: dict[str, Any]
 
     def line(self) -> str:
@@ -94,7 +95,10 @@ def summarise_recording(path: Path) -> tuple[list[RecordedSession], bool]:
         def collect(ended: str, at: float) -> None:
             for s in pending:
                 begun = starts.pop(0) if starts else at
-                out.append(RecordedSession(begun - (first_t or at), (at - begun) / 60, ended, s))
+                driving = s.get("driving_ms")
+                minutes = (at - begun) / 60 if driving is None else driving / 60000
+                ended = "paused" if s.get("ended_paused") else ended
+                out.append(RecordedSession(begun - (first_t or at), minutes, ended, s))
             pending.clear()
 
         recording = read_recording(path)
@@ -116,7 +120,7 @@ def summarise_recording(path: Path) -> tuple[list[RecordedSession], bool]:
             # False when the outing was still being written, or cut off by a crash.
             complete = recording.complete
             if store.session is not None and prev is not None:
-                store.end_session(prev)
+                engine.close_session()
                 collect("open", prev.t)
         finally:
             store.close()  # on every path: it owns a writer thread

@@ -75,8 +75,7 @@ async def run_replay(
             try:
                 # A session still open when the recording stops is ended, so the
                 # store is complete: every session has its summary.json.
-                if store.session is not None and engine.prev is not None:
-                    store.end_session(engine.prev)
+                engine.close_session()
             finally:
                 store.close()
     log.info("replay summary: %s", summarise(spoken, queue))

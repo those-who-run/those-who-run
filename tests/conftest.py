@@ -31,6 +31,9 @@ def make_state(**over) -> RaceState:
         total_cars=16,
     )
     base.update(over)
+    if "pos_x" not in over:
+        # A car that moves: a moving car frozen in place is a pause (pause.py).
+        base["pos_x"] = base["t"] * base["speed_kph"] / 3.6
     if "phase" not in over:
         base["phase"] = derive_phase(base["current_lap"], base["total_laps"], False, False)
     if "cars_on_track" not in over:

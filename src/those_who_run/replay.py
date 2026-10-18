@@ -18,6 +18,7 @@ from typing import Any, TextIO, cast
 from those_who_run.audio.player import Player
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.engine import Engine
+from those_who_run.pause import PauseClock
 from those_who_run.state import Phase, RaceState
 
 log = logging.getLogger(__name__)
@@ -87,12 +88,27 @@ class OutingRecorder:
     seen is written first, so a replay starts from a known state) and closes on
     the next menu frame. Loading screens and the track screen between races
     stay inside the same outing. The newest ``keep`` files are kept.
+
+    A pause (``PauseClock``: paused frames, or GT7's frozen stream) is written at
+    one frame per ``paused_every`` seconds, with its first and last frame, so a
+    replay still sees the pause and how long it was. An hour paused was 96% of a
+    5.7 MB outing at 60 Hz (20261017-205541, #229). 0 writes every frame.
     """
 
-    def __init__(self, directory: Path, keep: int = 20, clock: Any = time.time) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        keep: int = 20,
+        clock: Any = time.time,
+        paused_every: float = 1.0,
+    ) -> None:
         self.directory = Path(directory)
         self.keep = keep
         self.clock = clock
+        self.paused_every = paused_every
+        self._pauses = PauseClock()
+        self._paused_t: float | None = None  # the last paused frame written
+        self._held: RaceState | None = None  # the last paused frame, not written yet
         self.path: Path | None = None
         self.count = 0  # frames written, all outings
         self.outings = 0
@@ -100,6 +116,15 @@ class OutingRecorder:
         self._last_menu: RaceState | None = None
 
     def write(self, state: RaceState) -> None:
+        paused = self._pauses.observe(state).phase is Phase.PAUSED
+        if paused and self._writer is not None and self.paused_every > 0:
+            if self._paused_t is not None and state.t - self._paused_t < self.paused_every:
+                self._held = state
+                return
+            self._paused_t, self._held = state.t, None
+        else:
+            self._paused_t = None
+            self._release()
         if state.phase is Phase.MENU:
             self._last_menu = state
             if self._writer is not None:
@@ -111,6 +136,12 @@ class OutingRecorder:
             if self._last_menu is not None:
                 self._write(self._last_menu)
         self._write(state)
+
+    def _release(self) -> None:
+        """Write the pause's last frame, held back in case another came."""
+        held, self._held = self._held, None
+        if held is not None and self._writer is not None:
+            self._write(held)
 
     def _write(self, state: RaceState) -> None:
         assert self._writer is not None
@@ -137,6 +168,7 @@ class OutingRecorder:
     def close(self) -> None:
         if self._writer is None:
             return
+        self._release()
         n = self._writer.count
         self._writer.close()
         self._writer = None

@@ -111,7 +111,8 @@ fixtures:
       - The engine records the session kind in the session, the metrics and
         the rules.
       - The stored best lap matches the results card.
-    tests: [test_best_lap_stored, test_real_recording, test_recordtools, test_results, test_sessionkind]
+      - Ten minutes paused mid-lap 2 changes nothing but the paused time (#229).
+    tests: [test_best_lap_stored, test_pause, test_real_recording, test_recordtools, test_results, test_sessionkind]
 
   - file: real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz
     date: 2026-10-15
@@ -341,7 +342,9 @@ fixtures:
         screen at lap 0, so it ends the session like a quit, and the next race
         starts a clean one (#157 AC1).
       - The lap-1 restart's session has no full lap and no card.
-    tests: [test_real_recording]
+      - GT7's frozen pause stream (45 s of identical in_race frames on lap 2) is a
+        pause, counted as paused, and nothing is said in it (#229).
+    tests: [test_pause, test_real_recording]
 
 outings:
   - id: "20261016-183946"

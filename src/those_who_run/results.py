@@ -81,6 +81,8 @@ def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card 
         result = f"Finished P{position}{of_cars}" if position else "Finished"
         if total:
             result += f" in {race_time(total)}"
+    elif summary.get("ended_paused"):
+        result = paused_result(summary, position)
     elif kind == "lap_race" and total_laps:
         result = f"Retired on lap {min(laps + 1, total_laps)} of {total_laps}"
         if position:
@@ -119,6 +121,17 @@ def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card 
         timestamp=datetime.fromtimestamp(started, UTC) if started else None,
         url=session_link(pitwall_url, summary.get("session_id")),
     )
+
+
+def paused_result(summary: dict[str, Any], position: object = None) -> str:
+    """A session that ended in a pause, the feed lost or the engineer stopped
+    (#229): "Paused on lap 1, P2", "Paused on lap 3 of 5". It is not a retirement:
+    the race may still be paused on the PS5."""
+    laps = int(summary.get("laps_completed") or 0)
+    total = int(summary.get("total_laps") or 0)
+    lap = min(laps + 1, total) if total else laps + 1
+    result = f"Paused on lap {lap}" + (f" of {total}" if total else "")
+    return result + (f", P{position}" if position else "")
 
 
 def position_shown(kind_rec: dict[str, Any] | None) -> bool:

@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.metrics import Metrics
+from those_who_run.pause import PauseClock
 from those_who_run.pitstop import NO_STOPS, PitDetector, PitStatus
 from those_who_run.rules.base import Rule
 from those_who_run.rules.fuel import FuelRule
@@ -41,6 +42,11 @@ FINISH_COAST_SECS = 3.0
 # line, SUGO 2026-10-18) or dropped ("drop": a place called a moment before the
 # entry is the order before the stop, and the net change follows the exit).
 
+# A pause never ends a session on its own (#229): GT7 keeps a paused race for as
+# long as the PS5 stays on, and so does the engineer. The session ends paused when
+# the feed is lost during the pause (the PS5 switched off or put to rest) or the
+# engineer stops, or, with ``pause_limit_secs``, after a pause that long.
+
 
 class Engine:
     def __init__(
@@ -49,6 +55,7 @@ class Engine:
         queue: CalloutQueue,
         recorder: SessionStore | None = None,
         metrics: Metrics | None = None,
+        pause_limit_secs: float = 0.0,
     ) -> None:
         self.rules = rules
         self.queue = queue
@@ -70,12 +77,19 @@ class Engine:
         self._held_prev: RaceState | None = None
         self.in_pit_lane = False  # as the rules were last told, see _apply_pits
         self.pit_held: list[Callout] = []  # raised in the pit lane, spoken after the exit
+        self.pauses = PauseClock()
+        self.pause_limit_secs = pause_limit_secs  # 0 is no limit, see the top
+        self.ended_paused = False  # ended in a pause: ignored until the next start
 
     def process(self, state: RaceState) -> list[Callout]:
         """Feed one frame. A session that starts with GT7's cars-on-track flag off is
         held back, at most ``DriverCheck.window_secs``, until it is known to be a
         drive (its frames then go through as if never held), a replay (#243) or
-        GT7's attract-mode demo race (#260)."""
+        GT7's attract-mode demo race (#260).
+
+        A frozen frame is read as the pause it is (``PauseClock``) before anything
+        else sees it."""
+        state = self.pauses.observe(state)
         prev = self.prev
         if self._held:
             self._held.append(state)
@@ -97,7 +111,7 @@ class Engine:
             recorder, last = self.recorder, self._held_prev
             if recorder is not None and recorder.session is not None and last is not None:
                 log.info("closing open session on %s start", verdict)
-                recorder.end_session(last)
+                self._end_session(last)
             self.last_driving = None
             return []
         self.driver.see(state)
@@ -107,11 +121,64 @@ class Engine:
             self.driver.start(state)
             self.prev = state
             return []
-        if self.replay and not starting:
+        if (self.replay or self.ended_paused) and not starting:
             self.prev = state
             return []
-        self.replay = False
+        self.replay = self.ended_paused = False
+        if (
+            self.pause_limit_secs > 0
+            and self.pauses.since is not None
+            and state.t - self.pauses.since >= self.pause_limit_secs
+            and self.session_open
+            and self.last_driving is not None
+        ):
+            self._end_paused(state, f"paused for {self.pause_limit_secs / 60:.0f} min")
+            self.prev = state
+            return []
         return self._step(state)
+
+    def feed_lost(self) -> bool:
+        """The live watchdog lost the feed. During a pause that ends the session,
+        paused (#229): the PS5 was switched off or put to rest. Lost while driving,
+        the session stays open: the feed may come back. True if it ended."""
+        if self.pauses.since is None or self.prev is None or self.last_driving is None:
+            return False
+        if not self.session_open:
+            return False
+        self._end_paused(self.prev, "the feed was lost")
+        return True
+
+    def close_session(self) -> None:
+        """End the open session where the frames stop (the engineer stopping, or the
+        end of a replay): paused when they stop in a pause."""
+        if self.recorder is None or self.recorder.session is None or self.prev is None:
+            return
+        if self.pauses.since is not None:
+            self._end_paused(self.prev, "the frames stopped")
+            return
+        self._end_session(self.prev)
+
+    def _end_paused(self, state: RaceState, why: str) -> None:
+        """End the session as of the start of its pause, and ignore the frames until
+        the next start: if the race carries on after this, it is not watched."""
+        log.info("session ended paused on lap %d: %s", state.current_lap, why)
+        self._end_session(state)
+        self.ended_paused = True
+        self.last_driving = None
+        self.track = None
+        self.queue.clear()
+        self.pit_held.clear()
+
+    def _end_session(self, state: RaceState, finished: bool = False) -> None:
+        """Close the open session with the pause clock's view of it."""
+        if self.recorder is None or self.recorder.session is None:
+            return
+        self.recorder.end_session(
+            state,
+            finished=finished,
+            paused_secs=self.pauses.paused_for(state.t),
+            paused_since=self.pauses.since,
+        )
 
     def _step(self, state: RaceState) -> list[Callout]:
         prev = self.prev
@@ -119,7 +186,7 @@ class Engine:
         if race_started(prev, state) or restarted:
             if self.recorder is not None and self.recorder.session is not None and prev is not None:
                 log.info("closing open session on race %s", "restart" if restarted else "start")
-                self.recorder.end_session(prev)
+                self._end_session(prev)
             self.races_started += 1
             log.info(
                 "race start: track %s, %s laps, fuel %.1f/%.0f",
@@ -141,6 +208,7 @@ class Engine:
             self.pits.reset()
             self.in_pit_lane = False
             self.pit_held.clear()
+            self.pauses.reset()
             self.finished = False
             self._crossing = None
             self._coast_since = None
@@ -220,7 +288,7 @@ class Engine:
                 if self.track is not None and self.tracks.match.decision == self.track.decision:
                     self.recorder.set_track(self.tracks.match)  # final candidates and fit
                 self.recorder.set_pits(self.pits.status)  # fuel and time of a stop still open
-                self.recorder.end_session(state, finished=self.finished)
+                self._end_session(state, finished=self.finished)
                 self.track = None
 
         if self.metrics is not None:
@@ -246,6 +314,8 @@ class Engine:
     def _timed_finish(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         """Spot the end of a timed race with a field, see FINISH_COAST_SECS."""
         kind = self.kinds.kind
+        if state.phase is Phase.PAUSED:
+            self._coast_since = None  # a frozen car is not coasting
         if (
             self.finished
             or prev is None

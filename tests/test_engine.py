@@ -364,7 +364,10 @@ async def test_the_pit_lane_is_quiet_from_entry_to_exit(tmp_path, sim):
     cut = replace(entry, phase=Phase.LOADING, current_lap=3, last_lap_ms=61000, best_lap_ms=60000)
     lane = _pit_lane(replace(cut, phase=Phase.IN_RACE, speed_kph=60.0), race_start_pos=12)
     out = lane[-1]
-    track = [replace(out, t=out.t + i, packet_id=out.packet_id + i) for i in range(1, 6)]
+    track = [  # driving away: a car frozen in place would be a pause (#229)
+        replace(out, t=out.t + i, packet_id=out.packet_id + i, pos_x=out.pos_x + 20 * i)
+        for i in range(1, 6)
+    ]
     engine, queue = make_engine(tmp_path)
     spoken = await replay(iter([*s.frames, cut, *lane, *track]), engine, ConsolePlayer())
     (stop,) = engine.pits.status.stops

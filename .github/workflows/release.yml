@@ -38,7 +38,11 @@ jobs:
       - name: Tag matches the package version
         id: v
         run: .venv/bin/python scripts/release_version.py "$GITHUB_REF_NAME"
+      # As in CI: archived-outing tests fetch from the outings release with gh
+      # (ADR 0002), which needs a token (contents: read); a skip fails make check.
       - run: make check
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   publish:
     runs-on: ubuntu-latest

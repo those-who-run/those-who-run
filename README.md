@@ -126,6 +126,7 @@ is unchanged by the rebrand.
 | `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
+| `GT7_PAUSE_LIMIT_SECS` | `0` (no limit) | End a session that has been paused this long, as ended paused. By default a pause of any length keeps the session, as GT7 keeps the race; losing the feed during a pause (the PS5 switched off or put to rest) ends it. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
 | `GT7_WEB_PORT` | `8501` | The pit wall (`those-who-run web`). |
@@ -292,9 +293,10 @@ those-who-run cars name 3339        # Subaru BRZ Drift Car '17
 
 `those-who-run recordings` replays each outing recording in `GT7_RECORD_DIR`
 (or the files and directories given) and prints one line per session: when it
-started (local time, and how far into the file), how long it ran, track and kind, the result, car, best
-lap, session kind and start, and how it ended (`flag`, `quit`, `restart`, or
-`open` if the recording stops mid-session). Handy for matching a night's
+started (local time, and how far into the file), how long it was driven (pauses
+left out), track and kind, the result, car, best lap, session kind and start, and
+how it ended (`flag`, `quit`, `restart`, `paused` if the recording stops in a
+pause, or `open` if it stops mid-session). Handy for matching a night's
 drives to notes:
 
 ```sh
@@ -388,6 +390,17 @@ command that writes the store (`tracks backfill`, `post`, `rebuild-best`,
 wall, or stop the engineer first. The engineer likewise refuses to start while
 one of those is running.
 The pit wall only reads and never takes the lock.
+
+A pause is not driving time (#229). `summary.json` and the index carry
+`driving_ms`, `paused_ms` and `ended_paused` next to the wall-clock
+`started_at` and `ended_at`, and the pit wall's session length is `driving_ms`.
+A pause of any length keeps the session, whether GT7 sends paused frames or
+the frozen stream it sends from the pause menu (identical frames with the car
+moving). Losing the feed during a pause (the PS5 switched off or put to rest)
+or stopping the engineer ends the session paused: it ends when the pause
+began, and its card says "Paused on lap 2 of 5, P3". `GT7_PAUSE_LIMIT_SECS` ends
+a pause that long the same way; it is off by default. Outing recordings keep a
+pause at one frame a second.
 
 A session's `best_lap_ms` is the best lap the results card and the pit wall
 show: GT7's own best when there is one, which leaves out lap 1 from a grid

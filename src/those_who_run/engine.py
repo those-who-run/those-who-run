@@ -35,6 +35,17 @@ log = logging.getLogger(__name__)
 FINISH_GRACE_SECS = 0.5  # inputs right at the line still count as the driver's
 FINISH_COAST_SECS = 3.0
 
+
+def joined_part_way(prev: RaceState | None, state: RaceState) -> bool:
+    """The engineer started part way through a session (an upgrade, an OOM, a node
+    reboot; Suzuka 2026-10-18, lap 7 at 124 km/h, #265): its first frame is a race
+    frame past lap 1 with nothing before it. A start seen from the grid, the track
+    screen or a loading screen has a frame before it. Joined on lap 1 it cannot be
+    told from a flying start, which crosses the line at speed with nothing before
+    it either when the engineer comes up on that frame, so it reads as a start."""
+    return prev is None and state.in_race and state.current_lap > 1
+
+
 # The pit lane is quiet from entry to exit (#244), apart from the rules whose
 # ``pit_lane`` is "speak" (fuel: its calls are about the stop). Each other rule
 # says whether a callout raised in the lane, or still queued at the entry, is
@@ -188,6 +199,7 @@ class Engine:
                 log.info("closing open session on race %s", "restart" if restarted else "start")
                 self._end_session(prev)
             self.races_started += 1
+            joined = joined_part_way(prev, state)
             log.info(
                 "race start: track %s, %s laps, fuel %.1f/%.0f",
                 state.track_id,
@@ -195,16 +207,26 @@ class Engine:
                 state.fuel_level,
                 state.fuel_capacity,
             )
+            if joined:
+                log.info(
+                    "joined part way: lap %d at %.0f km/h, no start seen",
+                    state.current_lap,
+                    state.speed_kph,
+                )
             for rule in self.rules:
                 rule.reset()
                 rule.session = None
                 rule.pits = NO_STOPS
+                rule.joined = joined
             self.queue.clear()
             if restarted:
                 self.tracks.reset()  # the car was teleported back to the grid
             self.track = None
             self.last_driving = None
             self.kinds.reset()
+            if joined:
+                self.kinds.join()
+                self.tracks.join()
             self.pits.reset()
             self.in_pit_lane = False
             self.pit_held.clear()
@@ -213,7 +235,7 @@ class Engine:
             self._crossing = None
             self._coast_since = None
             if self.recorder is not None:
-                self.recorder.start_session(state)
+                self.recorder.start_session(state, joined=joined)
             # A rolling start crosses the finish line before lap 1, so the
             # detector may already know the track when the session opens.
             if self.tracks.match.confidence != "none":

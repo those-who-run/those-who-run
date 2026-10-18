@@ -158,7 +158,13 @@ class SessionDetector:
         self._start_packet: int | None = None
         self._start_kph = 0.0
         self._start_known = False
+        self._joined = False
         self._kind: SessionKind = UNKNOWN
+
+    def join(self) -> None:
+        """The session was joined part way through (#265): its start was not seen,
+        so the start type stays unknown. Call after ``reset``."""
+        self._joined = True
 
     @property
     def kind(self) -> SessionKind:
@@ -229,7 +235,9 @@ class SessionDetector:
         else:
             why += "; fuel use " + ("on" if self._fuel_use else "off")
         start: Start = "unknown"
-        if self._start_known:
+        if self._joined:
+            why += "; joined part way, start not seen"
+        elif self._start_known:
             if self._start_kph < self.grid_kph:
                 start = "grid"
             else:

@@ -12,6 +12,10 @@ verdict is spoken again under the same limit; a confidence upgrade for the same
 track is not. ``late_track_first_lap_only: false`` lifts the limit. When the
 detector cannot pick between layouts of one circuit (Fuji and Fuji Short look
 the same in the table), the circuit's name is spoken.
+
+A session the engineer joined part way through (it started mid-lap, #265) had
+no start to brief: GT7's position is the place now, not a grid slot, and the
+driver knows the track. It gets "Back with you. Lap seven. P one." and no track.
 """
 
 from __future__ import annotations
@@ -54,6 +58,8 @@ class StartBriefRule(Rule):
             self.pending_track = None
             return
         self.track = name
+        if self.joined:
+            return  # the driver has been driving it: no news
         if self.briefed and self.announce_track and name != self.track_spoken:
             # A callout needs a frame time, so it is built on the next evaluated frame.
             self.pending_track = name
@@ -78,6 +84,8 @@ class StartBriefRule(Rule):
             return out
 
         self.briefed = True
+        if self.joined:
+            return [*out, self.callout(self._joined_brief(state), state)]
         parts: list[str] = []
         if self.track is not None:
             parts.append(self._track_phrase(self.track))
@@ -111,6 +119,21 @@ class StartBriefRule(Rule):
         if parts:
             out.append(self.callout(_sentences(parts), state))
         return out
+
+    def _joined_brief(self, state: RaceState) -> str:
+        lap = number_words(state.current_lap)
+        if state.has_lap_count:
+            lap += f" of {number_words(state.total_laps)}"
+        parts = [self.template("template_joined", "Back with you. Lap {lap}.").format(lap=lap)]
+        if self.has_field(state) and state.position is not None:
+            parts.append(
+                self.template("template_joined_position", "P {p}.").format(
+                    p=number_words(state.position),
+                    position=ordinal_words(state.position),
+                    total=number_words(state.total_cars),
+                )
+            )
+        return _sentences(parts)
 
     def _track_phrase(self, name: str) -> str:
         return tidy_sentence(

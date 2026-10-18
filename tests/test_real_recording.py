@@ -117,7 +117,8 @@ async def test_real_session_callouts_and_sessions(tmp_path):
     spoken = await replay(read_recording(FIXTURE, strict=True), engine, ConsolePlayer())
     texts = [c.text for c in spoken]
     assert texts == [
-        # practice session: the engineer started mid-session on lap 7, no brief
+        # practice session: the engineer started mid-session on lap 7 (#265)
+        "Back with you. Lap seven.",
         "Lap seven. forty-nine point seven.",
         # leaving practice: no flag, so a short summary (GT7's counter, best lap)
         "Session done. Seven laps. Best lap forty-nine point seven.",
@@ -316,12 +317,12 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
     """Circuit Gilles Villeneuve, laps 5 to 8 of twelve, NUC 2026-10-17. The pit call
     comes after lap 5; lap 6 is the in-lap, crossed in the pit lane after a full
     tank, and lap 7 the out-lap, which starts in the pit lane at the limiter and
-    used 15.0 against 16.4 for lap 8. Neither is a fuel lap."""
+    used 15.0 against 16.4 for lap 8. Neither is a fuel lap. The fixture starts
+    part way through lap 5, as when the engineer starts mid-race, so lap 5 is not
+    a fuel lap either (it read 14.34, and called the pit before the stop, #265)."""
     engine, texts, laps = await _replay_with_store(GILLES_STOP, tmp_path, end=True)
     assert texts == [
-        "Eight laps to go. P seven of twenty.",  # the fixture starts on lap 5
-        "Pit this lap.",
-        "Fuel. one lap remaining.",
+        "Back with you. Lap five of twelve. P seven.",  # joined part way (#265)
         "Lap five. one thirty-eight point four. zero point nine over best.",
         "Up to sixth.",
         "Up to fifth.",
@@ -332,13 +333,13 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
         "Up to ninth.",
         "Out lap, one forty-two point two.",
         "Up to sixth.",
-        "Fuel to the flag, just. Save a little.",  # 4.47 laps of fuel for the last four
+        "Fuel to the flag, just. Save a little.",  # the last four, on lap 8 alone
         "Lap eight. one thirty-seven point eight. zero point three over best.",
     ]
     assert [lap for lap, _ in laps] == [5, 6, 7, 8, 9]
     assert _pit_column(tmp_path) == [None, "in", "out", None, None]
     fuel = _fuel_rule(engine)
-    assert [round(x, 2) for x in fuel.consumption] == [14.34, 16.35]  # laps 5 and 8
+    assert [round(x, 2) for x in fuel.consumption] == [16.35]  # lap 8
     assert fuel.stint == 2
     summary = _summary(tmp_path)
     assert summary["stints"] == 2

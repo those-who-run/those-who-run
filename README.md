@@ -402,6 +402,13 @@ began, and its card says "Paused on lap 2 of 5, P3". `GT7_PAUSE_LIMIT_SECS` ends
 a pause that long the same way; it is off by default. Outing recordings keep a
 pause at one frame a second.
 
+When the engineer starts part way through a session (an upgrade, a crash, a
+node reboot: the first frame is a race frame past lap 1), it says "Back with
+you. Lap seven. P one." instead of a start brief, makes no cold-tyre call, does
+not measure fuel on the lap it joined, and names no track until the finish line
+is seen. The session's `joined_on_lap` is set in `summary.json` and the index,
+and the card says "Joined on lap 7" (#265).
+
 A session's `best_lap_ms` is the best lap the results card and the pit wall
 show: GT7's own best when there is one, which leaves out lap 1 from a grid
 start; `fastest_lap_ms` in `summary.json` is the quickest complete lap of any

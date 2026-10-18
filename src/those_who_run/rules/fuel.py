@@ -87,6 +87,7 @@ class FuelRule(Rule):
         self.bridged = False
         self.stint = 1
         self.skip_next = False  # the lap in progress started inside a telemetry gap
+        self.partial = False  # the lap in progress was joined part way (#265)
         self.max_gap = float(self.cfg.get("max_gap_secs", 1.0))
 
     def on_bridge(self, phase: Phase) -> None:
@@ -113,6 +114,7 @@ class FuelRule(Rule):
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if self.lap_start_fuel is None and state.in_race and state.current_lap >= 1:
             self.lap_start_fuel = state.fuel_level
+            self.partial = self.joined  # joined part way: the first lap is not a whole one
         pit_cut, self.pit_cut = self.pit_cut, False
         bridged, self.bridged = self.bridged, False
         if prev is None or not lap_completed(prev, state):
@@ -122,7 +124,10 @@ class FuelRule(Rule):
         used = self.lap_start_fuel - state.fuel_level
         gap = not bridged and state.t - prev.t > self.max_gap
         skip, self.skip_next = self.skip_next, gap
-        if gap and used >= -self.refuel_epsilon:
+        partial, self.partial = self.partial, False
+        if partial and used >= -self.refuel_epsilon:
+            log.info("fuel: lap %d was joined part way, not measured", prev.current_lap)
+        elif gap and used >= -self.refuel_epsilon:
             log.info(
                 "fuel: lap crossed inside a %.1f s telemetry gap, not measured", state.t - prev.t
             )

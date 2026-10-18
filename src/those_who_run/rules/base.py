@@ -38,6 +38,9 @@ class Rule(ABC):
         self.phrases = Phrasebook(self.cfg, random.Random())
         self.session: SessionKind | None = None  # the engine's verdict, see on_session
         self.pits: PitStatus = NO_STOPS  # the engine's pit detector, see on_pit
+        # The session was joined part way through (the engineer started mid-lap,
+        # #265): its start was not seen. Set by the engine on every start.
+        self.joined = False
         self.reset()
 
     def reset(self) -> None:

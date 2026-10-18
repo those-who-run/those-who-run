@@ -245,7 +245,8 @@ fixtures:
     source: NUC outing 20261017-141530, laps 6 to 8.
     pins:
       - A pit stop whose finish line is crossed in the exit cut.
-    tests: [test_pitstop, test_real_recording]
+      - Cut mid-lap, it reads as joined part way and names no track (#265).
+    tests: [test_joined, test_pitstop, test_real_recording]
 
   - file: real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz
     date: 2026-10-17
@@ -345,6 +346,23 @@ fixtures:
       - GT7's frozen pause stream (45 s of identical in_race frames on lap 2) is a
         pause, counted as paused, and nothing is said in it (#229).
     tests: [test_pause, test_real_recording]
+
+  - file: real-nuc-suzuka-joined-mid-race-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Suzuka Circuit
+    car: Honda Civic Type R (EK) Touring Car
+    kind: [timed_field (start not seen)]
+    outing: "20261018-134517"
+    source: >-
+      NUC outing 20261018-134517, the first 169 s at 2 Hz: the engineer pod came
+      back 20 s into lap 7 of a timed race at Suzuka, leading, after a chaos-test
+      kill. It stops on lap 8, before the pause the race was quit from.
+    pins:
+      - A session joined part way gives "Back with you. Lap seven. P one.", no
+        grid slot, no cold-tyre call and no track before the line (#265).
+      - The track is Suzuka from the line, never Lago Maggiore from the mid-lap
+        start, and the session is stored as joined on lap 7.
+    tests: [test_joined]
 
 outings:
   - id: "20261016-183946"
@@ -553,6 +571,21 @@ outings:
       on lap 1, then P2 of 20 in 2:49.772. Source of
       real-nuc-sugo-restarts-2026-10-18.
     cited_by: [157, 229]
+
+  - id: "20261018-134517"
+    date: 2026-10-18
+    track: [Suzuka Circuit]
+    car: [Honda Civic Type R (EK) Touring Car]
+    kind: [timed_field]
+    frames: null  # still being recorded when the fixture was cut: set when archived
+    sha256: null
+    note: >-
+      The engineer pod's outing after a chaos-test kill 20 s into lap 7 of a
+      Suzuka timed race (the old pod's outing is 20261018-132115): it starts
+      mid-lap with no menu, and 0.5.1 briefed a grid slot, called cold tyres and
+      named two Lago Maggiore layouts. Then more timed races at Suzuka. Source of
+      real-nuc-suzuka-joined-mid-race-2026-10-18.
+    cited_by: [265]
 
 lost:
   - id: "20261016-180243"

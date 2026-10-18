@@ -85,6 +85,9 @@ rules:
     # template_laps_to_go: "{laps} to go."   # engineer started mid-race
     # template_timed: "Timed race."          # also what qualifying looks like to GT7
     # template_position: "P {p} of {total}."
+    # The engineer started part way through a session (#265): no grid slot.
+    # template_joined: "Back with you. Lap {lap}."
+    # template_joined_position: "P {p}."
   race_summary:
     enabled: true
     priority: 25             # after the final lap time, posted on the same frame

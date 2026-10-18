@@ -88,6 +88,8 @@ DEFAULT_RULES: dict[str, Any] = {
             "template_laps_to_go": "{laps} to go.",
             "template_timed": "Timed race.",
             "template_position": "P {p} of {total}.",
+            "template_joined": "Back with you. Lap {lap}.",
+            "template_joined_position": "P {p}.",
         },
         "race_summary": {
             "enabled": True,

@@ -100,6 +100,10 @@ def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card 
     car = summary.get("car_name")
     if car:
         fields.append(("Car", car))
+    joined = summary.get("joined_on_lap")
+    if joined:
+        # the engineer started part way through (#265): laps before it are not here
+        fields.append(("Joined", f"on lap {joined}"))
     used = summary.get("fuel_burned", summary.get("fuel_used")) or 0
     capacity = summary.get("fuel_capacity") or 0
     if kind_rec.get("fuel_use") and used > 0 and capacity > 0:

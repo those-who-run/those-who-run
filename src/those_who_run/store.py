@@ -406,6 +406,7 @@ class Session:
     gt7_best_ms: int = 0  # GT7's own best, which leaves out a start lap
     pits: PitStatus = NO_STOPS  # see SessionStore.set_pits
     start_t: float = 0.0  # frame time of the first frame, for the driving time
+    joined_on_lap: int | None = None  # joined part way through, on this lap (#265)
 
 
 class SessionStore:
@@ -436,6 +437,7 @@ class SessionStore:
         _ensure_column(self._db, "sessions", "paused_ms", "INTEGER")
         _ensure_column(self._db, "sessions", "driving_ms", "INTEGER")
         _ensure_column(self._db, "sessions", "ended_paused", "INTEGER")
+        _ensure_column(self._db, "sessions", "joined_on_lap", "INTEGER")
         _ensure_column(self._db, "laps", "pit", "TEXT")
         self._db.commit()
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
@@ -469,7 +471,9 @@ class SessionStore:
 
     # session lifecycle
 
-    def start_session(self, state: RaceState) -> Session:
+    def start_session(self, state: RaceState, joined: bool = False) -> Session:
+        """Open a session on its first driving frame. ``joined``: the engineer
+        started part way through it (#265), so the frames start mid-lap."""
         base = time.strftime("%Y%m%d-%H%M%S", time.gmtime(self.clock()))
         session_id, n = base, 1
         while (self.data_dir / "sessions" / session_id).exists():
@@ -488,10 +492,11 @@ class SessionStore:
             fuel_at_start=state.fuel_level,
             lap_start_fuel=state.fuel_level,
             start_t=state.t,
+            joined_on_lap=state.current_lap if joined else None,
         )
         self._write(
-            "INSERT INTO sessions (id, started_at, type, track_id, car_code, total_laps)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO sessions (id, started_at, type, track_id, car_code, total_laps,"
+            " joined_on_lap) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 session_id,
                 self.session.started_at,
@@ -499,6 +504,7 @@ class SessionStore:
                 None,
                 state.car_code,
                 state.total_laps,
+                self.session.joined_on_lap,
             ),
         )
         log.info(
@@ -716,6 +722,7 @@ class SessionStore:
             "best_lap_ms": session_best_lap(s.laps, s.kind, gt7_best),
             "fastest_lap_ms": min(times) if times else None,  # lap 1 from the grid too
             "finished": finished,  # the chequered flag, not a quit
+            "joined_on_lap": s.joined_on_lap,  # the engineer started part way through
             "total_time_ms": sum(times) if finished and times else None,
             "final_position": state.position or s.last_position,
             "total_cars": state.total_cars if state.total_cars > 0 else s.last_cars,

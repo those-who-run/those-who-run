@@ -101,6 +101,8 @@ class TempsRule(Rule):
         out: list[Callout] = []
         if self.started_at is None:
             self.started_at = state.t
+        if self.joined:
+            self.cold_checked = True  # cold tyres are a start call: no start was seen
         if (
             not self.cold_checked
             and self.tyre_cold is not None

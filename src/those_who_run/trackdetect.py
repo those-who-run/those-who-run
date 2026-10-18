@@ -28,6 +28,15 @@ independent physical facts, each cheap to check on every frame:
    pit exit runs through Tokyo East's line, and a lap of Tokyo East cuts
    Suzuka's (2026-10-15).
 
+Joined part way (``join``: the engineer started mid-lap, #265), facts 1 and 3
+are not what they seem: the first position is wherever the car was, not near a
+line, and the path to the next tick is part of a lap. Lines of other layouts lie
+all over a circuit, so a path crossing counts for nothing, and the first lap
+boundary only says where the line is: the box and the distance before it are not
+a whole lap, so no layout is judged on them. At Suzuka (2026-10-18) the start
+mid-lap was near Lago Maggiore's line and the path crossed it; the detector said
+"probable Lago Maggiore - East Reverse" 28 s in.
+
 Ranking: layouts whose line has been crossed outrank the rest; among those,
 higher overlap between the driven box and the layout's box wins. Confidence
 is reported honestly: some pairs (Fuji vs Fuji Short, Monza vs No Chicane)
@@ -142,6 +151,14 @@ class TrackDetector:
         self._line_known = False  # the lap counter has put the car on a layout's line
         self._alive: set[int] = {t.id for t in self.tracks}
         self._match: TrackMatch = NO_MATCH
+        self._joined = False  # see join
+        self._partial = False  # the lap in progress is the one joined part way
+
+    def join(self) -> None:
+        """The frames start part way through a lap (see the top): call before the
+        first one."""
+        self.reset()
+        self._joined = self._partial = True
 
     @property
     def match(self) -> TrackMatch:
@@ -209,7 +226,7 @@ class TrackDetector:
         """
         p = (x, z)
         self._velocity = velocity
-        if not self._anchors:
+        if not self._anchors and not self._joined:
             self._anchors.append(p)
         if self._box is None:
             self._box = (x, z, x, z)
@@ -227,12 +244,14 @@ class TrackDetector:
                 moved = True
                 self._distance += step
                 self._lap_distance += step
-                if lap is not None and not self._line_known:
+                if lap is not None and not self._line_known and not self._joined:
                     self._note_crossings(self._prev, p)
             # else: reset to pits, restart, or a replayed results screen; the
             # segment is not a path the car drove.
         if lap is not None:
-            if (self._last_lap is None or self._last_lap < 1) and lap >= 1:
+            if self._joined and self._last_lap is None:
+                pass  # mid-lap: neither an anchor nor the start of a lap
+            elif (self._last_lap is None or self._last_lap < 1) and lap >= 1:
                 self._anchors.append(p)
                 if moved:
                     assert self._prev is not None
@@ -326,8 +345,10 @@ class TrackDetector:
             if t.id in self._alive and t.direction == direction
         }
         step = travel_direction(a, b)
+        whole, self._partial = not self._partial, False
         if not dist and (direction is None or (step is not None and step != direction)):
-            self._lap_length = self._lap_distance  # still a whole lap, just no direction
+            if whole:
+                self._lap_length = self._lap_distance  # still a whole lap, just no direction
             self._lap_distance = 0.0
             return
         reach = min(self.line_radius, min(dist.values(), default=0.0) + self.line_slack)
@@ -339,14 +360,17 @@ class TrackDetector:
                 self._alive.discard(t.id)
                 continue
             self._crossed.add(t.id)
+            if not whole:
+                continue  # joined part way: the line is all this lap says
             if box_iou(self._box, t.box) < self.min_fit or (
                 t.length_m
                 and abs(self._lap_distance - t.length_m) > self.length_tolerance * t.length_m
             ):
                 self._alive.discard(t.id)
-        self._lap_complete = True
         self._line_known = True
-        self._lap_length = self._lap_distance
+        if whole:
+            self._lap_complete = True
+            self._lap_length = self._lap_distance
         self._lap_distance = 0.0
 
     def _eliminate(self) -> None:
@@ -357,14 +381,15 @@ class TrackDetector:
                 self._alive.discard(t.id)
 
     def _decide(self) -> TrackMatch:
-        assert self._box is not None and self._anchors
+        assert self._box is not None
         alive = [t for t in self.tracks if t.id in self._alive]
         if not alive:
             return TrackMatch(None, None, "none", (), "no layout fits the lap counter and path")
         near = [
             t
             for t in alive
-            if min(distance_to_segment(an, *t.line) for an in self._anchors)  # type: ignore[misc]
+            if self._anchors
+            and min(distance_to_segment(an, *t.line) for an in self._anchors)  # type: ignore[misc]
             <= self.start_radius
         ]
         crossed_any = [t for t in alive if t.id in self._crossed]

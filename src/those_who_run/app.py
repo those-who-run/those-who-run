@@ -153,6 +153,10 @@ class App:
         self.writer: RecordingWriter | OutingRecorder | None = None
         self.poster: ResultsPoster | None = None
         self._store_open = False
+        # When the last driving frame (in a race, or paused in one) arrived;
+        # None until one does, and idle_secs counts from the engineer's start.
+        self._started = time.monotonic()
+        self._driving_at: float | None = None
 
     # control
 
@@ -184,7 +188,20 @@ class App:
                 "name": engine.track.name,
                 "confidence": engine.track.confidence,
             },
+            **self.idle(),
         }
+
+    def idle(self) -> dict[str, Any]:
+        """Whether a restart would cut into a drive (#272). Busy while driving
+        frames (``in_race`` or paused in a race) are arriving, that is while
+        the last one is under ``telemetry_timeout_secs`` old; ``idle_secs`` is
+        0 then, and otherwise the time since the last one. A session left open
+        by a feed that stopped (the PS5 switched off mid-lap) is idle: a
+        restart interrupts no one, and shutdown closes the session. The
+        home-lab deploy waits on these before it rolls the engineer."""
+        since = time.monotonic() - (self._driving_at or self._started)
+        busy = self._driving_at is not None and since < self.settings.telemetry_timeout_secs
+        return {"idle": not busy, "idle_secs": 0.0 if busy else round(since, 1)}
 
     # lifecycle
 
@@ -313,6 +330,8 @@ class App:
     async def _handle(self, state: RaceState) -> None:
         if self.writer is not None:
             self.writer.write(state)
+        if state.phase in (Phase.IN_RACE, Phase.PAUSED):
+            self._driving_at = time.monotonic()
         self.engine.process(state)
         await self.player.on_phase(state.phase, state.t)
 

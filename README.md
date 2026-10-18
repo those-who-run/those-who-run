@@ -517,10 +517,20 @@ their layout follows [ADR 0001](docs/adr/0001-data-and-network.md):
 To deploy or upgrade, from a home-lab checkout:
 
 ```sh
-# one tag for both Deployments: newTag under images: in base/kustomization.yaml
-kubectl --context=my-cluster apply -k manifests/those-who-run/overlays/local
-kubectl --context=my-cluster -n those-who-run rollout status deploy/those-who-run-pitwall
+make roll-those-who-run TAG=0.6.2                     # waits until nobody is driving
+make roll-those-who-run TAG=0.6.2 ARGS=--dry-run      # idle check, then show what it would apply
+make roll-those-who-run TAG=0.6.2 ARGS=--now          # emergencies: roll now, mid-race or not
+make roll-those-who-run TAG=0.6.2 ARGS=--pitwall-only # just the pit wall, any time
+```
 
+It bumps `newTag` in `base/kustomization.yaml` (one tag for both Deployments),
+waits until the engineer's `/healthz` has said `idle` for `IDLE_SECS` (300),
+then applies the overlay and waits for both rollouts. A restart mid-race costs
+the voice and splits the session, so it never forces: after `TIMEOUT_SECS`
+(4 h) of driving it gives up and exits non-zero. Home-lab's
+`docs/services/those-who-run.md` has the details.
+
+```sh
 # check it
 curl -s --cacert local-ca.crt https://pitwall.nuc.home.arpa/_stcore/health    # ok
 # (add --resolve pitwall.nuc.home.arpa:443:192.0.2.216 if the name doesn't resolve)
@@ -551,6 +561,14 @@ so it is not in `tasks`; `telemetry_listening` and `telemetry_restarts` show
 how it is going. No packets arriving is not unhealthy: that is normal with the
 PS5 off, and shows as `telemetry_connected: false`. Voice being down is not
 unhealthy either.
+
+`idle` is false while driving frames are arriving: in a race, or paused in
+one, with the last frame under `GT7_TELEMETRY_TIMEOUT_SECS` old. `idle_secs`
+is 0 then, and otherwise the seconds since the last driving frame (since the
+engineer's start if there has been none). A session left open because the
+frames stopped, say the PS5 was switched off mid-lap, counts as idle: a
+restart interrupts no one, and shutdown closes the session. The home-lab
+deploy waits on these, so a new image never restarts the engineer mid-race.
 
 ## Livery
 
@@ -597,6 +615,9 @@ rest (`.github/workflows/release.yml`):
    `web --help` in it, then pushes `muldoon/those-who-run:<tag without v>`.
    `latest` moves only for a final release, never for an `-rc`, alpha, beta or
    dev tag.
+4. Roll it onto the NUC from a home-lab checkout with
+   `make roll-those-who-run TAG=0.5.0` (see [Pit wall on the NUC](#pit-wall-on-the-nuc)),
+   then open the home-lab PR for the bumped tag. It waits until nobody is driving.
 
 The workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
 

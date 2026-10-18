@@ -185,6 +185,59 @@ async def test_the_app_serves_its_status_as_healthz(settings, sim):
     assert await asyncio.wait_for(running, 5) == 0
 
 
+FEED_TIMEOUT = 0.5  # telemetry_timeout_secs for the idle tests: when driving frames go stale
+
+
+async def test_the_engineer_is_busy_in_a_race_and_idle_once_the_frames_stop(settings, sim):
+    # #272: the deploy waits on idle and idle_secs
+    settings = dataclasses.replace(settings, telemetry_timeout_secs=FEED_TIMEOUT)
+    frames = sim(total_laps=3).menu().at_track().race([90000, 89000], finish=False).frames
+    app, _ = make_app(settings, frames, FakePlayer())
+    running = asyncio.create_task(app.run())
+    await wait_for(lambda: app.supervisor.alive())
+    await wait_for(lambda: app.engine.prev is not None and app.engine.prev.packet_id == len(frames))
+    status = app.status()
+    assert status["idle"] is False and status["idle_secs"] == 0  # in the race
+
+    # The frames stop mid-lap (the PS5 switched off): the session stays open,
+    # but a restart interrupts no one, so it is idle and counts up.
+    await wait_for(lambda: app.status()["idle"])
+    first = app.status()
+    assert app.engine.session_open
+    assert first["idle_secs"] >= FEED_TIMEOUT
+    await asyncio.sleep(0.25)
+    assert app.status()["idle_secs"] > first["idle_secs"]
+
+    app.engine.close_session()
+    assert app.status()["idle"] is True  # and after close_session
+
+    now = time.monotonic()
+    await app._handle(dataclasses.replace(frames[-1], t=now))  # driving again
+    assert app.status()["idle"] is False
+    assert app.status()["idle_secs"] == 0
+    await wait_for(lambda: app.status()["idle"])
+    await app._handle(sim().paused().frames[0])  # paused in a race is still busy
+    assert app.status()["idle"] is False
+    await wait_for(lambda: app.status()["idle"])
+    await app._handle(sim().menu().frames[0])  # menu frames flowing are not
+    assert app.status()["idle"] is True
+    app.stop()
+    assert await asyncio.wait_for(running, 5) == 0
+
+
+async def test_a_fresh_engineer_is_idle_and_counts_from_its_start(settings, sim):
+    app, _ = make_app(settings, sim().menu().at_track().frames, FakePlayer())
+    running = asyncio.create_task(app.run())
+    await wait_for(lambda: app.supervisor.alive())
+    await wait_for(lambda: app.engine.prev is not None and app.engine.prev.packet_id == 2)
+    first = app.status()
+    assert first["idle"] is True  # telemetry flowing at a track is not driving
+    await asyncio.sleep(0.25)
+    assert app.status()["idle_secs"] > first["idle_secs"]
+    app.stop()
+    assert await asyncio.wait_for(running, 5) == 0
+
+
 async def test_a_start_that_raises_closes_everything_opened_so_far(settings, tmp_path):
     record = tmp_path / "frames.jsonl"
     player = FakePlayer(fail_start=True)

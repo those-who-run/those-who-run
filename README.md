@@ -518,7 +518,29 @@ their layout follows [ADR 0001](docs/adr/0001-data-and-network.md):
 - It uses `RollingUpdate`. It takes no lock, so restarting it never touches the
   engineer, and the reverse holds too.
 
-To deploy or upgrade, from a home-lab checkout:
+Deploys are GitOps. Argo CD (https://argocd.nuc.home.arpa) keeps the NUC matching
+home-lab's `main`, so a merged `newTag` bump is a deploy. A release opens that PR
+by itself (see [Releasing](#releasing)). Each sync of the app runs gates
+([#285](https://github.com/those-who-run/those-who-run/issues/285)):
+
+1. **The pit wall first.** It takes no lock, so it never waits.
+2. **The idle gate.** If the sync changes the engineer, a hook Job holds it until
+   `/healthz` has said `idle` for 300 s. A drive is never interrupted. After 4 h it
+   fails the sync, rolls nothing, and Argo CD retries later. An engineer that is
+   down and not answering doesn't hold the gate, so a fix can reach it.
+3. **The engineer** (`Recreate`, one writer).
+4. **The smoke check.** It confirms that `those-who-run --version` matches the tag
+   and that both pods run that image. It also checks that `/healthz` is ok with
+   every task alive, that `/metrics` is served, and that the pit wall answers 200
+   over HTTPS. A failure marks the sync Failed.
+
+Argo CD Notifications post the result to Discord. To roll back, revert the bump
+in home-lab. Home-lab's `manifests/argocd/README.md` covers all of this, and
+it is also a guide to Argo CD.
+
+The manual path, from a home-lab checkout, waits for idle the same way. First
+pause the Application's auto-sync, or self-heal would put git's tag back; the
+script refuses while it is on:
 
 ```sh
 make roll-those-who-run TAG=0.6.2                     # waits until nobody is driving
@@ -624,12 +646,22 @@ merge.
    `.github/workflows/release.yml`. That runs `make check`, fails unless the tag is
    `v` plus `__version__`, builds the image, runs `--version` and `web --help` in it,
    and pushes `muldoon/those-who-run:x.y.z` and `latest`.
-3. **Roll it out.** A final release then opens a PR in home-lab that changes only
-   `newTag` in `manifests/those-who-run/base/kustomization.yaml`. home-lab's
-   checks build the overlay, run kubeconform and check the diff, then merge it, and
-   Argo CD rolls it out once nobody is driving. Without Argo CD, roll it from a
-   home-lab checkout with `make roll-those-who-run TAG=x.y.z`
-   (see [Pit wall on the NUC](#pit-wall-on-the-nuc)).
+3. **The home-lab bump.** A final release then opens a PR in home-lab (with
+   `HOME_LAB_TOKEN`) that changes only `newTag` in
+   `manifests/those-who-run/base/kustomization.yaml`. home-lab's checks build the
+   overlay, run kubeconform and check that the diff is only `newTag`, then
+   squash-merge it.
+4. **Argo CD rolls it** (within about 3 minutes of the merge), through the gates in
+   [Pit wall on the NUC](#pit-wall-on-the-nuc):
+   1. The pit wall rolls at once.
+   2. The idle gate holds the engineer until nobody is driving.
+   3. The engineer rolls.
+   4. A smoke check confirms the new version.
+5. **Discord** says how it went: success, or a failed sync with the reason. To roll
+   back, revert the bump in home-lab; the old tag goes back through the same gates.
+
+The manual path is still there: `make roll-those-who-run TAG=x.y.z` from a home-lab
+checkout, with Argo CD's auto-sync paused first (the script refuses otherwise).
 
 **Versions follow the milestones.** Before 1.0, `feat:` and `fix:` both bump the
 patch (0.6.2 to 0.6.3), and a breaking change bumps the minor

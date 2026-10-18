@@ -41,7 +41,7 @@ def store_dir(tmp_path, sim):
     race = sim(total_laps=4, fuel=100, burn=5).menu().at_track()
     race.race([100000, 101000, 99500, 99800], refuel_after_lap=2)
     drive(tmp_path, race.frames)
-    tt = sim(total_laps=0, cars=1, position=1, burn=0).menu().at_track()
+    tt = sim(total_laps=0, cars=1, position=1, burn=0, is_race=True).menu().at_track()
     tt.race([70000, 69000], finish=False).menu()
     drive(tmp_path, tt.frames, at=T0 + DAY)
     live = sim(total_laps=5, burn=5).menu().at_track().race([98000], finish=False)

@@ -10,7 +10,7 @@ from those_who_run.metrics import Metrics
 from those_who_run.pitstop import NO_STOPS, PitDetector, PitStatus
 from those_who_run.rules.base import Rule
 from those_who_run.rules.fuel import FuelRule
-from those_who_run.sessionkind import ReplayCheck, SessionDetector, SessionKind
+from those_who_run.sessionkind import DriverCheck, SessionDetector, SessionKind
 from those_who_run.state import (
     Phase,
     RaceState,
@@ -64,46 +64,47 @@ class Engine:
         self._crossing: RaceState | None = None  # last line crossing of a timed race
         self._coast_since: float | None = None
         self.last_driving: RaceState | None = None  # last IN_RACE frame of this race
-        self.replays = ReplayCheck()
-        self.replay = False  # watching a GT7 replay: ignored until the next start
-        self._held: list[RaceState] = []  # an unflagged start, until ReplayCheck decides
+        self.driver = DriverCheck()
+        self.replay = False  # a GT7 replay or demo race: ignored until the next start
+        self._held: list[RaceState] = []  # an unflagged start, until DriverCheck decides
         self._held_prev: RaceState | None = None
         self.in_pit_lane = False  # as the rules were last told, see _apply_pits
         self.pit_held: list[Callout] = []  # raised in the pit lane, spoken after the exit
 
     def process(self, state: RaceState) -> list[Callout]:
         """Feed one frame. A session that starts with GT7's cars-on-track flag off is
-        held back, at most ``ReplayCheck.window_secs``, until it is known to be a
-        drive (its frames then go through as if never held) or a replay (#243)."""
+        held back, at most ``DriverCheck.window_secs``, until it is known to be a
+        drive (its frames then go through as if never held), a replay (#243) or
+        GT7's attract-mode demo race (#260)."""
         prev = self.prev
         if self._held:
             self._held.append(state)
             self.prev = state
-            verdict = self.replays.observe(state)
+            verdict = self.driver.observe(state)
+            self.driver.see(state)  # after: a menu that ends the start is no news of it
             if verdict is None:
                 return []
             held, self._held = self._held, []
             if verdict == "drive":
                 self.prev = self._held_prev
                 return [c for s in held for c in self._step(s)]
-            first = held[0]
             log.info(
-                "ignoring a replay: GT7's cars-on-track flag is off from the start and"
-                " fuel is draining (%.1f -> %.1f), which only a replay does",
-                first.fuel_level,
-                state.fuel_level,
+                "ignoring a %s: GT7's cars-on-track flag is off from the start and %s",
+                "replay" if verdict == "replay" else "demo race",
+                self.driver.why,
             )
             self.replay = True
             recorder, last = self.recorder, self._held_prev
             if recorder is not None and recorder.session is not None and last is not None:
-                log.info("closing open session on replay start")
+                log.info("closing open session on %s start", verdict)
                 recorder.end_session(last)
             self.last_driving = None
             return []
+        self.driver.see(state)
         starting = race_started(prev, state) or race_restarted(prev, state)
         if starting and not state.cars_on_track:
             self._held, self._held_prev = [state], prev
-            self.replays.start(state)
+            self.driver.start(state)
             self.prev = state
             return []
         if self.replay and not starting:

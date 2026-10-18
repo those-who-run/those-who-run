@@ -85,14 +85,6 @@ def test_real_time_trial_has_no_position(tmp_path):
     assert build_card(s).colour == 0x333333
 
 
-def test_real_retirement_from_a_race_gt7_does_not_flag(tmp_path):
-    (s,) = summaries("real-nuc-tokyo-east-race-2026-10-15", tmp_path)
-    title, description, fields = card_text(s)
-    assert title == "Tokyo Expressway - East Clockwise · 3-lap race"
-    assert description == "Retired on lap 2 of 3", "no position without GT7's flag"
-    assert "Fuel used" not in fields, "fuel use is off"
-
-
 def test_real_qualifying_quit_keeps_the_last_position(tmp_path):
     first, second = summaries("real-quali-restart-quit-2026-10-14", tmp_path)
     assert card_text(first)[:2] == ("Nurburgring 24h · timed race", "1 lap, P1 of 20")

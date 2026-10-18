@@ -47,10 +47,29 @@ driving frame, and it drops only on the last frames of a session. The replay
 has it off from the first frame to the last, while the fuel drains as it did in
 the race it replays (98.3 to 97.6 within 52 packets). The races GT7 never flags
 (2026-10-15, a mode still to be named, #63) are unflagged too, but none of them
-has ever used fuel, so fuel use is what tells the two apart. ``ReplayCheck``
-judges a session that starts unflagged: a replay once the fuel drops, a drive
-once the flag comes on or ``window_secs`` (or ``window_packets``) pass without
-a drop, which is longer than any drive with fuel on takes to show one.
+has ever used fuel, so fuel use is what tells the two apart.
+
+GT7's **attract-mode demo race**, which plays by itself when the PS5 sits idle
+on the menu, is the rest of that unflagged group (#260). Every demo on
+2026-10-18 (nine between 10:31 and 13:02) goes from the menu to the track
+screen and into lap 1 with no loading screen, has the flag off on every frame
+and keeps the fuel at 100. A drive always loads its track first: menu, loading,
+track screen, loading, track screen, then lap 1, in every recording with a menu
+before the start. The 2026-10-15 group are demos too: the Laguna Seca and
+Nordschleife fixtures match the 2026-10-18 demos in the same cars frame for
+frame (same positions, speeds and time of day), and Tokyo East and the
+Tsukuba drift laps start the same way. A demo can also be joined part way, when
+the engineer starts while one plays (2026-10-18 11:01, on lap 2 of 5): with no
+menu seen there is nothing to say whether a track was loaded, but GT7 reports
+a field of cars there while its cars-on-track flag says there are none, which
+no drive has done.
+
+``DriverCheck`` judges a session that starts unflagged. It is a **replay** once
+the fuel drops, and a drive once the flag comes on. When ``window_secs`` (or
+``window_packets``) pass without either, which is longer than any drive with
+fuel on takes to show a drop, or the session ends or pauses first, it is a
+**demo** if no loading screen came since the last menu, or if no menu has been
+seen and GT7 reports two or more cars; anything else is a drive.
 """
 
 from __future__ import annotations
@@ -220,39 +239,70 @@ class SessionDetector:
         return SessionKind(kind, self._laps, field, self._fuel_use, self._cars_on_track, why, start)
 
 
-Verdict = Literal["drive", "replay"]
+Verdict = Literal["drive", "replay", "demo"]
 
 
-class ReplayCheck:
-    """Is a session that starts with GT7's cars-on-track flag off a replay? See the
-    module docstring. Call ``start`` with the session's first driving frame, then
-    feed each later frame until ``observe`` returns a verdict."""
+class DriverCheck:
+    """Is a session that starts with GT7's cars-on-track flag off the driver
+    driving, a replay or a demo? See the module docstring. Feed ``see`` every
+    frame, so it knows whether a track was loaded since the menu. Call ``start``
+    with the session's first driving frame, then feed each later frame to
+    ``observe`` until it returns a verdict; ``why`` then says what decided it."""
 
     def __init__(
         self,
         fuel_drop: float = 0.05,
         window_secs: float = 3.0,
         window_packets: int = 180,
+        field_cars: int = 2,
     ) -> None:
         self.fuel_drop = fuel_drop
         self.window_secs = window_secs
         self.window_packets = window_packets
+        self.field_cars = field_cars
+        self.loaded: bool | None = None  # a loading screen since the last menu; None: no menu yet
         self.first: RaceState | None = None
         self.top_fuel = 0.0
+        self.cars = -1
+        self.why = ""
+
+    def see(self, state: RaceState) -> None:
+        if state.phase is Phase.MENU:
+            self.loaded = False
+        elif state.phase is Phase.LOADING and self.loaded is not None:
+            self.loaded = True
 
     def start(self, state: RaceState) -> None:
         self.first = state
         self.top_fuel = state.fuel_level
+        self.cars = state.total_cars
+        self.why = ""
 
     def observe(self, state: RaceState) -> Verdict | None:
         first = self.first
         assert first is not None, "start() first"
-        if state.phase is not Phase.IN_RACE or state.cars_on_track:
-            return "drive"  # a pause, an end or the flag: nothing a replay does at its start
+        if state.phase is not Phase.IN_RACE:
+            return self._settle()  # a pause or an end inside the window
+        if state.cars_on_track:
+            return "drive"  # nothing a replay or a demo does
+        self.cars = max(self.cars, state.total_cars)
         self.top_fuel = max(self.top_fuel, state.fuel_level)
         if state.fuel_capacity > 0 and state.fuel_level < self.top_fuel - self.fuel_drop:
+            self.why = (
+                f"fuel is draining ({first.fuel_level:.1f} -> {state.fuel_level:.1f}),"
+                " which only a replay does"
+            )
             return "replay"
         packets = state.packet_id - first.packet_id
         if state.t - first.t >= self.window_secs or not 0 <= packets < self.window_packets:
-            return "drive"
+            return self._settle()
         return None
+
+    def _settle(self) -> Verdict:
+        if self.loaded is False:
+            self.why = "it came straight from the menu with no loading screen"
+            return "demo"
+        if self.loaded is None and self.cars >= self.field_cars:
+            self.why = f"it was joined part way with no menu seen and GT7 reports {self.cars} cars"
+            return "demo"
+        return "drive"

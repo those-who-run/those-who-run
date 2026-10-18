@@ -22,7 +22,8 @@ from those_who_run.rules import FuelRule, build_rules
 from those_who_run.state import Phase, race_ended, race_restarted, race_started
 from those_who_run.store import SessionStore
 
-FIXTURE = Path(__file__).parent / "fixtures" / "real-race-2laps-2026-10-14.jsonl.gz"
+FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURE = FIXTURES / "real-race-2laps-2026-10-14.jsonl.gz"
 QUALI = Path(__file__).parent / "fixtures" / "real-quali-restart-quit-2026-10-14.jsonl.gz"
 PIT_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 NO_STOP = Path(__file__).parent / "fixtures" / "real-nuc-suzuka-no-stop-2026-10-15.jsonl.gz"
@@ -34,6 +35,7 @@ WILLOW_STOP = (
 )
 SUGO_STOPS = Path(__file__).parent / "fixtures" / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
 SUGO_REPLAY = Path(__file__).parent / "fixtures" / "real-nuc-sugo-replay-2026-10-18.jsonl.gz"
+LAGUNA_DEMO = Path(__file__).parent / "fixtures" / "real-nuc-laguna-seca-demo-2026-10-18.jsonl.gz"
 
 
 def _spoken_when(path):
@@ -194,9 +196,9 @@ def test_real_race_entered_from_a_loading_screen():
     """Nordschleife, 2026-10-15: GT7 goes MENU -> LOADING (lap 1) -> IN_RACE at 0
     km/h with no field, then shows the menu for two frames before the race proper.
     LOADING -> IN_RACE is not a start (a pit stop on lap 1 looks the same); the
-    session opens once, on the frame after the menu blip (#157). The flag is off, so
-    the start is held while the engine checks for a replay (#243): the frame the
-    session opens on is read where the engine handles it, not where it arrives."""
+    start is judged once, on the frame after the menu blip (#157). It is GT7's
+    attract-mode demo (#260; the 2026-10-18 demo matches it frame for frame), so
+    the check that judges it calls it a demo and no session opens."""
     path = (
         Path(__file__).parent
         / "fixtures"
@@ -210,20 +212,18 @@ def test_real_race_entered_from_a_loading_screen():
     ]
     assert [s.packet_id for s in loading_to_race] == [473613]
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
-    opened = []
-    step = engine._step
+    judged = []
+    start = engine.driver.start
 
     def spy(s):
-        before = engine.races_started
-        out = step(s)
-        if engine.races_started > before:
-            opened.append(s)
-        return out
+        judged.append(s)
+        start(s)
 
-    engine._step = spy  # type: ignore[method-assign]
+    engine.driver.start = spy  # type: ignore[method-assign]
     for s in states:
         engine.process(s)
-    assert [(s.packet_id, round(s.speed_kph), s.total_cars) for s in opened] == [(473620, 100, 20)]
+    assert [(s.packet_id, round(s.speed_kph), s.total_cars) for s in judged] == [(473620, 100, 20)]
+    assert engine.races_started == 0
 
 
 def test_real_pause_and_resume_is_neither_a_start_nor_an_end():
@@ -465,4 +465,61 @@ async def test_real_race_replay_is_ignored(tmp_path, caplog):
     assert replays == [
         "ignoring a replay: GT7's cars-on-track flag is off from the start and fuel is"
         " draining (98.3 -> 97.6), which only a replay does"
+    ]
+
+
+async def _ignored(path, tmp_path, caplog) -> list[str]:
+    """Replay ``path`` with a store: assert nothing was said, started, stored or
+    posted, and return the log lines about what was ignored."""
+    cards: list[dict] = []
+    engine = Engine(
+        build_rules(DEFAULT_RULES["rules"]),
+        CalloutQueue(max_age=None),
+        SessionStore(tmp_path, on_end=cards.append),
+    )
+    with caplog.at_level(logging.INFO, logger="those_who_run"):
+        spoken = await replay(read_recording(path, strict=True), engine, ConsolePlayer())
+    assert spoken == []
+    assert engine.races_started == 0
+    assert cards == []
+    assert not list(tmp_path.glob("sessions/*"))
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    assert db.execute("SELECT COUNT(*) FROM sessions").fetchone() == (0,)
+    db.close()
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith("ignoring")]
+
+
+async def test_real_demo_race_is_ignored(tmp_path, caplog):
+    """Laguna Seca, 2026-10-18 11:01: GT7's attract-mode demo, playing on the idle
+    PS5 when the engineer started, on lap 2 of 5. The flag is off and the fuel
+    stays at 100 throughout. With no menu seen there is no telling whether a track
+    was loaded, but GT7 reports 12 cars while its flag says none: no drive does
+    that. No callouts, no session, no card, and one log line (#260)."""
+    states = list(read_recording(LAGUNA_DEMO, strict=True))
+    driving = [s for s in states if s.in_race]
+    assert states[0].in_race and states[0].current_lap == 2
+    assert not any(s.cars_on_track for s in driving)
+    assert {s.fuel_level for s in driving} == {100.0}
+    assert await _ignored(LAGUNA_DEMO, tmp_path, caplog) == [
+        "ignoring a demo race: GT7's cars-on-track flag is off from the start and it was"
+        " joined part way with no menu seen and GT7 reports 12 cars"
+    ]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "real-nuc-tokyo-east-race-2026-10-15",
+        "real-nuc-laguna-seca-race-2026-10-15",
+        "real-nuc-nordschleife-rolling-start-2026-10-15",
+        "real-nuc-tsukuba-brz-drift-2026-10-15",
+    ],
+)
+async def test_real_2026_10_15_unflagged_group_are_demos(name, tmp_path, caplog):
+    """The races GT7 never flagged (#63) start as the demos do: from the menu with
+    no loading screen, the flag off, the fuel flat. Laguna Seca and Nordschleife are
+    the 2026-10-18 demos in the same cars frame for frame. All four are ignored."""
+    assert await _ignored(FIXTURES / f"{name}.jsonl.gz", tmp_path, caplog) == [
+        "ignoring a demo race: GT7's cars-on-track flag is off from the start and it came"
+        " straight from the menu with no loading screen"
     ]

@@ -638,9 +638,17 @@ Learned from recordings, and encoded in `state.py`:
   the cars-on-track flag, while the fuel drains as it did in the race. A
   session that starts unflagged is held for up to 3 s: a fuel drop makes it a
   replay, ignored until the next start (no callouts, no session, no card, one
-  log line); the flag, a pause or 3 s without a drop make it a drive, and its
-  frames go through as if never held. A replay of a race with fuel off is not
-  told apart yet.
+  log line); the flag makes it a drive, and its frames go through as if never
+  held.
+- GT7's attract-mode demo race, which plays by itself when the PS5 sits idle on
+  the menu, is unflagged too, with the fuel flat. A drive always loads its track
+  (menu, loading, track screen, loading, track screen, lap 1); a demo goes from
+  the menu to the track with no loading screen. So when 3 s pass without the
+  flag or a fuel drop, or the start ends or pauses first, an unflagged start
+  with no loading screen since the last menu is a demo, ignored like a replay.
+  With no menu seen (the engineer started mid-demo) it is a demo if GT7 reports
+  two or more cars with the flag off. Anything else is a drive. The unflagged
+  races of 2026-10-15 (#63) were demos.
 
 ## Known limits
 

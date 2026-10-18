@@ -1,5 +1,8 @@
 import json
+import logging
 import sqlite3
+
+import pytest
 
 from those_who_run.audio.player import ConsolePlayer
 from those_who_run.callouts import CalloutQueue
@@ -267,16 +270,81 @@ async def test_an_unflagged_start_is_held_then_driven_as_if_never_held(tmp_path,
     assert engine.races_started == 1
 
 
-async def test_an_unflagged_race_with_no_fuel_use_is_driven(tmp_path, sim):
-    """The races GT7 never flags (2026-10-15, #63) have never used fuel: they are
-    driven, after the replay check's window, not ignored."""
+async def test_an_unflagged_race_with_no_fuel_use_after_a_loading_screen_is_driven(tmp_path, sim):
+    """No drive has been seen unflagged, but one that loads its track as a drive
+    does is driven, after the check's window, not ignored."""
     s = sim(total_laps=3, position=9, burn=0.0, is_race=False)
-    frames = s.menu().at_track().race([100000, 99000, 99500]).frames
+    frames = s.menu().loading().at_track().race([100000, 99000, 99500]).frames
     engine, _ = make_engine(tmp_path)
     spoken = [c.text for c in await replay(frames, engine, ConsolePlayer())]
     assert spoken[0] == "Three laps."
     assert engine.races_started == 1
     assert len(list((tmp_path / "sessions").iterdir())) == 1
+
+
+def _demo(sim, *before: str):
+    """GT7's attract-mode demo (2026-10-18): the flag off, the fuel flat, and no
+    loading screen between the last menu and the start."""
+    s = sim(total_laps=5, position=9, cars=12, burn=0.0, is_race=False)
+    for step in before:
+        getattr(s, step)()
+    return s.race([110000, 112000], finish=False)
+
+
+@pytest.mark.parametrize(
+    "before",
+    [
+        ("menu", "at_track"),
+        ("menu", "loading", "menu", "at_track"),  # the demo's loading screen, then the menu
+        ("menu",),  # straight from the menu into lap 1 (Nordschleife)
+        (),  # joined part way, no menu seen: 12 cars with the flag off
+    ],
+)
+async def test_a_demo_race_is_ignored(tmp_path, sim, before, caplog):
+    cards: list[dict] = []
+    engine = Engine(
+        build_rules(DEFAULT_RULES["rules"]),
+        CalloutQueue(max_age=None),
+        SessionStore(tmp_path, on_end=cards.append),
+    )
+    s = _demo(sim, *before)
+    with caplog.at_level(logging.INFO, logger="those_who_run"):
+        spoken = await replay(s.menu().frames, engine, ConsolePlayer())
+    assert spoken == [] and cards == []
+    assert engine.races_started == 0
+    assert not list(tmp_path.glob("sessions/*"))
+    assert [r.getMessage() for r in caplog.records if "demo" in r.getMessage()] != []
+
+
+async def test_the_frame_a_demo_ends_on_opens_no_session(tmp_path, sim):
+    """As a demo ends GT7 sends one frame back on lap 1 with no field, then the
+    menu (Nordschleife, 2026-10-18 13:05:58): a restart, and on main a 1-frame
+    session. It is judged like any start, and it is still the demo."""
+    from dataclasses import replace
+
+    s = _demo(sim, "menu", "at_track")
+    last = s.frames[-1]
+    s.frames.append(
+        replace(
+            last, t=last.t + 0.02, packet_id=last.packet_id + 1, current_lap=1, total_cars=-1,
+            race_start_pos=-1, speed_kph=0.0,
+        )
+    )  # fmt: skip
+    s.menu()
+    engine, _ = make_engine(tmp_path)
+    assert await replay(s.frames, engine, ConsolePlayer()) == []
+    assert engine.races_started == 0
+    assert not list(tmp_path.glob("sessions/*"))
+
+
+async def test_a_race_after_a_demo_is_driven(tmp_path, sim):
+    s = _demo(sim, "menu", "at_track").menu().loading().at_track().loading().at_track()
+    s.is_race, s.burn = True, 5.0
+    s.race([100000, 99000])
+    engine, _ = make_engine(tmp_path)
+    spoken = [c.text for c in await replay(s.frames, engine, ConsolePlayer())]
+    assert spoken[0].startswith("Five laps.")
+    assert engine.races_started == 1
 
 
 async def test_the_pit_lane_is_quiet_from_entry_to_exit(tmp_path, sim):
@@ -330,4 +398,18 @@ async def test_the_flag_in_the_lane_still_gets_the_held_calls(tmp_path, sim):
     texts = [c.text for c in engine.process(flag)]
     assert texts[0] == "In lap, one ten point zero."
     assert texts[1].startswith("Chequered flag.")
+    engine.recorder.close()
+
+
+async def test_an_engineer_restart_mid_race_with_the_flag_is_driven(tmp_path, sim):
+    """The engineer restarted mid-session (Suzuka, 2026-10-18 13:45): its first
+    frame is already racing, mid-lap, with no menu seen, like a demo joined part
+    way, but GT7 flags cars on track. A flagged start is never held: driven."""
+    s = sim(total_laps=0, cars=17, position=1, burn=0.0, is_race=True)
+    s.lap = 7
+    s.drive(5)
+    engine, _ = make_engine(tmp_path)
+    await replay(s.frames, engine, ConsolePlayer())
+    assert engine.races_started == 1
+    assert engine.recorder.session is not None
     engine.recorder.close()

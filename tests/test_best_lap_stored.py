@@ -23,8 +23,19 @@ from those_who_run.rules import build_rules
 from those_who_run.store import BestLapFix, SessionStore, StoreBusy, rebuild_best_laps
 
 FIXTURES = Path(__file__).parent / "fixtures"
-# A replay stores nothing (#243): it has no best lap to compare.
-REAL = sorted(p for p in FIXTURES.glob("real-*.jsonl.gz") if "-replay-" not in p.name)
+# A replay (#243) or a demo (#260) stores nothing: it has no best lap to compare.
+DEMOS = {
+    "real-nuc-laguna-seca-demo-2026-10-18",
+    "real-nuc-tokyo-east-race-2026-10-15",
+    "real-nuc-laguna-seca-race-2026-10-15",
+    "real-nuc-nordschleife-rolling-start-2026-10-15",
+    "real-nuc-tsukuba-brz-drift-2026-10-15",
+}
+REAL = sorted(
+    p
+    for p in FIXTURES.glob("real-*.jsonl.gz")
+    if "-replay-" not in p.name and p.name.removesuffix(".jsonl.gz") not in DEMOS
+)
 PIT_STOP = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 
 
@@ -78,7 +89,6 @@ async def test_stored_best_lap_is_the_cards(path, tmp_path):
         ("real-nuc-suzuka-timed-race-2026-10-16", [67585]),  # not 1:02.036
         ("real-race-2laps-2026-10-14", [49677, 53108]),  # the lap race: not 50.982
         ("real-nuc-gilles-villeneuve-race-2026-10-17", [97524]),  # lap 1 does count here
-        ("real-nuc-laguna-seca-race-2026-10-15", [112476]),  # and here
     ],
 )
 async def test_stored_best_lap_leaves_out_a_grid_start(name, bests, tmp_path):
@@ -114,16 +124,16 @@ def _as_written_by_0_4_0(data_dir: Path) -> None:
 
 async def test_rebuild_corrects_a_store_written_by_0_4_0(tmp_path):
     await _replay(PIT_STOP, tmp_path)
-    await _replay(FIXTURES / "real-nuc-laguna-seca-race-2026-10-15.jsonl.gz", tmp_path)
+    await _replay(FIXTURES / "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz", tmp_path)
     _as_written_by_0_4_0(tmp_path)
-    pit_id, laguna_id = _stored(tmp_path)
-    assert _stored(tmp_path) == {pit_id: 57109, laguna_id: 112476}
+    pit_id, gilles_id = _stored(tmp_path)
+    assert _stored(tmp_path) == {pit_id: 57109, gilles_id: 97524}
 
     assert rebuild_best_laps(tmp_path) == [BestLapFix(pit_id, 57109, 59541)]
-    assert _stored(tmp_path) == {pit_id: 59541, laguna_id: 112476}
+    assert _stored(tmp_path) == {pit_id: 59541, gilles_id: 97524}
     pit = _summary(tmp_path, pit_id)
     assert (pit["best_lap_ms"], pit["fastest_lap_ms"]) == (59541, 57109)
-    assert _summary(tmp_path, laguna_id)["fastest_lap_ms"] == 112476
+    assert _summary(tmp_path, gilles_id)["fastest_lap_ms"] == 97524
 
     assert rebuild_best_laps(tmp_path) == []  # safe to run again
 

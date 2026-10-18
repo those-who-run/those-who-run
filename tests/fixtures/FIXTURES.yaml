@@ -161,50 +161,65 @@ fixtures:
     date: 2026-10-15
     track: Tokyo Expressway - East Clockwise
     car: Porsche 911 GT3 (997) '09
-    kind: [lap_race (rolling)]
+    kind: [none (GT7's demo race, ignored; the detector reads lap_race (rolling))]
     outing: null
-    source: NUC outing from about 18:57 UTC, since pruned. A race, quit after lap 1.
+    source: >-
+      NUC outing from about 18:57 UTC, since pruned. Indexed as a race quit after
+      lap 1; it is GT7's attract-mode demo (#260): from the menu with no loading
+      screen, the flag off, the fuel flat at 100.
     pins:
       - Tokyo East is never Suzuka mid-lap.
-      - A race GT7 does not flag positions in is briefed without position or
-        fuel.
-      - Retiring from it gives a card with no position.
-    tests: [test_results, test_session_callouts, test_sessionkind, test_tracks]
+      - The engine ignores it as a demo (#260); until then it pinned a race GT7
+        does not flag being briefed without position or fuel, and its card.
+    tests: [test_real_recording, test_sessionkind, test_tracks]
 
   - file: real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz
     date: 2026-10-15
     track: none (the Nordschleife is not in the table)
     car: Mazda RX-VISION GT3 CONCEPT
-    kind: [lap_race (rolling)]
+    kind: [none (GT7's demo race, ignored; the detector reads lap_race (rolling))]
     outing: null
-    source: NUC outing from about 19:04 UTC, since pruned. The first 40 s of the race.
+    source: >-
+      NUC outing from about 19:04 UTC, since pruned. The first 40 s of GT7's
+      attract-mode demo (#260), frame for frame the demo of outing
+      20261018-130241: it opens on the last frames of the demo before it.
     pins:
       - A rolling start read through a burst of packets.
-      - A race entered from a loading screen.
+      - A loading screen into a driving frame is not a start; the start is
+        judged once, after the menu, and the engine ignores it as a demo.
     tests: [test_real_recording, test_sessionkind]
 
   - file: real-nuc-laguna-seca-race-2026-10-15.jsonl.gz
     date: 2026-10-15
     track: WeatherTech Raceway Laguna Seca
     car: Dodge Challenger R/T '70
-    kind: [lap_race (rolling)]
+    kind: [none (GT7's demo race, ignored; the detector reads lap_race (rolling))]
     outing: null
-    source: NUC outing from about 19:10 UTC, since pruned. A race, quit after lap 1.
+    source: >-
+      NUC outing from about 19:10 UTC, since pruned. Indexed as a race quit after
+      lap 1; it is GT7's attract-mode demo (#260), frame for frame the demo of
+      outing 20261018-105854 (same positions, speeds and time of day).
     pins:
       - Laguna Seca is never Interlagos mid-lap.
-      - The stored best lap matches the results card.
-    tests: [test_best_lap_stored, test_sessionkind, test_tracks]
+      - The engine ignores it as a demo (#260); until then it pinned the stored
+        best lap matching the card.
+    tests: [test_best_lap_stored, test_real_recording, test_sessionkind, test_tracks]
 
   - file: real-nuc-tsukuba-brz-drift-2026-10-15.jsonl.gz
     date: 2026-10-15
     track: Tsukuba Circuit
     car: Subaru BRZ Drift Car '17
-    kind: [solo_laps (flying)]
+    kind: [none (GT7's demo race, ignored; the detector reads solo_laps (flying))]
     outing: null
-    source: NUC outing from about 19:17 UTC, since pruned. Two drift laps.
+    source: >-
+      NUC outing from about 19:17 UTC, since pruned. Indexed as two drift laps;
+      it starts as GT7's attract-mode demo does (#260): from the menu with no
+      loading screen, the flag off, the fuel flat at 100.
     pins:
-      - Hot rears while drifting give one warning each time, not a stream.
-    tests: [test_rules, test_sessionkind]
+      - Hot rears while drifting give one warning each time, not a stream (the
+        temperature rule, fed the frames directly).
+      - The engine ignores it as a demo (#260).
+    tests: [test_real_recording, test_rules, test_sessionkind]
 
   - file: real-nuc-suzuka-timed-race-2026-10-16.jsonl.gz
     date: 2026-10-16
@@ -295,6 +310,22 @@ fixtures:
       - It gives no callouts, no stored session and no results card, and one
         log line saying why.
     tests: [test_real_recording]
+
+  - file: real-nuc-laguna-seca-demo-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: WeatherTech Raceway Laguna Seca (a demo; the detector is never run on it)
+    car: Dodge Challenger R/T '70
+    kind: [none (GT7's demo race, ignored)]
+    outing: "20261018-110141"
+    source: >-
+      NUC outing 20261018-110141, whole: GT7's attract-mode demo race on the
+      idle PS5, joined on lap 2 of 5 when the engineer restarted on 0.5.1.
+      Thinned at 2 Hz, with the first 4 s (the check's window) at full rate.
+    pins:
+      - A demo joined part way, with no menu seen, the flag off, the fuel flat
+        and 12 cars, gives no callouts, no stored session and no card, and one
+        log line saying why.
+    tests: [test_best_lap_stored, test_real_recording]
 
 outings:
   - id: "20261016-183946"
@@ -453,6 +484,41 @@ outings:
       race. No sessions, as the engineer ignores it. Source of
       real-nuc-sugo-replay-2026-10-18.
     cited_by: [63, 243]
+
+  - id: "20261018-110141"
+    date: 2026-10-18
+    track: []
+    car: []
+    kind: []
+    frames: 2541
+    sha256: 7863093029133efc18bccdeb703c6088d4349fcd60303b82b4e9017d7fae212e
+    note: >-
+      GT7 attract-mode demo race at WeatherTech Raceway Laguna Seca in the
+      Dodge Challenger R/T '70, joined on lap 2 of 5 when the engineer
+      restarted on 0.5.1 (11:01:41): cars-on-track off on every driving frame,
+      fuel flat at 100, 12 cars. It opened session 20261018-110144 before
+      #260. The same demo as 20261018-105854 and the 2026-10-15 Laguna Seca
+      fixture. No sessions, as the engineer ignores it. Source of
+      real-nuc-laguna-seca-demo-2026-10-18.
+    cited_by: [63, 260]
+
+  - id: "20261018-130241"
+    date: 2026-10-18
+    track: []
+    car: []
+    kind: []
+    frames: 11815
+    sha256: 5280f8a6e19f82786625c42cdf30d0c381c8b5acd2bb6ee4d80334e658c3760c
+    note: >-
+      GT7 attract-mode demo race on the Nurburgring Nordschleife Tourist
+      Layout in the Mazda RX-VISION GT3 CONCEPT, 2 laps, 20 cars: straight
+      from the menu into lap 1 with no loading screen, cars-on-track off on
+      every driving frame, fuel flat at 100. Before #260 it talked, posted a
+      card (session 20261018-130244) and opened a 1-frame session
+      (20261018-130558) on the restart frame GT7 sends as the demo ends.
+      Frame for frame the demo of the 2026-10-15 Nordschleife fixture. No
+      sessions, as the engineer ignores it.
+    cited_by: [63, 260]
 
 lost:
   - id: "20261016-180243"

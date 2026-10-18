@@ -14,7 +14,7 @@ from those_who_run.metrics import Metrics
 from those_who_run.replay import read_recording, replay
 from those_who_run.rules import build_rules
 from those_who_run.rules.base import Rule
-from those_who_run.sessionkind import ReplayCheck, SessionDetector
+from those_who_run.sessionkind import DriverCheck, SessionDetector
 from those_who_run.state import Phase
 from those_who_run.store import SessionStore
 
@@ -178,18 +178,6 @@ def test_real_rolling_start_read_through_a_packet_burst():
         ("real-nuc-fuji-timed-2026-10-15.jsonl.gz", "solo_timed", False, True, "flying"),
         ("real-nuc-sugo-timed-2026-10-15.jsonl.gz", "solo_timed", False, True, "flying"),
         ("real-n24h-race-lap1-positions-2026-10-14.jsonl.gz", "lap_race", True, True, "rolling"),
-        # the unnamed mode: no cars-on-track flag, no fuel use (see #63)
-        ("real-nuc-tokyo-east-race-2026-10-15.jsonl.gz", "lap_race", False, False, "rolling"),
-        ("real-nuc-laguna-seca-race-2026-10-15.jsonl.gz", "lap_race", False, False, "rolling"),
-        ("real-nuc-tsukuba-brz-drift-2026-10-15.jsonl.gz", "solo_laps", False, False, "flying"),
-        # 0 km/h on the first racing frames after loading, then 100 behind the pace
-        (
-            "real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz",
-            "lap_race",
-            False,
-            False,
-            "rolling",
-        ),
     ],
 )
 def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track, start):
@@ -200,6 +188,24 @@ def test_real_session_kinds(fixture, kind, fuel_use, cars_on_track, start):
     assert engine.kind.fuel_use is fuel_use
     assert engine.kind.cars_on_track is cars_on_track
     assert engine.kind.start == start
+
+
+@pytest.mark.parametrize(
+    ("fixture", "kind", "start"),
+    [
+        ("real-nuc-tokyo-east-race-2026-10-15.jsonl.gz", "lap_race", "rolling"),
+        ("real-nuc-laguna-seca-race-2026-10-15.jsonl.gz", "lap_race", "rolling"),
+        ("real-nuc-tsukuba-brz-drift-2026-10-15.jsonl.gz", "solo_laps", "flying"),
+        # 0 km/h on the first racing frames after loading, then 100 behind the pace
+        ("real-nuc-nordschleife-rolling-start-2026-10-15.jsonl.gz", "lap_race", "rolling"),
+    ],
+)
+def test_real_demo_kinds(fixture, kind, start):
+    """GT7's attract-mode demos (#260; the unnamed mode of #63): the engine ignores
+    them, but the detector reads them as it would a drive, with no flag and no fuel."""
+    det = SessionDetector()
+    feed(det, read_recording(FIXTURES / fixture, strict=True))
+    assert det.kind.decision == (kind, False, False, start)
 
 
 def test_real_qualifying_is_a_timed_field():
@@ -247,11 +253,15 @@ def test_engine_records_the_kind_in_the_session_metrics_and_rules(tmp_path):
     assert b"gt7_session_info{" + labels + b"} 1.0" in metrics.render()
 
 
-# replays (#243)
+# replays (#243) and demo races (#260)
 
 
-def check(first, *frames):
-    rc = ReplayCheck()
+def check(first, *frames, before=(Phase.MENU, Phase.LOADING)):
+    """The verdicts after a start reached through the ``before`` phases (by
+    default the loading screen a drive always passes through)."""
+    rc = DriverCheck()
+    for phase in before:
+        rc.see(frame(0, phase=phase))
     rc.start(first)
     verdicts = [rc.observe(f) for f in frames]
     return verdicts
@@ -270,7 +280,7 @@ def test_replay_check_reads_draining_fuel_without_the_flag_as_a_replay():
     ("later", "why"),
     [
         (dict(cars_on_track=True, fuel_level=97.0), "the flag came on"),
-        (dict(phase=Phase.PAUSED, fuel_level=97.0), "a pause: nothing a replay does"),
+        (dict(phase=Phase.PAUSED, fuel_level=97.0), "a pause after a loading screen"),
         (dict(t=3.0, packet_id=60), "three seconds without a drop"),
         (dict(t=1.0, packet_id=180), "180 packets without a drop"),
         (dict(t=1.0, packet_id=-5), "GT7's counter started over"),
@@ -287,3 +297,45 @@ def test_replay_check_calls_it_a_drive(later, why):
 def test_replay_check_waits_while_nothing_has_shown():
     start = frame(0, packet_id=0, cars_on_track=False, fuel_level=50.0)
     assert check(start, frame(1.0, packet_id=60, cars_on_track=False, fuel_level=50.0)) == [None]
+
+
+@pytest.mark.parametrize(
+    ("later", "why"),
+    [
+        (dict(t=3.0, packet_id=60), "three seconds without the flag or a drop"),
+        (dict(phase=Phase.MENU, current_lap=-1), "the demo ends inside the window"),
+        (dict(phase=Phase.PAUSED), "a pause inside the window"),
+    ],
+)
+def test_driver_check_reads_a_start_straight_from_the_menu_as_a_demo(later, why):
+    """2026-10-18: GT7's attract-mode demo goes menu, track screen, lap 1, with no
+    loading screen, the flag off and the fuel flat."""
+    start = frame(0, packet_id=0, cars_on_track=False, fuel_level=100.0)
+    over = dict(t=0.5, packet_id=30, cars_on_track=False, fuel_level=100.0)
+    over.update(later)
+    rc = DriverCheck()
+    for phase in (Phase.LOADING, Phase.MENU, Phase.AT_TRACK):  # loaded once, then the menu
+        rc.see(frame(0, phase=phase))
+    rc.start(start)
+    assert rc.observe(frame(**over)) == "demo", why
+    assert rc.why == "it came straight from the menu with no loading screen"
+
+
+def test_driver_check_still_sees_the_flag_from_the_menu_as_a_drive():
+    start = frame(0, packet_id=0, cars_on_track=False)
+    later = frame(0.5, packet_id=30, cars_on_track=True)
+    assert check(start, later, before=(Phase.MENU, Phase.AT_TRACK)) == ["drive"]
+
+
+@pytest.mark.parametrize(
+    ("cars", "verdict"),
+    [
+        (12, "demo"),  # the demo joined on lap 2 of 5, 2026-10-18 11:01
+        (-1, "drive"),  # 2026-10-14 practice joined on lap 7: no field reported
+        (1, "drive"),
+    ],
+)
+def test_driver_check_with_no_menu_seen_goes_by_the_field(cars, verdict):
+    start = frame(0, packet_id=0, cars_on_track=False, current_lap=2, total_cars=cars)
+    later = frame(3.0, packet_id=180, cars_on_track=False, current_lap=2, total_cars=cars)
+    assert check(start, later, before=()) == [verdict]

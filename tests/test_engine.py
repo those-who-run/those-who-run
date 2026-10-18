@@ -193,3 +193,57 @@ async def test_a_lap_posted_on_a_loading_frame_is_still_called(tmp_path, sim):
     assert "Lap one. one oh zero point zero." in [c.text for c in spoken]
     assert [lap["lap"] for lap in engine.recorder.session.laps] == [1], "lap 1 stored on its own"
     engine.recorder.close()
+
+
+async def test_a_replay_between_two_races_is_ignored(tmp_path, sim):
+    """A race, its GT7 replay (no cars-on-track flag, the fuel draining) and the
+    next race: two sessions, two briefs, nothing from the replay (#243)."""
+    s = sim(total_laps=2, position=4, cars=12, is_race=True)
+    s.menu().at_track().race([100000, 99000]).menu().at_track()
+    s.is_race = False
+    s.race([100000, 99000]).menu().at_track()
+    s.is_race = True
+    s.race([101000, 98000])
+    cards: list[dict] = []
+    engine = Engine(
+        build_rules(DEFAULT_RULES["rules"]),
+        CalloutQueue(max_age=None),
+        SessionStore(tmp_path, on_end=cards.append),
+    )
+    spoken = [c.text for c in await replay(s.frames, engine, ConsolePlayer())]
+    assert engine.races_started == 2
+    assert spoken.count("Two laps. P four of twelve.") == 2
+    assert len([t for t in spoken if t.startswith("Chequered flag")]) == 2
+    assert len(cards) == 2
+    assert len(list((tmp_path / "sessions").iterdir())) == 2
+
+
+async def test_an_unflagged_start_is_held_then_driven_as_if_never_held(tmp_path, sim):
+    """The flag missing from the first frame only delays the session until it shows:
+    every frame then goes through as it would have, so the callouts are the same."""
+    from dataclasses import replace
+
+    frames = sim(total_laps=3, is_race=True).menu().at_track().race([100000, 99000, 99500]).frames
+    engine, _ = make_engine(tmp_path / "a")
+    expected = [c.text for c in await replay(frames, engine, ConsolePlayer())]
+    start = next(i for i, f in enumerate(frames) if f.in_race)
+    late = list(frames)
+    late[start] = replace(late[start], cars_on_track=False)
+    engine, _ = make_engine(tmp_path / "b")
+    assert engine.process(late[start - 1]) == [] and engine.process(late[start]) == []
+    assert engine.races_started == 0, "held"
+    rest = [c.text for c in await replay(late[start + 1 :], engine, ConsolePlayer())]
+    assert rest == expected
+    assert engine.races_started == 1
+
+
+async def test_an_unflagged_race_with_no_fuel_use_is_driven(tmp_path, sim):
+    """The races GT7 never flags (2026-10-15, #63) have never used fuel: they are
+    driven, after the replay check's window, not ignored."""
+    s = sim(total_laps=3, position=9, burn=0.0, is_race=False)
+    frames = s.menu().at_track().race([100000, 99000, 99500]).frames
+    engine, _ = make_engine(tmp_path)
+    spoken = [c.text for c in await replay(frames, engine, ConsolePlayer())]
+    assert spoken[0] == "Three laps."
+    assert engine.races_started == 1
+    assert len(list((tmp_path / "sessions").iterdir())) == 1

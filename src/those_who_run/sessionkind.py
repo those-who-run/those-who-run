@@ -38,6 +38,19 @@ been recorded yet.
 for the whole of a time trial, so -1 says nothing about the field. GT7 can also
 post the lap total a moment after the race starts, so the verdict is kept up to
 date like the track detector's: feed every frame, read ``kind``.
+
+A **GT7 race replay** sends driving frames too, and GT7 starts it like a race:
+the track screen, then lap 1 (SUGO, 2026-10-18, outing ``20261018-100645``).
+What gives it away is the cars-on-track flag together with fuel. Every drive
+since 2026-10-16 (races, time trials, practice) has the flag set from its first
+driving frame, and it drops only on the last frames of a session. The replay
+has it off from the first frame to the last, while the fuel drains as it did in
+the race it replays (98.3 to 97.6 within 52 packets). The races GT7 never flags
+(2026-10-15, a mode still to be named, #63) are unflagged too, but none of them
+has ever used fuel, so fuel use is what tells the two apart. ``ReplayCheck``
+judges a session that starts unflagged: a replay once the fuel drops, a drive
+once the flag comes on or ``window_secs`` (or ``window_packets``) pass without
+a drop, which is longer than any drive with fuel on takes to show one.
 """
 
 from __future__ import annotations
@@ -205,3 +218,41 @@ class SessionDetector:
             why += f"; {start} start at {self._start_kph:.0f} km/h"
         field = kind in ("lap_race", "timed_field")
         return SessionKind(kind, self._laps, field, self._fuel_use, self._cars_on_track, why, start)
+
+
+Verdict = Literal["drive", "replay"]
+
+
+class ReplayCheck:
+    """Is a session that starts with GT7's cars-on-track flag off a replay? See the
+    module docstring. Call ``start`` with the session's first driving frame, then
+    feed each later frame until ``observe`` returns a verdict."""
+
+    def __init__(
+        self,
+        fuel_drop: float = 0.05,
+        window_secs: float = 3.0,
+        window_packets: int = 180,
+    ) -> None:
+        self.fuel_drop = fuel_drop
+        self.window_secs = window_secs
+        self.window_packets = window_packets
+        self.first: RaceState | None = None
+        self.top_fuel = 0.0
+
+    def start(self, state: RaceState) -> None:
+        self.first = state
+        self.top_fuel = state.fuel_level
+
+    def observe(self, state: RaceState) -> Verdict | None:
+        first = self.first
+        assert first is not None, "start() first"
+        if state.phase is not Phase.IN_RACE or state.cars_on_track:
+            return "drive"  # a pause, an end or the flag: nothing a replay does at its start
+        self.top_fuel = max(self.top_fuel, state.fuel_level)
+        if state.fuel_capacity > 0 and state.fuel_level < self.top_fuel - self.fuel_drop:
+            return "replay"
+        packets = state.packet_id - first.packet_id
+        if state.t - first.t >= self.window_secs or not 0 <= packets < self.window_packets:
+            return "drive"
+        return None

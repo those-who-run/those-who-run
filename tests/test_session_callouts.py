@@ -75,7 +75,8 @@ async def test_a_race_gt7_does_not_flag_gets_no_grid_slot_or_places(sim):
 
 
 async def test_leaving_a_time_trial_sums_it_up(sim):
-    s = sim(total_laps=0, cars=1, position=1)
+    # GT7 flags a time trial (#129); unflagged with the fuel draining is a replay (#243).
+    s = sim(total_laps=0, cars=1, position=1, is_race=True)
     s.race([102300, 101900, 103000], finish=False)
     s.loading(0).at_track()
     texts = await spoken(s.frames)

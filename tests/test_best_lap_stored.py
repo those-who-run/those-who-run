@@ -23,7 +23,8 @@ from those_who_run.rules import build_rules
 from those_who_run.store import BestLapFix, SessionStore, StoreBusy, rebuild_best_laps
 
 FIXTURES = Path(__file__).parent / "fixtures"
-REAL = sorted(FIXTURES.glob("real-*.jsonl.gz"))
+# A replay stores nothing (#243): it has no best lap to compare.
+REAL = sorted(p for p in FIXTURES.glob("real-*.jsonl.gz") if "-replay-" not in p.name)
 PIT_STOP = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 
 

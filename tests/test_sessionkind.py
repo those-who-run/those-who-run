@@ -14,7 +14,7 @@ from those_who_run.metrics import Metrics
 from those_who_run.replay import read_recording, replay
 from those_who_run.rules import build_rules
 from those_who_run.rules.base import Rule
-from those_who_run.sessionkind import SessionDetector
+from those_who_run.sessionkind import ReplayCheck, SessionDetector
 from those_who_run.state import Phase
 from those_who_run.store import SessionStore
 
@@ -245,3 +245,45 @@ def test_engine_records_the_kind_in_the_session_metrics_and_rules(tmp_path):
     assert summary["car_name"] == "Honda Civic Si Group A version '87"
     labels = b'fuel_use="on",kind="lap_race",start="rolling"'
     assert b"gt7_session_info{" + labels + b"} 1.0" in metrics.render()
+
+
+# replays (#243)
+
+
+def check(first, *frames):
+    rc = ReplayCheck()
+    rc.start(first)
+    verdicts = [rc.observe(f) for f in frames]
+    return verdicts
+
+
+def test_replay_check_reads_draining_fuel_without_the_flag_as_a_replay():
+    start = frame(0, packet_id=0, cars_on_track=False, fuel_level=98.3)
+    assert check(
+        start,
+        frame(0.5, packet_id=30, cars_on_track=False, fuel_level=98.3),
+        frame(0.9, packet_id=52, cars_on_track=False, fuel_level=97.6),
+    ) == [None, "replay"]
+
+
+@pytest.mark.parametrize(
+    ("later", "why"),
+    [
+        (dict(cars_on_track=True, fuel_level=97.0), "the flag came on"),
+        (dict(phase=Phase.PAUSED, fuel_level=97.0), "a pause: nothing a replay does"),
+        (dict(t=3.0, packet_id=60), "three seconds without a drop"),
+        (dict(t=1.0, packet_id=180), "180 packets without a drop"),
+        (dict(t=1.0, packet_id=-5), "GT7's counter started over"),
+        (dict(t=3.0, fuel_capacity=0.0, fuel_level=0.0), "no tank: fuel says nothing"),
+    ],
+)
+def test_replay_check_calls_it_a_drive(later, why):
+    start = frame(0, packet_id=0, cars_on_track=False)
+    over = dict(t=0.5, packet_id=30, cars_on_track=False)
+    over.update(later)
+    assert check(start, frame(**over)) == ["drive"], why
+
+
+def test_replay_check_waits_while_nothing_has_shown():
+    start = frame(0, packet_id=0, cars_on_track=False, fuel_level=50.0)
+    assert check(start, frame(1.0, packet_id=60, cars_on_track=False, fuel_level=50.0)) == [None]

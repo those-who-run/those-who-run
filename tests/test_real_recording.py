@@ -7,6 +7,7 @@ no cars on track), a two-lap race from P10 to P6, the chequered flag at
 """
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -32,6 +33,7 @@ WILLOW_STOP = (
     Path(__file__).parent / "fixtures" / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz"
 )
 SUGO_STOPS = Path(__file__).parent / "fixtures" / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
+SUGO_REPLAY = Path(__file__).parent / "fixtures" / "real-nuc-sugo-replay-2026-10-18.jsonl.gz"
 
 
 def test_fixture_phases_cover_the_whole_session():
@@ -127,7 +129,9 @@ def test_real_race_entered_from_a_loading_screen():
     """Nordschleife, 2026-10-15: GT7 goes MENU -> LOADING (lap 1) -> IN_RACE at 0
     km/h with no field, then shows the menu for two frames before the race proper.
     LOADING -> IN_RACE is not a start (a pit stop on lap 1 looks the same); the
-    session opens once, on the frame after the menu blip (#157)."""
+    session opens once, on the frame after the menu blip (#157). The flag is off, so
+    the start is held while the engine checks for a replay (#243): the frame the
+    session opens on is read where the engine handles it, not where it arrives."""
     path = (
         Path(__file__).parent
         / "fixtures"
@@ -142,11 +146,18 @@ def test_real_race_entered_from_a_loading_screen():
     assert [s.packet_id for s in loading_to_race] == [473613]
     engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None))
     opened = []
-    for s in states:
+    step = engine._step
+
+    def spy(s):
         before = engine.races_started
-        engine.process(s)
+        out = step(s)
         if engine.races_started > before:
             opened.append(s)
+        return out
+
+    engine._step = spy  # type: ignore[method-assign]
+    for s in states:
+        engine.process(s)
     assert [(s.packet_id, round(s.speed_kph), s.total_cars) for s in opened] == [(473620, 100, 20)]
 
 
@@ -357,3 +368,34 @@ async def test_real_race_finished_on_the_last_litre(tmp_path):
         "Chequered flag. Finished second. Best lap one oh one point two.",
     ]
     assert [lap for lap, _ in laps] == [1, 2, 3, 4, 5, 6]
+
+
+async def test_real_race_replay_is_ignored(tmp_path, caplog):
+    """SUGO, 2026-10-18: the driver watched the replay of the race just run. GT7
+    starts it like a race (track screen, then lap 1) but never flags cars on track
+    while it plays, and the fuel drains as it did in the race. The engineer says
+    nothing, stores nothing and posts no card, and says why once in the log (#243)."""
+    states = list(read_recording(SUGO_REPLAY, strict=True))
+    driving = [s for s in states if s.in_race]
+    assert not any(s.cars_on_track for s in driving)
+    assert driving[0].fuel_level > 98 and driving[-1].fuel_level < 3
+    cards: list[dict] = []
+    engine = Engine(
+        build_rules(DEFAULT_RULES["rules"]),
+        CalloutQueue(max_age=None),
+        SessionStore(tmp_path, on_end=cards.append),
+    )
+    with caplog.at_level(logging.INFO, logger="those_who_run"):
+        spoken = await replay(states, engine, ConsolePlayer())
+    assert spoken == []
+    assert engine.races_started == 0
+    assert cards == []
+    assert not list(tmp_path.glob("sessions/*"))
+    db = sqlite3.connect(tmp_path / "index.sqlite")
+    assert db.execute("SELECT COUNT(*) FROM sessions").fetchone() == (0,)
+    db.close()
+    replays = [r.getMessage() for r in caplog.records if "replay" in r.getMessage()]
+    assert replays == [
+        "ignoring a replay: GT7's cars-on-track flag is off from the start and fuel is"
+        " draining (98.3 -> 97.6), which only a replay does"
+    ]

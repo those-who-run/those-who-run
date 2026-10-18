@@ -9,7 +9,7 @@ from those_who_run.metrics import Metrics
 from those_who_run.pitstop import NO_STOPS, PitDetector, PitStatus
 from those_who_run.rules.base import Rule
 from those_who_run.rules.fuel import FuelRule
-from those_who_run.sessionkind import SessionDetector, SessionKind
+from those_who_run.sessionkind import ReplayCheck, SessionDetector, SessionKind
 from those_who_run.state import (
     Phase,
     RaceState,
@@ -56,8 +56,53 @@ class Engine:
         self._crossing: RaceState | None = None  # last line crossing of a timed race
         self._coast_since: float | None = None
         self.last_driving: RaceState | None = None  # last IN_RACE frame of this race
+        self.replays = ReplayCheck()
+        self.replay = False  # watching a GT7 replay: ignored until the next start
+        self._held: list[RaceState] = []  # an unflagged start, until ReplayCheck decides
+        self._held_prev: RaceState | None = None
 
     def process(self, state: RaceState) -> list[Callout]:
+        """Feed one frame. A session that starts with GT7's cars-on-track flag off is
+        held back, at most ``ReplayCheck.window_secs``, until it is known to be a
+        drive (its frames then go through as if never held) or a replay (#243)."""
+        prev = self.prev
+        if self._held:
+            self._held.append(state)
+            self.prev = state
+            verdict = self.replays.observe(state)
+            if verdict is None:
+                return []
+            held, self._held = self._held, []
+            if verdict == "drive":
+                self.prev = self._held_prev
+                return [c for s in held for c in self._step(s)]
+            first = held[0]
+            log.info(
+                "ignoring a replay: GT7's cars-on-track flag is off from the start and"
+                " fuel is draining (%.1f -> %.1f), which only a replay does",
+                first.fuel_level,
+                state.fuel_level,
+            )
+            self.replay = True
+            recorder, last = self.recorder, self._held_prev
+            if recorder is not None and recorder.session is not None and last is not None:
+                log.info("closing open session on replay start")
+                recorder.end_session(last)
+            self.last_driving = None
+            return []
+        starting = race_started(prev, state) or race_restarted(prev, state)
+        if starting and not state.cars_on_track:
+            self._held, self._held_prev = [state], prev
+            self.replays.start(state)
+            self.prev = state
+            return []
+        if self.replay and not starting:
+            self.prev = state
+            return []
+        self.replay = False
+        return self._step(state)
+
+    def _step(self, state: RaceState) -> list[Callout]:
         prev = self.prev
         restarted = race_restarted(prev, state)
         if race_started(prev, state) or restarted:

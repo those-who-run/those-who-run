@@ -276,6 +276,23 @@ fixtures:
         one call.
     tests: [test_pitstop, test_real_recording]
 
+  - file: real-nuc-sugo-replay-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Sportsland SUGO (a replay; the detector is never run on it)
+    car: "Mazda RX-VISION GT3 EVO '26"
+    kind: [none (a race replay, ignored)]
+    outing: "20261018-100645"
+    source: >-
+      NUC outing 20261018-100645: the GT7 replay of the SUGO 12-lap race
+      20261018-094323, watched from the start and skipped to the end on lap 4.
+      Thinned at 2 Hz, with seconds 10 to 14 (the start, from the track
+      screen) at full rate.
+    pins:
+      - A race replay is never flagged cars on track, and its fuel drains.
+      - It gives no callouts, no stored session and no results card, and one
+        log line saying why.
+    tests: [test_real_recording]
+
 outings:
   - id: "20261016-183946"
     date: 2026-10-16
@@ -418,6 +435,21 @@ outings:
       and 8) with the pit lane across the finish line. Source of
       real-nuc-sugo-two-stops-2026-10-18.
     cited_by: [244, 245, 246, 247]
+
+  - id: "20261018-100645"
+    date: 2026-10-18
+    track: []
+    car: []
+    kind: []
+    frames: 18517
+    sha256: 4a529bb5964805cb51850238542c066dae45d346a503a03a4a070f4fb057248b
+    note: >-
+      GT7 race replay of the SUGO 12-lap race 20261018-094323 (session
+      20261018-094354), watched from the start and skipped to the end on lap
+      4: cars-on-track off on every driving frame, fuel draining as in the
+      race. No sessions, as the engineer ignores it. Source of
+      real-nuc-sugo-replay-2026-10-18.
+    cited_by: [63, 243]
 
 lost:
   - id: "20261016-180243"

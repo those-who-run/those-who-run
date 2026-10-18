@@ -625,6 +625,13 @@ Learned from recordings, and encoded in `state.py`:
 - Timed races never report a flag (no lap total to exceed), so they get no
   summary yet. That needs a timed-race recording.
 - GT7 sends no track id; see Track detection above.
+- A race replay starts like a race (track screen, then lap 1) but never sets
+  the cars-on-track flag, while the fuel drains as it did in the race. A
+  session that starts unflagged is held for up to 3 s: a fuel drop makes it a
+  replay, ignored until the next start (no callouts, no session, no card, one
+  log line); the flag, a pause or 3 s without a drop make it a drive, and its
+  frames go through as if never held. A replay of a race with fuel off is not
+  told apart yet.
 
 ## Known limits
 

@@ -362,7 +362,30 @@ fixtures:
         grid slot, no cold-tyre call and no track before the line (#265).
       - The track is Suzuka from the line, never Lago Maggiore from the mid-lap
         start, and the session is stored as joined on lap 7.
-    tests: [test_joined]
+      - After real-nuc-suzuka-before-restart-2026-10-18 on the same data
+        directory, it continues that session (#273).
+    tests: [test_joined, test_restart]
+
+  - file: real-nuc-suzuka-before-restart-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Suzuka Circuit
+    car: Honda Civic Type R (EK) Touring Car
+    kind: [timed_field (flying)]
+    outing: "20261018-132115"
+    source: >-
+      NUC outing 20261018-132115, the whole outing at 1 Hz: the old engineer
+      pod's view of a Suzuka timed race, from the menu to the chaos-test kill 20 s
+      into lap 7, leading. A 4-minute pause on lap 3 and a stop on lap 4 that sat
+      in the box for 3.5 minutes and took no fuel. Its last frame is the last one
+      before the kill; real-nuc-suzuka-joined-mid-race-2026-10-18 is the new
+      pod's view from 8.7 s later.
+    pins:
+      - Laps 1 to 6 and the start of lap 7, Suzuka confirmed on lap 1, one pit
+        stop on lap 4 (its exit is a drive out, not a cut).
+      - Ended by the engineer's shutdown, the session's card is held; the joined
+        fixture after it continues the session, and another car or a gap over
+        the window does not (#273).
+    tests: [test_restart]
 
   - file: real-nuc-spa-pit-cut-quit-2026-10-18.jsonl.gz
     date: 2026-10-18
@@ -613,15 +636,30 @@ outings:
     track: [Suzuka Circuit]
     car: [Honda Civic Type R (EK) Touring Car]
     kind: [timed_field]
-    frames: null  # still being recorded when the fixture was cut: set when archived
-    sha256: null
+    frames: 104906
+    sha256: d88d43aa1cb85cc3614a7f69450ec8859127726077fc1187c35441ad2c59d856
     note: >-
       The engineer pod's outing after a chaos-test kill 20 s into lap 7 of a
       Suzuka timed race (the old pod's outing is 20261018-132115): it starts
       mid-lap with no menu, and 0.5.1 briefed a grid slot, called cold tyres and
       named two Lago Maggiore layouts. Then more timed races at Suzuka. Source of
       real-nuc-suzuka-joined-mid-race-2026-10-18.
-    cited_by: [265]
+    cited_by: [265, 273]
+
+  - id: "20261018-132115"
+    date: 2026-10-18
+    track: [Suzuka Circuit]
+    car: [Honda Civic Type R (EK) Touring Car]
+    kind: [timed_field (flying)]
+    frames: 85658
+    sha256: 43f2baaef96ab69ace36b2e227eb704e16b9dd04aa244ff8bd1394613eaf9101
+    note: >-
+      The old engineer pod's outing of the Suzuka timed race the chaos test
+      killed it in, 20 s into lap 7 while leading (session 20261018-132148, "ended
+      after 6 laps"). It ends at the kill, with no menu frame. The new pod's
+      outing is 20261018-134517. Source of
+      real-nuc-suzuka-before-restart-2026-10-18.
+    cited_by: [265, 273]
 
   - id: "20261018-141557"
     date: 2026-10-18

@@ -73,6 +73,8 @@ class SessionRow:
     closed: bool  # summary.json written: the session has ended
     track_id: int | None = None  # only when the detector is sure: probable or confirmed
     driving_ms: int | None = None  # time not paused (#229); None for older sessions
+    # engineer restarts the session was continued across (#273): from, to, lap, reason
+    gaps: tuple[dict[str, Any], ...] = ()
 
     @property
     def kind_name(self) -> str:
@@ -117,6 +119,7 @@ class LapRow:
     invalid: bool  # no lap time to compare: a partial lap or an untimed crossing
     best: bool  # the session's best lap, as the card picks it
     fuel_use: bool = True  # False when the session's fuel use is off: fuel means nothing
+    restart: bool = False  # an engineer restart fell in this lap (#273): partly seen
 
     @property
     def time(self) -> str:
@@ -132,6 +135,8 @@ class LapRow:
             out.append("pit")
         if self.out_lap:
             out.append("out")
+        if self.restart:
+            out.append("restart")
         if self.invalid:
             out.append("partial" if not self.complete else "no time")
         return ", ".join(out)
@@ -215,6 +220,7 @@ _SESSION_COLS = (
     "session_kind",
     "fuel_use",
     "start_type",
+    "gaps",
 )
 _LAP_COLS = (
     "lap",
@@ -299,6 +305,7 @@ def _index_summary(row: dict[str, Any], laps: list[dict[str, Any]]) -> dict[str,
         "finished": False,
         "final_position": row["final_position"],
         "fuel_used": row["fuel_used"],
+        "gaps": json.loads(row["gaps"]) if row["gaps"] else [],
         "laps": laps,
     }
 
@@ -345,6 +352,7 @@ def _row(summary: dict[str, Any], closed: bool) -> SessionRow:
         closed=closed,
         track_id=sure_track_id(summary.get("track")),
         driving_ms=summary.get("driving_ms"),
+        gaps=tuple(summary.get("gaps") or ()),
     )
 
 
@@ -446,7 +454,8 @@ def lap_summaries(data_dir: Path, session_id: str) -> list[LapRow]:
       refuel: fuel rose by ``PIT_REFUEL`` or more during the lap, in a session
       whose fuel use is not off, and the out lap is the one after it.
     - **invalid:** no lap time: the partial lap at the end of a session, or a
-      crossing GT7 gave no time for. GT7 does not report track limits.
+      crossing GT7 gave no time for. GT7 does not report track limits. The lap
+      an engineer restart fell in (#273) is partial too, and flagged ``restart``.
     """
     summary = session_summary(data_dir, session_id)
     if summary is None:
@@ -463,6 +472,7 @@ def lap_summaries(data_dir: Path, session_id: str) -> list[LapRow]:
     best_no = quickest[0] if quickest else None
 
     detected = "pit_stops" in summary or any(r["pit"] for r in laps)
+    restarts = {g.get("lap") for g in summary.get("gaps") or []}
     out: list[LapRow] = []
     prev_pit = False
     for r in laps:
@@ -491,6 +501,7 @@ def lap_summaries(data_dir: Path, session_id: str) -> list[LapRow]:
                 invalid=not r["complete"] or not r["lap_time_ms"],
                 best=r["lap"] == best_no,
                 fuel_use=not fuel_off,
+                restart=r["lap"] in restarts,
             )
         )
         prev_pit = pit

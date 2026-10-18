@@ -34,6 +34,19 @@ A lap's ``laps`` row is inserted by that same thread once its Parquet file is
 complete, so a reader that finds the row always finds the file (#148). The
 SQLite connection is shared between the event loop and the writer thread, so
 every use of it holds ``_db_lock``.
+
+An engineer restart in the middle of a race (an upgrade, an OOM, a node reboot)
+continues the session it cut short (#273). A session the engineer's shutdown
+ended (``end_session(shutdown=True)``) is marked ``engineer_shutdown`` and its
+results card is held: ``on_end`` is not called. A session joined part way
+(#265) within ``continue_window_secs`` of it, in the same car, kind and field,
+on its last lap or later, reopens it: the same id, the laps appended, the track
+and kind carried over, and the gap recorded in ``gaps``. The lap the gap falls
+in is stored as one incomplete lap, its frames from both sides. A held card is
+let go (``on_end``) when the session continues and ends for real, when another
+session starts, or ``continue_window_secs`` after the shutdown
+(``release_held``, from the engineer's watchdog, so a store opened later lets go
+of what an earlier one held). Anything else is a new session, as before.
 """
 
 from __future__ import annotations
@@ -118,6 +131,9 @@ FRAME_COLUMNS: tuple[tuple[str, str], ...] = (
 # How long a write waits for another writer (backfill, a ``post``) before failing.
 BUSY_TIMEOUT_SECS = 5.0
 LOCK_FILE = "engineer.lock"
+# A session the engineer's shutdown ended is continued by a join this soon after.
+CONTINUE_WINDOW_SECS = 600.0
+GAP_REASON = "engineer restart"
 
 
 class LapNotIndexed(RuntimeError):
@@ -273,6 +289,18 @@ def write_parquet(path: Path, rows: list[tuple[Any, ...]]) -> float:
     return time.perf_counter() - started
 
 
+def read_frames(path: Path) -> list[tuple[Any, ...]]:
+    """A lap file's rows in FRAME_COLUMNS order, as written."""
+    import duckdb
+
+    cols = ", ".join(name for name, _ in FRAME_COLUMNS)
+    con = duckdb.connect()
+    try:
+        return con.execute(f"SELECT {cols} FROM read_parquet(?)", [str(path)]).fetchall()
+    finally:
+        con.close()
+
+
 def write_summary(path: Path, summary: dict[str, Any]) -> None:
     """Write summary.json atomically: a temporary file next to it, synced, then
     renamed over it. A crash leaves the old file or the new one, never half of
@@ -383,6 +411,30 @@ def session_type(state: RaceState) -> str:
     return "time_trial" if state.total_laps == 0 else "practice"
 
 
+def continue_mismatch(
+    before: dict[str, Any], state: RaceState, since: float, window: float
+) -> str | None:
+    """Why a join at ``state``, ``since`` seconds after the session ``before``
+    summarises was ended by a shutdown, does not continue it; None when it does
+    (#273). The kind as far as one frame tells it: race or not, the lap total, and
+    the size of the field."""
+    last_lap = max((int(x["lap"]) for x in before.get("laps") or []), default=0)
+    cars, was_cars = state.total_cars, int(before.get("total_cars") or 0)
+    if since > window:
+        return f"{since / 60:.1f} min after it ended, over {window / 60:.1f}"
+    if before.get("car_code") != state.car_code:
+        return "another car"
+    if before.get("type") != session_type(state):
+        return f"a {session_type(state)}, not a {before.get('type')}"
+    if before.get("total_laps") != state.total_laps:
+        return f"{state.total_laps} laps, not {before.get('total_laps')}"
+    if cars > 0 and was_cars > 0 and cars != was_cars:
+        return f"{cars} cars, not {was_cars}"
+    if state.current_lap < last_lap:
+        return f"lap {state.current_lap}, before its last lap {last_lap}"
+    return None
+
+
 @dataclass
 class Session:
     session_id: str
@@ -406,7 +458,17 @@ class Session:
     gt7_best_ms: int = 0  # GT7's own best, which leaves out a start lap
     pits: PitStatus = NO_STOPS  # see SessionStore.set_pits
     start_t: float = 0.0  # frame time of the first frame, for the driving time
+    start_wall: float | None = None  # wall-clock time at start_t, when not started_at
     joined_on_lap: int | None = None  # joined part way through, on this lap (#265)
+    # Continued after an engineer restart (#273): see SessionStore.start_session.
+    gaps: list[dict[str, Any]] = field(default_factory=list)
+    gap_lap: int | None = None  # the lap the last gap fell in, until it is written
+    gap_merge: Path | None = None  # that lap's file from before the gap, to merge
+    before: dict[str, Any] | None = None  # the summary before the last gap
+
+    @property
+    def continued(self) -> bool:
+        return bool(self.gaps)
 
 
 class SessionStore:
@@ -415,8 +477,10 @@ class SessionStore:
         data_dir: Path,
         clock: Any = time.time,
         on_end: Callable[[dict[str, Any]], None] | None = None,
+        continue_window_secs: float = CONTINUE_WINDOW_SECS,
     ) -> None:
-        self.on_end = on_end  # called with each summary once it is written
+        self.on_end = on_end  # called with each summary once it is written, see the top
+        self.continue_window_secs = continue_window_secs
         self.data_dir = Path(data_dir)
         self.clock = clock
         self.session: Session | None = None
@@ -438,8 +502,17 @@ class SessionStore:
         _ensure_column(self._db, "sessions", "driving_ms", "INTEGER")
         _ensure_column(self._db, "sessions", "ended_paused", "INTEGER")
         _ensure_column(self._db, "sessions", "joined_on_lap", "INTEGER")
+        _ensure_column(self._db, "sessions", "engineer_shutdown", "INTEGER")
+        _ensure_column(self._db, "sessions", "card_held", "INTEGER")
+        _ensure_column(self._db, "sessions", "gaps", "TEXT")
         _ensure_column(self._db, "laps", "pit", "TEXT")
         self._db.commit()
+        # Sessions ended by a shutdown whose card is held: id -> ended_at.
+        self._held: dict[str, float] = dict(
+            self._db.execute(
+                "SELECT id, ended_at FROM sessions WHERE card_held = 1 ORDER BY ended_at"
+            ).fetchall()
+        )
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lap-writer")
         self._pending: list[Future[float]] = []
 
@@ -473,7 +546,13 @@ class SessionStore:
 
     def start_session(self, state: RaceState, joined: bool = False) -> Session:
         """Open a session on its first driving frame. ``joined``: the engineer
-        started part way through it (#265), so the frames start mid-lap."""
+        started part way through it (#265), so the frames start mid-lap, and it may
+        continue the session a shutdown cut short (#273, see the top)."""
+        if joined:
+            before = self._continuable(state)
+            if before is not None:
+                return self._continue(before, state)
+        self.release_held(force=True)  # a new session: no held one can continue now
         base = time.strftime("%Y%m%d-%H%M%S", time.gmtime(self.clock()))
         session_id, n = base, 1
         while (self.data_dir / "sessions" / session_id).exists():
@@ -516,6 +595,123 @@ class SessionStore:
         )
         return self.session
 
+    def _continuable(self, state: RaceState) -> dict[str, Any] | None:
+        """The summary of the session a join at ``state`` continues, or None: the
+        latest session, ended by the engineer's shutdown within the window, with
+        its card still held, in the same car, kind and field, and not on a later
+        lap than ``state``. Each mismatch is logged: it is a new session."""
+        with self._db_lock:
+            row = self._db.execute(
+                "SELECT id FROM sessions ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+        if row is None or row[0] not in self._held:
+            return None
+        session_id = row[0]
+        try:
+            path = self.data_dir / "sessions" / session_id / "summary.json"
+            before: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log.warning("session %s cannot be continued: %s", session_id, exc)
+            return None
+        since = self.clock() - float(before.get("ended_at") or 0.0)
+        why = continue_mismatch(before, state, since, self.continue_window_secs)
+        if why is not None:
+            log.info("not continuing session %s after the restart: %s", session_id, why)
+            return None
+        return before
+
+    def _continue(self, before: dict[str, Any], state: RaceState) -> Session:
+        """Reopen the session ``before`` summarises, joined at ``state`` (#273)."""
+        session_id = str(before["session_id"])
+        sdir = self.data_dir / "sessions" / session_id
+        laps = list(before.get("laps") or [])
+        now = self.clock()
+        gap = {
+            "from": before.get("ended_at"),
+            "to": now,
+            "lap": state.current_lap,
+            "reason": GAP_REASON,
+        }
+        straddled = next((x for x in laps if x["lap"] == state.current_lap), None)
+        merge = sdir / straddled["file"] if straddled is not None else None
+        self.session = s = Session(
+            session_id=session_id,
+            dir=sdir,
+            started_at=float(before["started_at"]),
+            type=str(before["type"]),
+            track_id=before.get("track_id"),
+            car_code=state.car_code,
+            total_laps=state.total_laps,
+            fuel_at_start=float(before.get("fuel_at_start") or state.fuel_level),
+            # the lap the gap falls in is stored whole: it starts before the gap
+            lap_start_fuel=float(straddled["fuel_start"]) if straddled else state.fuel_level,
+            laps=laps,
+            track=before.get("track"),
+            kind=before.get("session_kind"),
+            fuel_burned=float(before.get("fuel_burned") or 0.0),
+            fuel_stints=FuelStints(
+                stints=list(before.get("fuel_stints") or [0.0]),
+                base=max(len(before.get("fuel_stints") or [0.0]) - 1, 0),
+            ),
+            last_position=before.get("final_position"),
+            last_cars=before.get("total_cars"),
+            gt7_best_ms=int(before.get("gt7_best_lap_ms") or 0),
+            start_t=state.t,
+            start_wall=now,
+            joined_on_lap=before.get("joined_on_lap"),
+            gaps=[*(before.get("gaps") or []), gap],
+            gap_lap=state.current_lap,
+            gap_merge=merge,
+            before=before,
+        )
+        del self._held[session_id]
+        # Open again: the pit wall reads it from the index until it ends.
+        (sdir / "summary.json").unlink(missing_ok=True)
+        self._write(
+            "UPDATE sessions SET ended_at = NULL, engineer_shutdown = 0, card_held = 0,"
+            " gaps = ? WHERE id = ?",
+            (json.dumps(s.gaps), session_id),
+        )
+        self.release_held(force=True)  # any older held card: it cannot continue now
+        log.info(
+            "session %s continued after an engineer restart: lap %d, %.0f s after it ended",
+            session_id,
+            state.current_lap,
+            now - float(before.get("ended_at") or now),
+        )
+        return s
+
+    def release_held(self, force: bool = False) -> int:
+        """Let go of each held card (see the top) whose session can no longer be
+        continued: ``continue_window_secs`` after it ended, or all of them with
+        ``force``. Each goes to ``on_end`` as if the session had just ended.
+        Returns how many were let go."""
+        now = self.clock()
+        due = [
+            sid
+            for sid, ended in self._held.items()
+            if force or now - (ended or 0.0) > self.continue_window_secs
+        ]
+        for session_id in due:
+            del self._held[session_id]
+            self._write("UPDATE sessions SET card_held = 0 WHERE id = ?", (session_id,))
+            path = self.data_dir / "sessions" / session_id / "summary.json"
+            try:
+                summary = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                log.warning("held card for %s not let go: %s", session_id, exc)
+                continue
+            log.info("session %s was not continued: its card goes now", session_id)
+            self._ended(summary)
+        return len(due)
+
+    def _ended(self, summary: dict[str, Any]) -> None:
+        if self.on_end is not None:
+            try:
+                self.on_end(summary)
+            except Exception:  # noqa: BLE001
+                log.exception("session end hook failed for %s", summary.get("session_id"))
+
     def set_track(self, match: TrackMatch) -> None:
         """Record the track detector's verdict for the open session."""
         s = self.session
@@ -540,11 +736,17 @@ class SessionStore:
         s = self.session
         if s is None:
             return
-        s.kind = kind.record()
+        record = kind.record()
+        before = (s.before or {}).get("session_kind") or {}
+        if before.get("kind") == kind.kind and before.get("start"):
+            # Continued after an engineer restart (#273): the start was seen before it.
+            record["start"] = before["start"]
+            record["evidence"] = f"{record['evidence']}; continued after an engineer restart"
+        s.kind = record
         fuel = None if kind.fuel_use is None else int(kind.fuel_use)
         self._write(
             "UPDATE sessions SET session_kind = ?, fuel_use = ?, start_type = ? WHERE id = ?",
-            (kind.kind, fuel, kind.start, s.session_id),
+            (kind.kind, fuel, record["start"], s.session_id),
         )
 
     def set_pits(self, status: PitStatus) -> None:
@@ -555,9 +757,8 @@ class SessionStore:
             return
         s.pits = status
         s.fuel_stints.on_pit(status)
-        self._write(
-            "UPDATE sessions SET pit_stops = ? WHERE id = ?", (len(status.stops), s.session_id)
-        )
+        stops = len(status.stops) + len((s.before or {}).get("pit_stops") or [])
+        self._write("UPDATE sessions SET pit_stops = ? WHERE id = ?", (stops, s.session_id))
 
     def observe(self, prev: RaceState | None, state: RaceState) -> None:
         s = self.session
@@ -588,16 +789,29 @@ class SessionStore:
             s.buffer = [rows[-1]]
             rows = rows[:-1]
         path = s.dir / f"lap-{lap_no:02d}.parquet"
+        timed = complete
+        merge: Path | None = None
+        frames = len(rows)
+        if lap_no == s.gap_lap:
+            # The lap an engineer restart fell in (#273): not all of it was seen.
+            # GT7 still timed it. Its frames from before the gap go in the same file.
+            complete, s.gap_lap = False, None
+            merge, s.gap_merge = s.gap_merge, None
+            if merge is not None:
+                old = next((x for x in s.laps if x["file"] == merge.name), None)
+                if old is not None:
+                    s.laps.remove(old)
+                    frames += int(old["frames"])
         lap = {
             "lap": lap_no,
-            "lap_time_ms": state.last_lap_ms if complete and state.last_lap_ms > 0 else None,
+            "lap_time_ms": state.last_lap_ms if timed and state.last_lap_ms > 0 else None,
             "complete": complete,
             "fuel_start": s.lap_start_fuel,
             "fuel_end": state.fuel_level,
             "fuel_used": round(s.lap_start_fuel - state.fuel_level, 3),
             "position": state.position,
             "pit": s.pits.lap_role(lap_no),
-            "frames": len(rows),
+            "frames": frames,
             "file": path.name,
             "recorded_at": self.clock(),
         }
@@ -618,7 +832,7 @@ class SessionStore:
             lap["recorded_at"],
         )
         session_row = (sum(1 for x in s.laps if x["complete"]), s.track_id, s.session_id)
-        fut = self._writer.submit(self._write_lap, path, rows, lap_row, session_row)
+        fut = self._writer.submit(self._write_lap, path, rows, lap_row, session_row, merge)
         self._pending.append(fut)
 
     def _write_lap(
@@ -627,14 +841,22 @@ class SessionStore:
         rows: list[tuple[Any, ...]],
         lap_row: tuple[Any, ...],
         session_row: tuple[Any, ...],
+        merge: Path | None = None,
     ) -> float:
         """On the writer thread: the lap file, then its index row. A lap whose
         file could not be written gets no row (summary.json still lists it).
+        ``merge``: the lap's file from before an engineer restart, whose frames
+        go first.
 
         The outcome is logged here, before the future resolves, so it is in the
         log by the time ``wait()`` returns. (A done-callback runs after waiters
         are woken, so it could log late.)"""
         try:
+            if merge is not None:
+                try:
+                    rows = read_frames(merge) + rows
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("lap %s from before the restart not merged: %s", merge, exc)
             took = self._write_lap_and_row(path, rows, lap_row, session_row)
         except LapNotIndexed as exc:
             log.error("wrote %s (%d frames) but could not index it: %s", path, len(rows), exc)
@@ -679,9 +901,12 @@ class SessionStore:
         finished: bool = False,
         paused_secs: float = 0.0,
         paused_since: float | None = None,
+        shutdown: bool = False,
     ) -> Path | None:
         """Close the open session. ``finished``: it ended at the line (the engine's
-        timed-race finish); a FINISHED frame counts on its own.
+        timed-race finish); a FINISHED frame counts on its own. ``shutdown``: the
+        engineer is stopping, so the session may be continued and its card is held
+        (#273, see the top).
 
         Time paused is not driving time (#229): ``paused_secs`` is the session's
         time paused up to ``state``, and ``driving_ms`` the rest. ``paused_since``
@@ -691,11 +916,14 @@ class SessionStore:
         s = self.session
         if s is None:
             return None
+        before = s.before or {}  # the session before an engineer restart (#273)
         driving_ms = max(round((state.t - s.start_t - paused_secs) * 1000), 0)
-        paused_ms = round(paused_secs * 1000)
+        driving_ms += int(before.get("driving_ms") or 0)
+        paused_ms = round(paused_secs * 1000) + int(before.get("paused_ms") or 0)
         ended_at = self.clock()
         if paused_since is not None:
-            ended_at = min(ended_at, s.started_at + max(paused_since - s.start_t, 0.0))
+            start_wall = s.started_at if s.start_wall is None else s.start_wall
+            ended_at = min(ended_at, start_wall + max(paused_since - s.start_t, 0.0))
         if s.buffer:
             # Partial lap at the end of a session (quit, or the lap in progress).
             self._flush_lap(s.buffer[-1][2], state, complete=False)
@@ -704,6 +932,13 @@ class SessionStore:
         times = [x["lap_time_ms"] for x in completed if x["lap_time_ms"]]
         gt7_best = s.gt7_best_ms or None
         finished = finished or state.phase is Phase.FINISHED
+        pits = s.pits.record()  # stints, pit_stops
+        stops_before = list(before.get("pit_stops") or [])
+        if stops_before:
+            pits["stints"] += int(before.get("stints") or 1) - 1
+            for stop in pits["pit_stops"]:
+                stop["stop"] += len(stops_before)
+            pits["pit_stops"] = stops_before + pits["pit_stops"]
         summary = {
             "session_id": s.session_id,
             "type": s.type,
@@ -728,19 +963,23 @@ class SessionStore:
             "total_cars": state.total_cars if state.total_cars > 0 else s.last_cars,
             "fuel_burned": round(s.fuel_burned, 3),
             "fuel_burned_by_stint": [round(x, 3) for x in s.fuel_stints.used()],
+            "fuel_stints": [round(x, 3) for x in s.fuel_stints.stints],  # every one, see #273
             "gt7_best_lap_ms": gt7_best,
             "fuel_capacity": state.fuel_capacity,
             "fuel_at_start": s.fuel_at_start,
             "fuel_at_end": state.fuel_level,
             "fuel_used": round(sum(x["fuel_used"] for x in s.laps), 3),
-            **s.pits.record(),  # stints, pit_stops
+            **pits,
+            # the engineer's shutdown ended it (#273), not anything in GT7
+            "engineer_shutdown": shutdown,
+            "gaps": s.gaps,  # engineer restarts it was continued across (#273)
             "laps": s.laps,
         }
         write_summary(s.dir / "summary.json", summary)
         self._write(
             "UPDATE sessions SET ended_at = ?, laps_completed = ?, best_lap_ms = ?, fuel_used = ?,"
             " final_position = ?, track_id = COALESCE(track_id, ?), driving_ms = ?,"
-            " paused_ms = ?, ended_paused = ? WHERE id = ?",
+            " paused_ms = ?, ended_paused = ?, engineer_shutdown = ?, card_held = ? WHERE id = ?",
             (
                 summary["ended_at"],
                 len(completed),
@@ -751,14 +990,21 @@ class SessionStore:
                 driving_ms,
                 paused_ms,
                 int(paused_since is not None),
+                int(shutdown),
+                int(shutdown),
                 s.session_id,
             ),
         )
         log.info("session %s ended after %d laps", s.session_id, len(completed))
         self.session = None
-        if self.on_end is not None:
-            try:
-                self.on_end(summary)
-            except Exception:  # noqa: BLE001
-                log.exception("session end hook failed for %s", s.session_id)
+        if shutdown:
+            # The engineer may be back in a moment to continue it: the card waits.
+            self._held[s.session_id] = ended_at
+            log.info(
+                "results card for %s held %.0f s in case the session continues",
+                s.session_id,
+                self.continue_window_secs,
+            )
+        else:
+            self._ended(summary)
         return s.dir / "summary.json"

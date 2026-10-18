@@ -157,7 +157,8 @@ def session_view(root: str, stamp: float, tz: tzinfo | None, session_id: str) ->
     st.dataframe(lap_frame(lap_rows), hide_index=True)
     st.caption(
         "Pit: fuel went up during the lap. Out: the lap after a pit stop. "
-        "Partial: the lap the session ended in. Position only in a field GT7 flags."
+        "Partial: the lap the session ended in. Restart: the engineer restarted in"
+        " this lap. Position only in a field GT7 flags."
     )
 
     st.markdown("#### Lap compare")

@@ -171,6 +171,8 @@ class Settings:
     bind_address: str = "0.0.0.0"
     control_port: int | None = None  # the control API's port (9851 on the NUC); None is off
     pause_limit_secs: float = 0.0  # end a session paused this long; 0 keeps it (#229)
+    # A join this soon after a shutdown continues the session it cut short (#273).
+    continue_window_secs: float = 600.0
 
     @property
     def speech_cache_dir(self) -> Path:
@@ -192,6 +194,7 @@ class Settings:
         "GT7_CACHE_MAX_MB",
         "GT7_CONTROL_PORT",
         "GT7_PAUSE_LIMIT_SECS",
+        "GT7_CONTINUE_WINDOW_SECS",
         "LOG_LEVEL",
         "GT7_CACHE_DIR",  # not parsed, but checked: it must not be under GT7_DATA_DIR
     )
@@ -240,6 +243,9 @@ class Settings:
             bind_address=e.get("GT7_BIND_ADDRESS") or "0.0.0.0",
             control_port=parsed("GT7_CONTROL_PORT", _optional_port_env, None),
             pause_limit_secs=parsed("GT7_PAUSE_LIMIT_SECS", _float_env(0.0, minimum=0.0), 0.0),
+            continue_window_secs=parsed(
+                "GT7_CONTINUE_WINDOW_SECS", _float_env(600.0, minimum=0.0), 600.0
+            ),
         )
         if check is None or "GT7_CACHE_DIR" in check:
             settings.check_cache_dir()

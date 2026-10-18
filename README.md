@@ -127,6 +127,7 @@ is unchanged by the rebrand.
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_PAUSE_LIMIT_SECS` | `0` (no limit) | End a session that has been paused this long, as ended paused. By default a pause of any length keeps the session, as GT7 keeps the race; losing the feed during a pause (the PS5 switched off or put to rest) ends it. |
+| `GT7_CONTINUE_WINDOW_SECS` | `600` | After the engineer restarts mid-race, a session joined part way within this long of the one the shutdown ended (same car and kind) continues it. That session's results card waits this long for it. `0` never continues. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
 | `GT7_WEB_PORT` | `8501` | The pit wall (`those-who-run web`). |
@@ -413,6 +414,21 @@ you. Lap seven. P one." instead of a start brief, makes no cold-tyre call, does
 not measure fuel on the lap it joined, and names no track until the finish line
 is seen. The session's `joined_on_lap` is set in `summary.json` and the index,
 and the card says "Joined on lap 7" (#265).
+
+A restart in the middle of a race does not split it (#273). A session the
+engineer's shutdown ended is marked `engineer_shutdown` in `summary.json` and
+the index, and its results card is held. If the engineer joins a session part
+way within `GT7_CONTINUE_WINDOW_SECS` (10 minutes by default), in the same car,
+kind (race or not, the lap total) and field size, on the old session's last lap
+or later, it continues that session. It keeps the same id, carries the track
+over (so it is known at once), appends the laps and records the gap in `gaps`
+(`from`, `to`, `lap`, `reason: "engineer restart"`). The lap the gap falls in
+is stored as one incomplete lap with the frames from both sides, and keeps
+GT7's time for it. The one card goes at the real end and says "Engineer
+restarted on lap 7"; the pit wall flags that lap `restart`. A held card that is
+never continued goes once the window has passed, or when another session
+starts, and says "Engineer stopped on lap 7". Anything that doesn't match is a
+new session, as before.
 
 A session's `best_lap_ms` is the best lap the results card and the pit wall
 show: GT7's own best when there is one, which leaves out lap 1 from a grid

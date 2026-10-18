@@ -206,7 +206,9 @@ class App:
         self.rules_cfg = load_rules_config(settings.rules_file)
         rules = build_rules(self.rules_cfg["rules"])
         self.queue = CalloutQueue(max_age=float(self.rules_cfg["queue"]["max_age_seconds"]))
-        self.store = SessionStore(settings.data_dir)  # StoreBusy first: see cli.main
+        self.store = SessionStore(  # StoreBusy first: see cli.main
+            settings.data_dir, continue_window_secs=settings.continue_window_secs
+        )
         self._store_open = True
         stack.callback(self._close_store)  # only if what follows fails to build
         self.voice_model = settings.require_voice_model()  # before any socket or Discord
@@ -278,10 +280,12 @@ class App:
         self.telemetry.start()
 
     def _close_session(self) -> None:
-        self.store.on_end = None  # the loop is going: no card for a session cut short here
         if self.store.session is not None and self.engine.prev is not None:
             log.info("closing session %s", self.store.session.session_id)
-            self.engine.close_session()  # in a pause, it ends paused (#229)
+            # In a pause, it ends paused (#229). Its card is held: the engineer
+            # coming back within the window continues the session (#273), and
+            # one that does not lets the card go (``release_held``).
+            self.engine.close_session(shutdown=True)
         self._close_store()
 
     def _close_store(self) -> None:
@@ -334,6 +338,7 @@ class App:
                     metrics.callouts_total.labels(c.rule).inc()
                     log.info("callout queued (%s, p%d): %s", c.rule, c.priority, c.text)
                 await self.player.check_idle(time.monotonic())
+                self.store.release_held()  # cards held past the restart window (#273)
             except Exception:
                 errors.log()
             await asyncio.sleep(1)

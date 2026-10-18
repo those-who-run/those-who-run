@@ -21,6 +21,8 @@ SUZUKA = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
 SUGO = FIXTURES / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
 SPA = FIXTURES / "real-nuc-spa-pit-cut-quit-2026-10-18.jsonl.gz"
 STOPS = (GILLES, WILLOW, SUZUKA)
+# A real stop on lap 4 that drives out, with no exit cut: see test_restart.py
+RESTART = FIXTURES / "real-nuc-suzuka-before-restart-2026-10-18.jsonl.gz"
 
 
 def detect(frames) -> tuple[PitDetector, list[tuple[int, PitStatus]]]:
@@ -156,7 +158,7 @@ def test_a_lost_cut_frame_is_seen_as_a_teleport(path):
 
 @pytest.mark.parametrize(
     "path",
-    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in (*STOPS, SUGO, SPA)),
+    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in (*STOPS, SUGO, SPA, RESTART)),
     ids=lambda p: p.stem,
 )
 def test_no_stop_in_any_other_recording(path):

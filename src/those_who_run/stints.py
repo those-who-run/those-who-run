@@ -31,6 +31,7 @@ class FuelStints:
     min_fuel: float = MIN_STINT_FUEL
     stints: list[float] = field(default_factory=lambda: [0.0])  # fuel used in each
     last: float | None = None
+    base: int = 0  # stints done before an engineer restart (#273): the pit detector restarts
 
     def observe(self, level: float) -> float:
         """Take one frame's fuel level; returns the drop since the last frame (0 when
@@ -43,7 +44,7 @@ class FuelStints:
 
     def on_pit(self, status: PitStatus) -> None:
         """The pit detector's view: each stop it has seen done starts the next stint."""
-        while len(self.stints) < status.stint:
+        while len(self.stints) < self.base + status.stint:
             self.stints.append(0.0)
 
     @property

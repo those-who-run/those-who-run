@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from typing import Any
 
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.metrics import Metrics
@@ -22,7 +23,7 @@ from those_who_run.state import (
     racing_frame,
 )
 from those_who_run.store import SessionStore
-from those_who_run.trackdetect import CONFIDENCE_RANK, TrackDetector, TrackMatch
+from those_who_run.trackdetect import CONFIDENCE_RANK, Confidence, TrackDetector, TrackMatch
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,21 @@ def joined_part_way(prev: RaceState | None, state: RaceState) -> bool:
 def track_rank(match: TrackMatch) -> tuple[int, bool]:
     """How good a track verdict is: its confidence, then whether it names a layout."""
     return CONFIDENCE_RANK[match.confidence], match.track_id is not None
+
+
+def carried_track(rec: dict[str, Any] | None) -> TrackMatch | None:
+    """The track a session continued after an engineer restart had found (#273),
+    as the detector's answer: a sure layout, or the circuit when only that was
+    known (the Spa twins, #275). None when it had placed neither."""
+    rec = rec or {}
+    confidence = rec.get("confidence")
+    evidence = "carried over from before the engineer restart"
+    if rec.get("id") is not None and confidence in ("probable", "confirmed"):
+        sure: Confidence = "confirmed" if confidence == "confirmed" else "probable"
+        return TrackMatch(int(rec["id"]), rec.get("name"), sure, (), evidence, rec.get("family"))
+    if rec.get("family"):
+        return TrackMatch(None, None, "ambiguous", (), evidence, rec["family"])
+    return None
 
 
 # The pit lane is quiet from entry to exit (#244), apart from the rules whose
@@ -164,28 +180,31 @@ class Engine:
         self._end_paused(self.prev, "the feed was lost")
         return True
 
-    def close_session(self) -> None:
+    def close_session(self, shutdown: bool = False) -> None:
         """End the open session where the frames stop (the engineer stopping, or the
-        end of a replay): paused when they stop in a pause."""
+        end of a replay): paused when they stop in a pause. ``shutdown``: the
+        engineer is stopping, and may be back to continue the session (#273)."""
         if self.recorder is None or self.recorder.session is None or self.prev is None:
             return
         if self.pauses.since is not None:
-            self._end_paused(self.prev, "the frames stopped")
+            self._end_paused(self.prev, "the frames stopped", shutdown)
             return
-        self._end_session(self.prev)
+        self._end_session(self.prev, shutdown=shutdown)
 
-    def _end_paused(self, state: RaceState, why: str) -> None:
+    def _end_paused(self, state: RaceState, why: str, shutdown: bool = False) -> None:
         """End the session as of the start of its pause, and ignore the frames until
         the next start: if the race carries on after this, it is not watched."""
         log.info("session ended paused on lap %d: %s", state.current_lap, why)
-        self._end_session(state)
+        self._end_session(state, shutdown=shutdown)
         self.ended_paused = True
         self.last_driving = None
         self.track = None
         self.queue.clear()
         self.pit_held.clear()
 
-    def _end_session(self, state: RaceState, finished: bool = False) -> None:
+    def _end_session(
+        self, state: RaceState, finished: bool = False, shutdown: bool = False
+    ) -> None:
         """Close the open session with the pause clock's view of it."""
         if self.recorder is None or self.recorder.session is None:
             return
@@ -194,6 +213,7 @@ class Engine:
             finished=finished,
             paused_secs=self.pauses.paused_for(state.t),
             paused_since=self.pauses.since,
+            shutdown=shutdown,
         )
 
     def _step(self, state: RaceState) -> list[Callout]:
@@ -240,7 +260,13 @@ class Engine:
             self._crossing = None
             self._coast_since = None
             if self.recorder is not None:
-                self.recorder.start_session(state, joined=joined)
+                session = self.recorder.start_session(state, joined=joined)
+                carried = carried_track(session.track) if session.continued else None
+                if carried is not None:
+                    # Continued after an engineer restart (#273): the track was found
+                    # before it, so it is known at once. The detector may still rule
+                    # it out, as for any answer.
+                    self._apply_track(carried, store=False)
             # A rolling start crosses the finish line before lap 1, so the
             # detector may already know the track when the session opens.
             if self.tracks.match.confidence != "none":
@@ -312,8 +338,13 @@ class Engine:
             self.recorder.observe(seen, state)
             if race_ended(prev, state) and self.recorder.session is not None:
                 log.info("race end at lap %d", state.current_lap)
-                if self.track is not None and self.tracks.match.decision == self.track.decision:
-                    self.recorder.set_track(self.tracks.match)  # final candidates and fit
+                final = self.tracks.match
+                if (
+                    self.track is not None
+                    and final.decision == self.track.decision
+                    and final.family == self.track.family  # a carried circuit stays (#273)
+                ):
+                    self.recorder.set_track(final)  # final candidates and fit
                 self.recorder.set_pits(self.pits.status)  # fuel and time of a stop still open
                 self._end_session(state, finished=self.finished)
                 self.track = None
@@ -460,12 +491,13 @@ class Engine:
                 log.exception("rule %s failed on pit update", rule.name)
         return released
 
-    def _apply_track(self, match: TrackMatch) -> None:
+    def _apply_track(self, match: TrackMatch, store: bool = True) -> None:
         """Keep the best answer the session has had; never downgrade on a blip. A
         layout the detector has ruled out is not a blip: the answer was wrong. No
         layout at all is below a named one as unsure: at Spa (2026-10-18, #275) an
         ambiguous pair gave way to an ambiguous nothing, and the session was saved
-        without a track."""
+        without a track. ``store``: False for a track the session already has
+        stored."""
         if (
             self.track is not None
             and track_rank(match) < track_rank(self.track)
@@ -482,7 +514,7 @@ class Engine:
             match.track_id,
             match.evidence,
         )
-        if self.recorder is not None and self.recorder.session is not None:
+        if store and self.recorder is not None and self.recorder.session is not None:
             self.recorder.set_track(match)
         if self.metrics is not None:
             self.metrics.set_track(match)

@@ -83,6 +83,8 @@ def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card 
             result += f" in {race_time(total)}"
     elif summary.get("ended_paused"):
         result = paused_result(summary, position)
+    elif summary.get("engineer_shutdown"):
+        result = stopped_result(summary, position)
     elif kind == "lap_race" and total_laps:
         result = f"Retired on lap {min(laps + 1, total_laps)} of {total_laps}"
         if position:
@@ -104,6 +106,12 @@ def build_card(summary: dict[str, Any], pitwall_url: str | None = None) -> Card 
     if joined:
         # the engineer started part way through (#265): laps before it are not here
         fields.append(("Joined", f"on lap {joined}"))
+    restarts = [g["lap"] for g in summary.get("gaps") or [] if g.get("lap") is not None]
+    if restarts:
+        # continued across an engineer restart (#273): a lap of it was not all seen
+        laps_text = ", ".join(str(n) for n in restarts)
+        plural = "s" if len(restarts) > 1 else ""
+        fields.append(("Engineer restarted", f"on lap{plural} {laps_text}"))
     used = summary.get("fuel_burned", summary.get("fuel_used")) or 0
     capacity = summary.get("fuel_capacity") or 0
     if kind_rec.get("fuel_use") and used > 0 and capacity > 0:
@@ -135,6 +143,16 @@ def paused_result(summary: dict[str, Any], position: object = None) -> str:
     total = int(summary.get("total_laps") or 0)
     lap = min(laps + 1, total) if total else laps + 1
     result = f"Paused on lap {lap}" + (f" of {total}" if total else "")
+    return result + (f", P{position}" if position else "")
+
+
+def stopped_result(summary: dict[str, Any], position: object = None) -> str:
+    """A session the engineer's shutdown ended and no restart continued (#273):
+    "Engineer stopped on lap 7, P1". It is not a retirement: the race went on."""
+    laps = int(summary.get("laps_completed") or 0)
+    total = int(summary.get("total_laps") or 0)
+    lap = max((int(x["lap"]) for x in summary.get("laps") or []), default=laps + 1)
+    result = f"Engineer stopped on lap {lap}" + (f" of {total}" if total else "")
     return result + (f", P{position}" if position else "")
 
 

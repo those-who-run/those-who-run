@@ -1,0 +1,60 @@
+name: Release PR
+
+# Merged PRs collect in one release PR, `chore(release): x.y.z`, that release-please
+# keeps up to date on every push to main: the next version, CHANGELOG.md, and the
+# version strings in src/those_who_run/__init__.py and the README. Merging it is the
+# decision to ship: the next run tags the merge commit vx.y.z, creates the GitHub
+# release from the changelog, and calls release.yml to check and publish the image.
+#
+# Config: release-please-config.json and .release-please-manifest.json. Pre-1.0,
+# feat and fix both bump the patch (0.6.2 -> 0.6.3); moving to the next milestone
+# line takes a `Release-As: 0.7.0` footer (README, Releasing).
+#
+# Tokens: release-please uses the GITHUB_TOKEN. A tag that token creates starts no
+# workflow, so release.yml is called here (workflow_call) rather than on the tag
+# push: no PAT or App key with write access to this repo exists anywhere. The same
+# rule means the release PR, opened by that token, gets no CI run; release.yml runs
+# make check on the tagged commit before anything is published.
+on:
+  push:
+    branches: [main]
+
+# Least privilege: nothing by default, each job asks for what it uses.
+permissions: {}
+
+# One run at a time; a newer push supersedes a queued one, never a running one.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+# Actions are pinned by commit SHA (the tag in the comment); Dependabot bumps them.
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the release PR's branch, the v* tag and the GitHub release
+      pull-requests: write # opens and updates the release PR
+      issues: write # the autorelease labels on the release PR
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  release:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+    # The workspace-relative form: actionlint (1.7.12) rejects the newer `$/` one.
+    uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository]
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      HOME_LAB_TOKEN: ${{ secrets.HOME_LAB_TOKEN }}

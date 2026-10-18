@@ -16,6 +16,7 @@ speaks inside your PSVR2 headset while the HUD is gone.
 
 No cloud required. No subscription. One small box on your LAN.
 
+<!-- x-release-please-start-version -->
 ```
  ┌───────────────────────────────────────────────┐
  │  THOSE WHO RUN        走り屋        v0.6.2     │
@@ -23,6 +24,7 @@ No cloud required. No subscription. One small box on your LAN.
  │  ⏱️  lap times   ⛽ fuel   🚩 final lap   P1▲   │
  └───────────────────────────────────────────────┘
 ```
+<!-- x-release-please-end -->
 
 ## ⏱️ What it says
 
@@ -144,7 +146,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.6.2
+  muldoon/those-who-run:0.6.2  # x-release-please-version
 ```
 
 From source:
@@ -482,9 +484,11 @@ The image includes the extra (about 300 MB of Streamlit, pandas and pyarrow;
 see #26), so the same image runs it with a different command, sharing the
 data volume with the engineer:
 
+<!-- x-release-please-start-version -->
 ```sh
 podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.6.2 web
 ```
+<!-- x-release-please-end -->
 
 It listens on all addresses and has no login: keep it on the LAN. The image's
 health check is `those-who-run healthcheck`: it probes the engineer's `/healthz`
@@ -604,22 +608,66 @@ make build           # podman build for linux/amd64, local only
 
 ### Releasing
 
-The only way to publish an image is to push a `v*` tag; GitHub Actions does the
-rest (`.github/workflows/release.yml`):
+Merged PRs collect in one release PR; merging it ships. Nothing is released per
+merge.
 
-1. Set `__version__` in `src/those_who_run/__init__.py`, the version's one home
-   (`pyproject.toml` reads it), and merge that.
-2. Tag the merge commit and push the tag: `git tag v0.5.0 && git push origin v0.5.0`.
-3. The workflow runs `make check`, fails unless the tag is `v` plus that version
-   (`v0.5.0-rc1` matches `0.5.0rc1`), builds the image, runs `--version` and
-   `web --help` in it, then pushes `muldoon/those-who-run:<tag without v>`.
-   `latest` moves only for a final release, never for an `-rc`, alpha, beta or
-   dev tag.
-4. Roll it onto the NUC from a home-lab checkout with
-   `make roll-those-who-run TAG=0.5.0` (see [Pit wall on the NUC](#pit-wall-on-the-nuc)),
-   then open the home-lab PR for the bumped tag. It waits until nobody is driving.
+1. **The release PR.** On every push to `main`, release-please
+   (`.github/workflows/release-please.yml`) keeps one open PR,
+   `chore(release): x.y.z`. It lists the merged `feat:`, `fix:`, `perf:` and
+   `deps:` commits (Dependabot's, under "Dependencies"), writes `CHANGELOG.md`, and
+   bumps `__version__` in `src/those_who_run/__init__.py` (the version's one home,
+   which `pyproject.toml` reads) and the README's version strings (the lines marked
+   `x-release-please`). `docs:`, `test:`, `refactor:`, `build:`, `ci:` and `chore:`
+   commits ship in it but are not listed, and on their own they open no release PR.
+2. **Ship it.** Merge the release PR. release-please tags the merge commit
+   `vx.y.z`, creates the GitHub release from the changelog, then calls
+   `.github/workflows/release.yml`. That runs `make check`, fails unless the tag is
+   `v` plus `__version__`, builds the image, runs `--version` and `web --help` in it,
+   and pushes `muldoon/those-who-run:x.y.z` and `latest`.
+3. **Roll it out.** A final release then opens a PR in home-lab that changes only
+   `newTag` in `manifests/those-who-run/base/kustomization.yaml`. home-lab's
+   checks build the overlay, run kubeconform and check the diff, then merge it, and
+   Argo CD rolls it out once nobody is driving. Without Argo CD, roll it from a
+   home-lab checkout with `make roll-those-who-run TAG=x.y.z`
+   (see [Pit wall on the NUC](#pit-wall-on-the-nuc)).
 
-The workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository secrets.
+**Versions follow the milestones.** Before 1.0, `feat:` and `fix:` both bump the
+patch (0.6.2 to 0.6.3), and a breaking change bumps the minor
+(`bump-patch-for-minor-pre-major` and `bump-minor-pre-major` in
+`release-please-config.json`). To start the next line, merge a commit whose message
+has a `Release-As:` footer, and the release PR becomes that version:
+
+```sh
+git commit --allow-empty -m "chore: start 0.7" -m "Release-As: 0.7.0"
+```
+
+Open that as a PR and keep the footer in the squash commit message when you merge it.
+
+**Release candidates** stay manual. Set `__version__` to `0.7.0-rc1` in a PR (keep
+the hyphen, so release-please can replace the whole string later) and merge it.
+Then tag and push the tag yourself: `git tag v0.7.0-rc1 && git push origin
+v0.7.0-rc1`. The tag push runs `release.yml` directly, and the tag matches as a PEP
+440 version (`v0.7.0-rc1` and `0.7.0rc1` are equal). An rc never moves `latest` and
+never bumps home-lab. The next release PR sets `__version__` to the release.
+
+**Tokens and secrets.** release-please runs with the Actions token. A tag that
+token creates starts no workflow, so `release-please.yml` calls `release.yml`
+(`workflow_call`) instead of relying on the tag push. That way no PAT or App key can
+write to this repo, and each release runs once. For the same reason the release PR
+gets no CI run of its own; `release.yml` runs `make check` on the tagged commit
+before anything is published. Repository secrets:
+
+- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`: the push to Docker Hub.
+- `HOME_LAB_TOKEN` (optional): a fine-grained token for the deployment repo only,
+  with Contents and Pull requests set to read and write. Without it the home-lab
+  step says so and skips, and the release still publishes.
+
+The repository setting *Actions → General → Allow GitHub Actions to create and
+approve pull requests* must be on for release-please to open its PR.
+
+If a release fails after the tag exists (Docker Hub down, say), re-run the failed
+jobs of that *Release PR* run. Pushing the same tag again by hand does not work,
+because it already exists.
 
 ### Dependabot
 

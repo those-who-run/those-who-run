@@ -1,20 +1,43 @@
 name: Release
 
-# The one way an image is published: a v* tag. It must pass make check, match the
-# package version and run, before anything is pushed.
+# The one way an image is published. It must pass make check, match the package
+# version and run, before anything is pushed. Two ways in, the same jobs:
+#   workflow_call  from release-please.yml, right after merging the release PR
+#                  created the v* tag and the GitHub release. A tag created with the
+#                  Actions token starts no workflow, so the push trigger never fires
+#                  for it and nothing runs twice.
+#   push v* tag    a tag pushed by hand: release candidates (v0.7.0-rc1), or a
+#                  release-please tag whose run needs repeating.
 on:
   push:
     tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: The v* tag release-please created.
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+      HOME_LAB_TOKEN:
+        required: false
 
-# Least privilege: the image goes to Docker Hub with its own secrets, so the
-# GITHUB_TOKEN only reads the repository.
+# Least privilege: the image goes to Docker Hub with its own secrets and home-lab is
+# reached with its own token, so the GITHUB_TOKEN only reads the repository.
 permissions:
   contents: read
 
-# One release per tag at a time, never cancelled half-pushed.
+# One release per tag at a time, never cancelled half-pushed. Both ways in share
+# the group, keyed on the tag.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 # Actions are pinned by commit SHA (the tag in the comment): this job holds the
 # Docker Hub credentials, so a moved tag must not run with them. Dependabot bumps them.
@@ -28,6 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
@@ -37,7 +61,7 @@ jobs:
       # Fails unless the tag is v + __version__; says whether `latest` moves.
       - name: Tag matches the package version
         id: v
-        run: .venv/bin/python scripts/release_version.py "$GITHUB_REF_NAME"
+        run: .venv/bin/python scripts/release_version.py "$TAG"
       # As in CI: archived-outing tests fetch from the outings release with gh
       # (ADR 0002), which needs a token (contents: read); a skip fails make check.
       - run: make check
@@ -54,6 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/tags/${{ env.TAG }}
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build
@@ -84,3 +109,65 @@ jobs:
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ needs.check.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}
           cache-from: type=gha
+
+  # A final release (never an -rc, alpha, beta or dev tag) opens a PR in home-lab
+  # that changes only newTag; home-lab's workflow validates it and merges it, and
+  # Argo CD rolls it out. HOME_LAB_TOKEN is a fine-grained token for home-lab alone
+  # (contents and pull requests: write); without it this says so and skips.
+  # No checkout: the file is read and written through the API.
+  home-lab:
+    runs-on: ubuntu-latest
+    needs: [check, publish]
+    if: needs.check.outputs.latest == 'true'
+    permissions: {}
+    steps:
+      - name: Open the home-lab PR that bumps newTag
+        env:
+          GH_TOKEN: ${{ secrets.HOME_LAB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+          REPO: owner/deployment-repo
+          FILE: manifests/those-who-run/base/kustomization.yaml
+        run: |
+          say() { echo "$1" >> "$GITHUB_STEP_SUMMARY"; echo "$1"; }
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::HOME_LAB_TOKEN is not set, so home-lab is not bumped to $VERSION: run make roll-those-who-run TAG=$VERSION there."
+            say "HOME_LAB_TOKEN is not set: no home-lab PR for $VERSION."
+            exit 0
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$VERSION is not x.y.z"; exit 1
+          fi
+          branch="those-who-run/release-$VERSION"
+          # A re-run finds the PR it opened.
+          pr=$(gh pr list --repo "$REPO" --head "$branch" --state open --json url --jq '.[0].url // empty')
+          if [ -n "$pr" ]; then say "Already open: $pr"; exit 0; fi
+
+          base=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          gh api "repos/$REPO/contents/$FILE?ref=$base" > current.json
+          jq -r .content current.json | base64 -d > kustomization.yaml
+          if [ "$(grep -c '^    newTag: ' kustomization.yaml)" != 1 ]; then
+            echo "::error::$FILE does not have exactly one newTag"; exit 1
+          fi
+          old=$(sed -n 's/^    newTag: //p' kustomization.yaml)
+          if [ "$(printf '%s\n%s\n' "$old" "$VERSION" | sort -V | tail -n1)" = "$old" ]; then
+            say "home-lab is at $old already, not older than $VERSION: nothing to bump."
+            exit 0
+          fi
+          sed -i "s/^    newTag: .*/    newTag: $VERSION/" kustomization.yaml
+
+          # The bot's own branch, from main as it is now (reset if a closed PR left it).
+          if gh api "repos/$REPO/git/ref/heads/$branch" > /dev/null 2>&1; then
+            gh api --method PATCH "repos/$REPO/git/refs/heads/$branch" -f sha="$base" -F force=true > /dev/null
+          else
+            gh api --method POST "repos/$REPO/git/refs" -f ref="refs/heads/$branch" -f sha="$base" > /dev/null
+          fi
+          gh api --method PUT "repos/$REPO/contents/$FILE" \
+            -f branch="$branch" -f sha="$(jq -r .sha current.json)" \
+            -f message="feat(those-who-run): $VERSION" \
+            -f content="$(base64 -w0 kustomization.yaml)" > /dev/null
+          url=$(gh pr create --repo "$REPO" --base main --head "$branch" \
+            --title "feat(those-who-run): $VERSION" \
+            --body "Bumps \`newTag\` in \`$FILE\` from $old to $VERSION, for [those-who-run $VERSION]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION).
+
+          Opened by those-who-run's release workflow ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). It merges itself once the those-who-run bump checks pass: the overlay builds, kubeconform passes, the diff changes only \`newTag\` and the image is on Docker Hub.")
+          say "Opened $url ($old -> $VERSION)."

@@ -2,6 +2,8 @@ version: 2
 # Groups follow the auto-merge rules (.github/workflows/dependabot-automerge.yml): a
 # grouped PR merges only when every update in it is safe, so majors are never grouped
 # with the updates that would otherwise merge on their own.
+# Commits are `deps: ...`, which release-please lists under "Dependencies" in the
+# release PR and the changelog (release-please-config.json).
 updates:
   # The SHA-pinned actions in .github/workflows. Minors and patches merge after CI;
   # each major gets its own PR, for review.
@@ -9,6 +11,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       actions:
         update-types: [minor, patch]
@@ -19,6 +23,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       python-patch:
         update-types: [patch]
@@ -30,3 +36,5 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps

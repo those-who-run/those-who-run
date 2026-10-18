@@ -64,7 +64,7 @@ def probe(url: str, timeout: float) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 (localhost only)
             return 200 <= resp.status < 300
-    except (urllib.error.URLError, OSError, ValueError):
+    except urllib.error.URLError, OSError, ValueError:
         return False
 
 

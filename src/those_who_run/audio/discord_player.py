@@ -33,7 +33,7 @@ def wav_seconds(path: Path) -> float | None:
     try:
         with wave.open(str(path), "rb") as w:
             return w.getnframes() / float(w.getframerate())
-    except (OSError, EOFError, wave.Error, ZeroDivisionError):
+    except OSError, EOFError, wave.Error, ZeroDivisionError:
         return None
 
 

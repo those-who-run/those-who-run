@@ -252,7 +252,7 @@ def read_summary(data_dir: Path, session_id: str) -> dict[str, Any] | None:
     path = _session_dir(data_dir, session_id) / "summary.json"
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError, json.JSONDecodeError:
         return None
 
 

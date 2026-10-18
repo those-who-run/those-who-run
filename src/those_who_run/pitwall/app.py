@@ -50,7 +50,7 @@ def viewer_tz() -> tzinfo | None:
     name = getattr(st.context, "timezone", None)
     try:
         return ZoneInfo(name) if name else None
-    except (KeyError, ValueError):
+    except KeyError, ValueError:
         return None
 
 

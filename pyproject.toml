@@ -9,7 +9,7 @@ dynamic = ["version"]
 description = "Those Who Run (走り屋): self-hosted voice race engineer for Gran Turismo 7. PS5 telemetry in, rule-based callouts, Piper TTS, Discord voice out"
 readme = "README.md"
 license = { text = "GPL-3.0-only" }
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 authors = [{ name = "Ciarán Roche" }]
 dependencies = [
   "gt-telem==1.2.1",  # exact: telemetry.py uses its private attributes
@@ -37,7 +37,7 @@ packages = ["src/those_who_run"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -59,7 +59,7 @@ skip_covered = true
 show_missing = true
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 files = ["src"]
 warn_unused_ignores = true
 

@@ -8,7 +8,8 @@ label so a stream can be worked on its own. The
 releases: a board for the current release and the next one, and a table of
 everything open.
 
-Last reviewed 2026-10-17, at release 0.4.0, after a code review and an
+Last reviewed 2026-10-18, after the UI decision (ADR 0003). The previous
+review was on 2026-10-17, at release 0.4.0, after a code review and an
 architecture review of the same day.
 
 ## Principles
@@ -36,14 +37,14 @@ ones before it (checked against every issue's "Blocked by" line on
 | Release | What it delivers |
 |---|---|
 | [0.5 Solid ground](https://github.com/those-who-run/those-who-run/milestone/19) | The bugs from the code review fixed, including the stored best lap (#185). Guardrails: `make check` with type checking, reproducible builds, release checks, deterministic tests, gzipped fixtures. The pit wall on the NUC (#35), after the data and network decisions (#194). An archive for the outings specs rely on (#197). |
-| [0.6 Foundations](https://github.com/those-who-run/those-who-run/milestone/20) | The structure the streams build on: a runtime object and an API server on the event loop, engine events, one frame delta and a per-frame context for rules, one lap model and its lap table, versioned storage, the speech policy layer and audio pipeline, one fuel model, structured messages, a job runner, layered config, import contracts and a frame budget. |
-| [0.7 Cockpit voice](https://github.com/those-who-run/those-who-run/milestone/21) | The engineer as a HUD replacement in VR, on the session awareness it needs: start type, the unflagged mode, kinematics, track detection through a pit stop; the A-packet flags and extended telemetry; the timing gate, verbosity profiles, traction-aid and rev-limiter calls, the state-of-the-race bundle; phrasing and voices; replay that speaks in real time; raw packet recordings. |
-| [0.8 Pit wall setup](https://github.com/those-who-run/those-who-run/milestone/22) | Set the engineer up from the pit wall: settings on the data volume, a control API, PS5 discovery, the PlayStation and Discord setup pages, an admin token, host networking, the token in a Secret, a slimmer engineer image. |
+| [0.6 Foundations](https://github.com/those-who-run/those-who-run/milestone/20) | The structure the streams build on: a runtime object and an API server on the event loop, engine events, one frame delta and a per-frame context for rules, one lap model and its lap table, versioned storage, the speech policy layer and audio pipeline, one fuel model, structured messages, a job runner, layered config, import contracts and a frame budget. Our own GT7 decoder in place of gt-telem (#235). The pit wall moves to React: a read-only data API that proxies the engineer (#236), the web app scaffold (#237), and the port that retires Streamlit (#238), per [ADR 0003](docs/adr/0003-ui-stack.md). |
+| [0.7 Cockpit voice](https://github.com/those-who-run/those-who-run/milestone/21) | The engineer as a HUD replacement in VR, on the session awareness it needs: start type, the unflagged mode, kinematics, track detection through a pit stop; the A-packet flags and extended telemetry; the timing gate, verbosity profiles, traction-aid and rev-limiter calls, the state-of-the-race bundle; phrasing and voices; replay that speaks in real time; raw packet recordings. The first wheel dashboard on a phone or tablet (#240), fed by a live dash stream from the engineer (#239). |
+| [0.8 Pit wall setup](https://github.com/those-who-run/those-who-run/milestone/22) | Set the engineer up from the pit wall: settings on the data volume, a control API, PS5 discovery, the PlayStation and Discord setup pages (as React routes, reached through the pit wall's proxy), an admin token, host networking, the token in a Secret, a slimmer engineer image. |
 | [0.9 Lap model and strategy](https://github.com/those-who-run/those-who-run/milestone/23) | Distance along the track, reference laps, live delta, corner names, reference data on the data volume, the racing line and delta trace on the pit wall; tyre wear and drop-off, the fuel saving target, stop now or later, timed-race strategy, per-car overrides. |
 | [0.10 Coaching and drift](https://github.com/those-who-run/those-who-run/milestone/24) | Corner by corner against your own best: lockups and wheelspin, spins and big hits, braking points, minimum and exit speeds, theoretical best and consistency, the debrief, corner growth on the pit wall; drift detection, callouts and the drift card. |
 | [0.11 Progression](https://github.com/those-who-run/those-who-run/milestone/25) | Getting faster over weeks: a personal-best ledger, goals, PB cards, the weekly digest, a break reminder, the pit wall's growth view, retention and export, the Postgres push. |
 | [1.0 Voice questions](https://github.com/those-who-run/those-who-run/milestone/5) | Ask the engineer: voice receive and wake word, local speech to text, deterministic answers first, free-form answers through one model gateway (#190), slash-command history queries, "say that again". |
-| [1.1 AI coach](https://github.com/those-who-run/those-who-run/milestone/13) | A model turns the measured coaching data into advice: notes after a session, one practice tip between laps, a pre-session plan, `@coach` in Discord. Every number is checked against the data before it is said, with the deterministic debrief as the fallback. |
+| [1.1 AI coach](https://github.com/those-who-run/those-who-run/milestone/13) | A model turns the measured coaching data into advice: notes after a session, one practice tip between laps, a pre-session plan, `@coach` in Discord. Every number is checked against the data before it is said, with the deterministic debrief as the fallback. A dash layout designer (#241), a placeholder until the dashboards have been used. |
 | [Polish and ops](https://github.com/those-who-run/those-who-run/milestone/14) | Ongoing, not a release: upstream fixes and chores that belong to no release. |
 
 ```mermaid
@@ -68,9 +69,10 @@ flowchart LR
 | Session awareness | `stream: session` | 0.7, and drift detection in 0.10 |
 | A. Engineer voice | `stream: voice` | 0.7, drift callouts in 0.10 |
 | B. Lap model and coaching | `stream: coaching` | 0.9, 0.10, 1.1 |
-| C. Pit wall and progression | `stream: pit wall` | 0.5 (deploy), 0.8 (setup), 0.9 to 0.11 |
+| C. Pit wall and progression | `stream: pit wall` | 0.5 (deploy), 0.6 (the move to React), 0.8 (setup), 0.9 to 0.11 |
 | D. Strategy | `stream: strategy` | 0.9 |
 | E. Conversation | `stream: conversation` | 1.0 |
+| F. Dashboards | `stream: dashboards` | 0.7 (the dash stream and the first dashboard), 1.1 (the layout designer) |
 | Ops | `stream: ops` | 0.7, 0.8, 0.9, and Polish and ops |
 
 ## Order
@@ -84,7 +86,9 @@ flowchart LR
   #173), the engine model (#175, #176, #177, then #186 and #187), storage
   (#174, #178, then #115 and #183), speech (#179, #180, #181), then the job
   runner (#189), config (#191) and import contracts (#195). The frame budget
-  (#196) measures each step.
+  (#196) measures each step. The decoder (#235) can go at any time. The pit
+  wall's move to React follows #173: the data API (#236), the scaffold
+  (#237), then the port (#238), which removes Streamlit.
 - **Then:** 0.7 Cockpit voice and 0.8 Pit wall setup in parallel, then 0.9,
   0.10 and 0.11.
 - **Later:** 1.0 Voice questions and 1.1 AI coach, the releases that add
@@ -92,21 +96,33 @@ flowchart LR
 
 ## Open decisions
 
+- HTTPS for the pit wall. An installable dashboard and the screen wake lock
+  need a secure context (ADR 0003, #240); the pit wall is plain HTTP today.
 - Pit wall access: LAN only like the other home-lab apps (current
   assumption), or behind a login.
 - AI coach: local model only, or allow an optional hosted model. Planned as
   local by default, with hosted as an opt-in setting, to be decided after the
   evaluation set (#114).
 - Whether to keep the break reminder (#107) and the weekly digest (#106).
-- Data and network (#194): one writer for `/data`, how the pit wall opens the
-  index, what the LAN can reach with host networking, where secrets live, one
-  image or two.
 - Settings on the NUC (#135, #191): does the environment always win, and which
   keys move from the ConfigMap to the pit wall?
 - Speech to text in the engineer's process or as a separate server (#22,
   #190).
 - One corner table per track, with stable ids, rather than one per reference
   lap (#94, #193).
+
+## Decided
+
+- Data and network (#194): [ADR 0001](docs/adr/0001-data-and-network.md).
+- Where to archive the recordings specs rely on (#197):
+  [ADR 0002](docs/adr/0002-outing-archive.md).
+- The UI stack (#234): [ADR 0003](docs/adr/0003-ui-stack.md). The UI is a React,
+  Vite and TypeScript single-page app served as static files by the pit wall
+  pod, with a read-only data API and a proxy to the engineer, and no Node at
+  runtime. Streamlit is retired in 0.6 (#238). There are two modes, the pit
+  wall and the wheel dashboards.
+- Own the GT7 decoder (#235, ADR 0003 point 8): Salsa20 and the packet
+  layouts in our own code; gt-telem is dropped in 0.6.
 
 ## Milestones before 2026-10-17
 

@@ -35,3 +35,4 @@ Signs it is time:
 |---|---|
 | [0001](0001-data-and-network.md) | Who writes `/data`, how readers open it, what the LAN can reach, where secrets live, one image or two, how data gets to Postgres. |
 | [0002](0002-outing-archive.md) | The outing archive: the `outings` release of this repository, a directory as its working copy, tests fetching outings by id. |
+| [0003](0003-ui-stack.md) | The UI: a React single-page app built to static files, served with a read-only data API by the pit wall pod, which proxies the engineer; Streamlit retired; dashboards; the GT7 decoder owned. Amends 0001 point 5. |

@@ -18,6 +18,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 GILLES = FIXTURES / "real-nuc-gilles-villeneuve-pit-stop-2026-10-17.jsonl.gz"
 WILLOW = FIXTURES / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz"
 SUZUKA = FIXTURES / "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz"
+SUGO = FIXTURES / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
 STOPS = (GILLES, WILLOW, SUZUKA)
 
 
@@ -91,6 +92,28 @@ def test_real_suzuka_east_stop_crosses_the_line_in_the_entry_cut():
     assert not stop.tyres_changed
 
 
+def test_real_sugo_two_stops_cross_the_line_in_the_pit_lane():
+    """Twelve laps, Mazda RX-VISION GT3: in at the end of laps 4 and 8 on 1.5 and
+    3.2 per cent, the line crossed at the 60 km/h cut each time, three stints."""
+    det, changes = detect(read_recording(SUGO, strict=True))
+    assert [(lap, st.in_pit_lane, st.stint) for lap, st in changes] == [
+        (5, True, 1),
+        (5, False, 2),
+        (9, True, 2),
+        (9, False, 3),
+    ]
+    first, second = det.status.stops
+    assert [(s.in_lap, s.out_lap, s.tyres_changed) for s in (first, second)] == [
+        (4, 5, True),
+        (8, 9, True),
+    ]
+    assert first.fuel_before == pytest.approx(1.52, abs=0.01)
+    assert second.fuel_before == pytest.approx(3.24, abs=0.01)
+    assert first.pit_lane_secs == pytest.approx(25.79, abs=0.01)
+    assert second.pit_lane_secs == pytest.approx(25.63, abs=0.01)
+    assert det.status.record()["stints"] == 3
+
+
 def test_pit_laps_roles_and_stints():
     det, _ = detect(read_recording(GILLES, strict=True))
     status = det.status
@@ -132,7 +155,7 @@ def test_a_lost_cut_frame_is_seen_as_a_teleport(path):
 
 @pytest.mark.parametrize(
     "path",
-    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in STOPS),
+    sorted(p for p in FIXTURES.glob("*.jsonl.gz") if p not in (*STOPS, SUGO)),
     ids=lambda p: p.stem,
 )
 def test_no_stop_in_any_other_recording(path):

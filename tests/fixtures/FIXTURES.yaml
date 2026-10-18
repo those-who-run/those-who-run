@@ -258,6 +258,20 @@ fixtures:
       - An open stop marks every lap from the in lap.
     tests: [test_pitstop, test_real_recording]
 
+  - file: real-nuc-sugo-two-stops-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Sportsland SUGO
+    car: Mazda RX-VISION GT3 EVO '26
+    kind: [lap_race (rolling)]
+    outing: 20261018-094323
+    source: >-
+      NUC outing 20261018-094323, the whole 12-lap race, P9 of 20, thinned at
+      one frame a second (two stops at 2 Hz is twice the size and calls the same).
+    pins:
+      - Two pit stops whose finish line is crossed in the pit lane, at the
+        60 km/h cut, and three stints.
+    tests: [test_pitstop]
+
 outings:
   - id: "20261016-183946"
     date: 2026-10-16
@@ -386,6 +400,20 @@ outings:
       for most of an hour (session 20261017-205613): the paused-race case in
       #229.
     cited_by: [229]
+
+  - id: "20261018-094323"
+    date: 2026-10-18
+    track: [Sportsland SUGO]
+    car: ["Mazda RX-VISION GT3 EVO '26"]
+    kind: [lap_race (rolling)]
+    frames: 84061
+    sha256: c4ab4f7fd2b81501a31b7cff74bdd915bcbe4d47935daa1e69344037de4add44
+    note: >-
+      Sportsland SUGO 12-lap race in the Mazda RX-VISION GT3 EVO '26, P9 of 20
+      in 18:08.373, best 1:22.190 on lap 2, two stops (in at the end of laps 4
+      and 8) with the pit lane across the finish line. Source of
+      real-nuc-sugo-two-stops-2026-10-18.
+    cited_by: [244, 245, 246, 247]
 
 lost:
   - id: "20261016-180243"

@@ -7,9 +7,9 @@ import wave
 import discord
 
 from tests.conftest import make_state
-from those_who_run.__main__ import ingest_loop
 from those_who_run.audio.discord_player import DiscordPlayer, wav_seconds
 from those_who_run.callouts import Callout
+from those_who_run.cli.run import ingest_loop
 from those_who_run.state import Phase
 
 

@@ -27,7 +27,7 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5", "ruff>=0.6", "mypy>
 web = ["streamlit>=1.50,<2"]
 
 [project.scripts]
-those-who-run = "those_who_run.__main__:main"
+those-who-run = "those_who_run.cli:main"
 
 [tool.hatch.version]
 path = "src/those_who_run/__init__.py"

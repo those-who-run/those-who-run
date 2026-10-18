@@ -4,8 +4,8 @@ import asyncio
 import logging
 
 from tests.conftest import make_state
-from those_who_run.__main__ import ingest_loop, speak_loop
 from those_who_run.callouts import Callout, CalloutQueue
+from those_who_run.cli.run import ingest_loop, speak_loop
 from those_who_run.supervise import Supervisor
 
 

@@ -12,7 +12,8 @@ import discord
 import pytest
 from gt_telem.errors.playstation_errors import PlayStationNotFoundError
 
-from those_who_run import __main__ as cli
+from those_who_run import cli
+from those_who_run.cli import run as run_cmd
 from those_who_run.config import ConfigError, LiveSettings, Settings
 
 LIVE_ENV = {
@@ -190,13 +191,13 @@ async def test_until_stopped():
     async def quick():
         return 1
 
-    assert await cli.until_stopped(quick(), stop) is True
+    assert await run_cmd.until_stopped(quick(), stop) is True
 
     async def failing():
         raise ConfigError("no")
 
     with pytest.raises(ConfigError):
-        await cli.until_stopped(failing(), stop)
+        await run_cmd.until_stopped(failing(), stop)
 
     cancelled = []
 
@@ -208,7 +209,7 @@ async def test_until_stopped():
             raise
 
     asyncio.get_running_loop().call_later(0.05, stop.set)
-    assert await asyncio.wait_for(cli.until_stopped(hang(), stop), 2) is False
+    assert await asyncio.wait_for(run_cmd.until_stopped(hang(), stop), 2) is False
     assert cancelled == [True]
 
 
@@ -282,13 +283,13 @@ def hanging_live(monkeypatch, tmp_path):
 async def test_stop_ends_run_live_while_player_start_hangs(hanging_live):
     stop = asyncio.Event()
     asyncio.get_running_loop().call_later(0.1, stop.set)
-    assert await asyncio.wait_for(cli.run_live(hanging_live, stop=stop), 5) == 0
+    assert await asyncio.wait_for(run_cmd.run_live(hanging_live, stop=stop), 5) == 0
     assert HangingPlayer.instances[0].closed
 
 
 async def test_sigterm_ends_run_live_while_player_start_hangs(hanging_live):
     asyncio.get_running_loop().call_later(0.1, os.kill, os.getpid(), signal.SIGTERM)
-    assert await asyncio.wait_for(cli.run_live(hanging_live), 5) == 0
+    assert await asyncio.wait_for(run_cmd.run_live(hanging_live), 5) == 0
     assert HangingPlayer.instances[0].closed
     # the handlers are removed again on the way out
     assert signal.getsignal(signal.SIGTERM) in (signal.SIG_DFL, signal.default_int_handler)
@@ -331,7 +332,7 @@ async def test_a_second_sigterm_during_shutdown_does_not_cut_the_flush(
     record = tmp_path / "rec.jsonl"
     stop = asyncio.Event()
     asyncio.get_running_loop().call_later(0.05, stop.set)
-    assert await asyncio.wait_for(cli.run_live(hanging_live, record=record, stop=stop), 5) == 0
+    assert await asyncio.wait_for(run_cmd.run_live(hanging_live, record=record, stop=stop), 5) == 0
     assert SlowClosePlayer.seen == {"handler_installed": True}
     assert record.exists()  # the writer was closed before voice went
     assert signal.getsignal(signal.SIGTERM) in (signal.SIG_DFL, signal.default_int_handler)
@@ -345,7 +346,7 @@ async def test_a_hung_voice_close_is_bounded(hanging_live, monkeypatch):
             await asyncio.Event().wait()
 
     monkeypatch.setattr(dp, "DiscordPlayer", StuckClose)
-    monkeypatch.setattr(cli, "PLAYER_CLOSE_SECS", 0.1)
+    monkeypatch.setattr(run_cmd, "PLAYER_CLOSE_SECS", 0.1)
     stop = asyncio.Event()
     asyncio.get_running_loop().call_later(0.05, stop.set)
-    assert await asyncio.wait_for(cli.run_live(hanging_live, stop=stop), 5) == 0
+    assert await asyncio.wait_for(run_cmd.run_live(hanging_live, stop=stop), 5) == 0

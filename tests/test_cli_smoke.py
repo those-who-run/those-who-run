@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-import those_who_run.__main__ as cli
+import those_who_run.cli.cars as cars_command
 from those_who_run.__main__ import main
 from those_who_run.callouts import CalloutQueue
 from those_who_run.config import DEFAULT_RULES
@@ -252,10 +252,10 @@ def test_web_without_streamlit(data_dir, monkeypatch):
 
 
 def test_ctrl_c_is_exit_130(data_dir, monkeypatch):
-    def interrupted(args: Any) -> int:
+    def interrupted(args: Any, settings: Any) -> int:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(cli, "run_cars", interrupted)
+    monkeypatch.setattr(cars_command, "run", interrupted)
     assert main(["cars", "list"]) == 130
 
 

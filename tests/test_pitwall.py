@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from those_who_run.__main__ import build_parser, streamlit_flags
+from those_who_run.__main__ import build_parser
 from those_who_run.callouts import CalloutQueue
+from those_who_run.cli.web import streamlit_flags
 from those_who_run.config import DEFAULT_RULES, Settings
 from those_who_run.engine import Engine
 from those_who_run.pitwall import data

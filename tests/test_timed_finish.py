@@ -36,10 +36,7 @@ async def test_real_timed_race_finishes_at_the_line(tmp_path):
         "Lap four. one oh seven point seven. zero point one over best.",
         "Lap five. one oh eight point two. zero point six over best.",
     ]
-    assert spoken[-1] == (
-        "Chequered flag. Finished first. Best lap one oh seven point six. "
-        "Fuel used thirteen percent."
-    )
+    assert spoken[-1] == "Chequered flag. Finished first. Best lap one oh seven point six."
     assert engine.races_started == 1, "the replayed frames after the results are not a race"
     (summary,) = summaries
     assert summary["finished"] is True and summary["total_time_ms"] == 333162

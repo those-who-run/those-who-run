@@ -369,8 +369,7 @@ def test_start_brief_once_per_race_and_again_after_reset(sim):
 def test_race_summary_at_the_flag(sim):
     frames = sim(total_laps=3, fuel=100, burn=5, position=6).race([100000, 99000, 99500]).frames
     assert run_rule(RaceSummaryRule(), frames) == [
-        "Chequered flag. Finished sixth. Best lap one thirty-nine point zero. "
-        "Fuel used fifteen percent."
+        "Chequered flag. Finished sixth. Best lap one thirty-nine point zero."
     ]
 
 
@@ -393,48 +392,27 @@ def _run_with_stop(rule, frames, after_lap: int):
     return out
 
 
-def test_race_summary_counts_fuel_from_both_stints(sim):
+def test_race_summary_leaves_fuel_out_even_with_stops(sim):
+    """#245: "Fuel by stint, ninety-seven percent, then ninety-seven percent" told
+    the driver nothing. The summary is position and best lap; the results card keeps
+    the per-stint figures. SUGO, session 20261018-094354, with that pool's wording."""
     frames = (
-        sim(total_laps=4, fuel=50, burn=10)
-        .race([100000] * 4, refuel_after_lap=2, refuel_to=50)
+        sim(total_laps=4, fuel=100, burn=40, position=9)
+        .race([82200] * 4, refuel_after_lap=2, refuel_to=100)
         .frames
     )
-    (text,) = _run_with_stop(RaceSummaryRule(), frames, after_lap=2)
-    # 50 -> 30 before the stop, 50 -> 30 after; the sim refuels on the lap-2 crossing
-    # frame, which hides that frame's 5 units, so 15 and 20 of the 40 burnt are seen.
-    assert text.endswith("Fuel used fifteen percent, then twenty percent.")
-
-
-def test_race_summary_never_reports_more_than_a_tank(sim):
-    # 80 of a 100 tank in each stint: 160 in all, which is not a figure to read out
-    frames = (
-        sim(total_laps=4, fuel=100, burn=40)
-        .race([100000] * 4, refuel_after_lap=2, refuel_to=100)
-        .frames
-    )
-    rule = RaceSummaryRule({"template_fuel_stints": "{stints}"})
-    (text,) = _run_with_stop(rule, frames, after_lap=2)
-    assert text == "Chequered flag. Finished fifth. Best lap one forty point zero. " + (
-        "sixty percent, then eighty percent."
-    )
-    assert "hundred" not in text
-
-
-def test_race_summary_a_fuel_rise_without_a_stop_is_one_stint(sim):
-    """A restart the session detector does not see refills the tank on the restart
-    frame (qualifying, 2026-10-14: 75 -> 100, #157), and GT7's level can settle
-    up a fraction at the start. Neither is a stop: one figure, no "then"."""
-    from dataclasses import replace
-
-    frames = (
-        sim(total_laps=4, fuel=100, burn=25)
-        .race([100000] * 4, refuel_after_lap=1, refuel_to=100)
-        .frames
-    )
-    i = next(i for i, f in enumerate(frames) if f.fuel_level < 100)
-    frames[i:i] = [replace(frames[i], fuel_level=99.6), replace(frames[i], fuel_level=99.9)]
-    (text,) = run_rule(RaceSummaryRule(), frames)
-    assert "then" not in text and text.endswith("percent.")
+    cfg = {
+        "template": ["That is the flag. {position}. {best}."],
+        "template_position": ["Crossed the line in {position}."],
+        "template_best": ["Fastest lap was {time}."],
+    }
+    assert _run_with_stop(RaceSummaryRule(cfg), frames, after_lap=2) == [
+        "That is the flag. Crossed the line in ninth. Fastest lap was one twenty-two point two."
+    ]
+    # a rules file from before #245 that still names {fuel} reads without it
+    old = RaceSummaryRule({"template": "Flag. {position} {best} {fuel}"})
+    (text,) = _run_with_stop(old, frames, after_lap=2)
+    assert text == "Flag. Finished ninth. Best lap one twenty-two point two."
 
 
 def test_fuel_stints_follow_the_pit_detector():
@@ -532,9 +510,9 @@ def test_race_summary_silent_on_quit(sim):
 
 
 def test_race_summary_templates_are_configurable(sim):
-    rule = RaceSummaryRule({"template": "{position} {fuel}", "template_position": "P {p}."})
+    rule = RaceSummaryRule({"template": "{position} {best}", "template_position": "P {p}."})
     frames = sim(total_laps=2, fuel=100, burn=10, position=3).race([100000] * 2).frames
-    assert run_rule(rule, frames) == ["P three. Fuel used twenty percent."]
+    assert run_rule(rule, frames) == ["P three. Best lap one forty point zero."]
 
 
 # temperatures
@@ -827,17 +805,16 @@ def test_position_pools_for_the_lead_and_the_podium():
     ]
 
 
-def test_race_summary_pools_for_a_win_and_a_podium_and_fuel_left(sim):
+def test_race_summary_pools_for_a_win_and_a_podium(sim):
     cfg = {
         "template_position_win": ["Winner."],
         "template_position_podium": ["Podium, {position}."],
-        "template_fuel": ["{fuel_left} left."],
     }
     win = sim(total_laps=2, fuel=100, burn=10, position=1).race([100000] * 2).frames
     assert run_rule(RaceSummaryRule(cfg), win)[0].startswith("Chequered flag. Winner.")
     third = sim(total_laps=2, fuel=100, burn=10, position=3).race([100000] * 2).frames
     assert run_rule(RaceSummaryRule(cfg), third) == [
-        "Chequered flag. Podium, third. Best lap one forty point zero. eighty percent left."
+        "Chequered flag. Podium, third. Best lap one forty point zero."
     ]
 
 

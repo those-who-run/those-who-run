@@ -60,8 +60,7 @@ async def test_real_session_callouts_and_sessions(tmp_path):
         # engineer does not count it as a best: no delta for lap 2
         "Lap two. fifty-three point one.",
         # P6 was taken in the last two seconds; the summary reads it off the flag frame
-        "Chequered flag. Finished sixth. Best lap fifty-three point one. "
-        "Fuel used thirty-eight percent.",
+        "Chequered flag. Finished sixth. Best lap fifty-three point one.",
     ]
     # practice + race, and nothing for the post-race replay frames
     assert engine.races_started == 2
@@ -205,9 +204,8 @@ async def test_real_pit_stop_race(tmp_path):
         "Final lap.",
         "Lap five. fifty-nine point five. New best by one point zero.",
         "Lap six. one oh zero point three. zero point eight over best.",
-        "Chequered flag. Finished first. Best lap fifty-nine point five. "
-        # per stint, not the 130% they add up to: no figure is over a full tank
-        "Fuel used seventy-four percent, then fifty-seven percent.",
+        # no fuel by stint (#245): the results card has it
+        "Chequered flag. Finished first. Best lap fifty-nine point five.",
     ]
     assert engine.races_started == 1
     assert laps == [(1, 57109), (2, 60538), (3, 82544), (4, 69892), (5, 59541), (6, 60310)]
@@ -317,7 +315,6 @@ async def test_real_race_with_the_pit_call_ignored(tmp_path):
         "Final lap.",
         "Lap five. one oh three point four. two point two over best.",
         "Lap six. one oh four point zero. two point eight over best.",
-        "Chequered flag. Finished second. Best lap one oh one point two. "
-        "Fuel used ninety-seven percent.",
+        "Chequered flag. Finished second. Best lap one oh one point two.",
     ]
     assert [lap for lap, _ in laps] == [1, 2, 3, 4, 5, 6]

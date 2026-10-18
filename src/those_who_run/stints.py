@@ -9,12 +9,12 @@ electric car (Xiaomi VGT, 2026-10-16). None of those is a pit stop. A withdrawn
 stop (a reset to track, ``Teleport``) never ends a stint, as it is never done.
 
 Stints that burnt less than ``min_fuel`` are left out of the figures (a stop
-straight after another, a stint cut short by the flag), so the summary never
+straight after another, a stint cut short by the flag), so the results card never
 reads "zero percent, then seventy-four percent". The total keeps every drop.
 
-The race summary rule and the session store each keep one of these and feed it
-the same frames and pit status, so the spoken summary and the results card give
-the same figures.
+The session store keeps one of these, fed every frame and the pit status, for
+the results card's fuel-per-stint line. The spoken race summary leaves fuel out
+(#245).
 """
 
 from __future__ import annotations

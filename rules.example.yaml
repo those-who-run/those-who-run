@@ -73,12 +73,9 @@ rules:
     enabled: true
     priority: 25             # after the final lap time, posted on the same frame
     max_age_seconds: 30      # waits behind the final lap time instead of being dropped
-    min_fuel: 1.0            # skip the fuel clause under this many units used
-    # template: "Chequered flag. {position} {best} {fuel}"
+    # template: "Chequered flag. {position} {best}"   # no fuel: the results card has it
     # template_position: "Finished {position}."
     # template_best: "Best lap {time}."
-    # template_fuel: "Fuel used {fuel}."
-    # template_fuel_stints: "Fuel used {stints}."   # after a pit stop: fuel per stint
     # Leaving a session that has no flag: time trial, practice, solo laps. Add
     # lap_race to hear a summary on retiring too.
     quit_kinds: [solo_timed, solo_laps]

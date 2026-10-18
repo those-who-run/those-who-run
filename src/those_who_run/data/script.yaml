@@ -135,10 +135,10 @@ rules:
       - "Lined up {position} of {total}."
   race_summary:
     template:
-      - "Chequered flag. {position} {best} {fuel}"
-      - "Session complete. {position}. {best}. {fuel}."
-      - "Race over. {position}. {best}. {fuel}."
-      - "That is the flag. {position}. {best}. {fuel}."
+      - "Chequered flag. {position} {best}"
+      - "Session complete. {position}. {best}."
+      - "Race over. {position}. {best}."
+      - "That is the flag. {position}. {best}."
     template_position:
       - "Finished {position}."
       - "Crossed the line in {position}."
@@ -164,15 +164,6 @@ rules:
       - "That is the session. {laps}. {best}"
       - "Good session. {laps} in the bag. {best}"
       - "Calling it there. {laps}. {best}"
-    template_fuel:             # {fuel} is fuel used, {fuel_left} what is in the tank, both as a percentage
-      - "Fuel used {fuel}."
-      - "Used {fuel} of the tank."
-      - "Finished with {fuel_left} in the tank."
-      - "{fuel_left} left in the tank."
-    template_fuel_stints:      # after a pit stop; {stints} is each stint's use, "seventy percent, then sixty percent"
-      - "Fuel used {stints}."
-      - "Fuel by stint, {stints}."
-      - "Finished with {fuel_left} in the tank."
   temps:
     template_tyre_hot:         # {corners}: "Front left tyre", "Rear tyres", "Front left and rear left tyres", "All tyres"
       - "{corners} hot."

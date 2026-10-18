@@ -22,9 +22,6 @@ WORDS = {
     "total": "sixteen",
     "track": "Sportsland SUGO",
     "best": "Best lap one oh one point two.",
-    "fuel": "thirty percent",
-    "fuel_left": "seventy percent",
-    "stints": "seventy percent, then sixty percent",
     "corners": "Front left tyre",
 }
 PLACEHOLDERS = {
@@ -63,13 +60,11 @@ PLACEHOLDERS = {
         "template_position": {"p", "position", "total"},
     },
     "race_summary": {
-        "template": {"position", "best", "fuel"},
+        "template": {"position", "best"},
         "template_position": {"position", "p"},
         "template_position_win": {"position", "p"},
         "template_position_podium": {"position", "p"},
         "template_best": {"time"},
-        "template_fuel": {"fuel", "fuel_left"},
-        "template_fuel_stints": {"stints", "fuel_left"},
         "template_quit": {"laps", "best"},
     },
     "temps": {

@@ -53,8 +53,8 @@ def test_example_and_defaults_are_in_step():
 
 def test_a_key_missing_from_the_example_fails():
     text = EXAMPLE.read_text(encoding="utf-8")
-    assert drift(text.replace("    min_fuel: 1.0", "")) == [
-        "rules.race_summary.min_fuel: default not in the example"
+    assert drift(text.replace("    quit_min_laps: 1", "")) == [
+        "rules.race_summary.quit_min_laps: default not in the example"
     ]
     assert drift(text.replace("    # template_pit:", "    # template_pt:")) == [
         "rules.fuel.template_pit: default not in the example",

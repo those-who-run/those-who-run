@@ -25,8 +25,9 @@ from those_who_run import __version__, brand
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.config import LiveSettings, Settings, load_rules_config
 from those_who_run.engine import Engine
-from those_who_run.metrics import HealthServer, Metrics
+from those_who_run.metrics import Metrics
 from those_who_run.rules import build_rules
+from those_who_run.server import Server
 from those_who_run.state import Phase, RaceState
 from those_who_run.store import SessionStore
 from those_who_run.supervise import Supervisor
@@ -140,6 +141,15 @@ class App:
         self._make_telemetry = telemetry
         self._stop = asyncio.Event()
         self.supervisor = Supervisor(self._stop)
+        self.metrics = Metrics()
+        # Add API routes to ``server.api`` (or ``server.control_api``) before run().
+        self.server = Server(
+            self.metrics,
+            self.status,
+            host=settings.bind_address,
+            port=settings.metrics_port,
+            control_port=settings.control_port,
+        )
         self.writer: RecordingWriter | OutingRecorder | None = None
         self.poster: ResultsPoster | None = None
         self._store_open = False
@@ -195,7 +205,6 @@ class App:
         self.live: LiveSettings = settings.require_live()
         self.rules_cfg = load_rules_config(settings.rules_file)
         rules = build_rules(self.rules_cfg["rules"])
-        self.metrics = Metrics()
         self.queue = CalloutQueue(max_age=float(self.rules_cfg["queue"]["max_age_seconds"]))
         self.store = SessionStore(settings.data_dir)  # StoreBusy first: see cli.main
         self._store_open = True
@@ -219,7 +228,6 @@ class App:
             )
             self.store.on_end = self.poster.submit
             log.info("results cards go to channel %s", settings.results_channel_id)
-        http = HealthServer(settings.metrics_port, self.metrics, self.status)
 
         # Teardown runs these last first: data goes before the network.
         loop = asyncio.get_running_loop()
@@ -228,7 +236,7 @@ class App:
             loop.add_signal_handler(sig, self._stop.set)
         for sig in signals:
             stack.callback(loop.remove_signal_handler, sig)
-        stack.callback(http.stop)
+        stack.push_async_callback(self.server.stop)
         stack.push_async_callback(self._close_player)
         stack.callback(self._close_writer)
         stack.callback(self._close_session)
@@ -236,8 +244,7 @@ class App:
         stack.push_async_callback(self.supervisor.close)
         stack.callback(log.info, "shutting down")
 
-        http.start()
-        self.http = http
+        await self.server.start()
         if self.record is not None:
             from those_who_run.replay import RecordingWriter
 

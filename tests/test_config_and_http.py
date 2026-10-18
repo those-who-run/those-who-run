@@ -1,11 +1,8 @@
-import json
-import urllib.request
 from pathlib import Path
 
 import pytest
 
 from those_who_run.config import ConfigError, Settings, deep_merge, load_rules_config
-from those_who_run.metrics import HealthServer, Metrics
 
 
 def test_settings_from_env():
@@ -26,6 +23,15 @@ def test_settings_from_env():
     s.require_live()
     s = Settings.from_env({"GT7_RECORD_DIR": "/data/recordings", "GT7_RECORD_KEEP": "5"})
     assert str(s.record_dir) == "/data/recordings" and s.record_keep == 5
+
+
+def test_settings_bind_address_and_control_port():
+    s = Settings.from_env({})
+    assert (s.bind_address, s.control_port) == ("0.0.0.0", None)  # no control listener
+    s = Settings.from_env({"GT7_BIND_ADDRESS": "127.0.0.1", "GT7_CONTROL_PORT": "9851"})
+    assert (s.bind_address, s.control_port) == ("127.0.0.1", 9851)
+    with pytest.raises(ConfigError, match="GT7_CONTROL_PORT.*between 1 and 65535"):
+        Settings.from_env({"GT7_CONTROL_PORT": "0"})
 
 
 def test_settings_speech_cache_dir_and_cap():
@@ -92,20 +98,3 @@ def test_deep_merge_does_not_mutate():
     out = deep_merge(base, {"a": {"b": 9}, "d": 1})
     assert out == {"a": {"b": 9, "c": 2}, "d": 1}
     assert base == {"a": {"b": 1, "c": 2}}
-
-
-def test_health_server_serves_metrics_and_health():
-    m = Metrics()
-    m.in_race.set(1)
-    srv = HealthServer(0, m, lambda: {"ok": True, "telemetry_connected": False})
-    srv.start()
-    try:
-        port = srv.bound_port
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics") as r:
-            assert b"gt7_in_race 1.0" in r.read()
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz") as r:
-            assert json.load(r)["telemetry_connected"] is False
-        with pytest.raises(urllib.error.HTTPError):
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/nope")
-    finally:
-        srv.stop()

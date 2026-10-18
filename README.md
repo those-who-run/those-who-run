@@ -119,7 +119,9 @@ is unchanged by the rebrand.
 | `GT7_VOICE_MODEL` | `voices/en_GB-alba-medium.onnx` | Piper voice. |
 | `GT7_CACHE_DIR` | `$XDG_CACHE_HOME/those-who-run`, else `~/.cache/those-who-run` | Synthesised sentence clips, reused across laps. Must be owned by the user running the engineer, and must not be inside `GT7_DATA_DIR` (the pit wall can write there). |
 | `GT7_CACHE_MAX_MB` | `100` | Size cap for the speech cache; the least recently used clips go first. |
-| `GT7_METRICS_PORT` | `9850` | `/metrics` and `/healthz`. |
+| `GT7_METRICS_PORT` | `9850` | `/metrics`, `/healthz` and, as it arrives, the read-only `/api/v1`. |
+| `GT7_CONTROL_PORT` | unset | The control API's port (`9851` on the NUC, ADR 0001). Unset, nothing listens there. |
+| `GT7_BIND_ADDRESS` | `0.0.0.0` | Address both engineer ports listen on. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
 | `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |

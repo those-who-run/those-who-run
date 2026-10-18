@@ -37,6 +37,13 @@ def test_urls_follow_mode_and_ports():
     ]
 
 
+def test_the_engineer_probe_follows_the_bind_address():
+    assert health_urls(settings(GT7_BIND_ADDRESS="::"), "run") == ["http://127.0.0.1:9850/healthz"]
+    s = settings(GT7_BIND_ADDRESS="192.0.2.20")
+    assert health_urls(s, "run") == ["http://192.0.2.20:9850/healthz"]
+    assert health_urls(settings(GT7_BIND_ADDRESS="::1"), "run") == ["http://[::1]:9850/healthz"]
+
+
 def test_pid1_argv_reads_nul_separated_cmdline(tmp_path: Path):
     f = tmp_path / "cmdline"
     f.write_bytes(b"/usr/bin/python\0those-who-run\0web\0")

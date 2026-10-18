@@ -1,22 +1,12 @@
-"""Prometheus metrics and a tiny HTTP server for /metrics and /healthz."""
+"""Prometheus metrics. :mod:`those_who_run.server` serves them on /metrics."""
 
 from __future__ import annotations
 
-import json
-import logging
-import threading
-from collections.abc import Callable
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
-
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
-from prometheus_client.exposition import CONTENT_TYPE_LATEST
 
 from those_who_run.sessionkind import SessionKind
 from those_who_run.state import RaceState
 from those_who_run.trackdetect import TrackMatch
-
-log = logging.getLogger(__name__)
 
 
 class Metrics:
@@ -107,54 +97,3 @@ class Metrics:
 
     def render(self) -> bytes:
         return generate_latest(self.registry)
-
-
-class HealthServer:
-    """Serves /metrics and /healthz from a daemon thread."""
-
-    def __init__(self, port: int, metrics: Metrics, health: Callable[[], dict[str, Any]]) -> None:
-        self.port = port
-        self._metrics = metrics
-        self._health = health
-        self._server: ThreadingHTTPServer | None = None
-        self._thread: threading.Thread | None = None
-
-    def start(self) -> None:
-        metrics, health = self._metrics, self._health
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802
-                if self.path.startswith("/metrics"):
-                    body = metrics.render()
-                    self.send_response(200)
-                    self.send_header("Content-Type", CONTENT_TYPE_LATEST)
-                elif self.path.startswith("/healthz"):
-                    status = health()
-                    body = json.dumps(status).encode()
-                    self.send_response(200 if status.get("ok", True) else 503)
-                    self.send_header("Content-Type", "application/json")
-                else:
-                    self.send_response(404)
-                    body = b"not found"
-                    self.send_header("Content-Type", "text/plain")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
-                log.debug("http " + format, *args)
-
-        self._server = ThreadingHTTPServer(("0.0.0.0", self.port), Handler)
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="http")
-        self._thread.start()
-        log.info("metrics on :%d/metrics, health on :%d/healthz", self.port, self.port)
-
-    @property
-    def bound_port(self) -> int:
-        assert self._server is not None
-        return self._server.server_address[1]
-
-    def stop(self) -> None:
-        if self._server is not None:
-            self._server.shutdown()
-            self._server.server_close()

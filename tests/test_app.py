@@ -177,8 +177,8 @@ async def test_the_app_serves_its_status_as_healthz(settings, sim):
     player = FakePlayer()
     app, _ = make_app(settings, sim().menu().frames, player)
     running = asyncio.create_task(app.run())
-    await wait_for(lambda: hasattr(app, "http") and app.supervisor.ok() and app.supervisor.alive())
-    url = f"http://127.0.0.1:{app.http.bound_port}/healthz"
+    await wait_for(lambda: app.supervisor.ok() and app.supervisor.alive())
+    url = f"http://127.0.0.1:{app.server.bound_port}/healthz"
     body = await asyncio.to_thread(lambda: urllib.request.urlopen(url, timeout=2).read())
     assert json.loads(body).keys() == app.status().keys()
     app.stop()
@@ -192,7 +192,7 @@ async def test_a_start_that_raises_closes_everything_opened_so_far(settings, tmp
     with pytest.raises(RuntimeError, match="discord is down"):
         await asyncio.wait_for(app.run(), 5)
     # the HTTP server is closed: its port no longer answers
-    with pytest.raises(OSError), socket.create_connection(("127.0.0.1", app.http.bound_port), 1):
+    with pytest.raises(OSError), socket.create_connection(("127.0.0.1", app.server.bound_port), 1):
         pass
     SessionStore(settings.data_dir).close()  # the writer lock was released
     assert record.exists() and list(read_recording(record)) == []  # the recording was closed

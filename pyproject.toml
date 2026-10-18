@@ -18,6 +18,7 @@ dependencies = [
   "prometheus-client>=0.21",
   "pyyaml>=6",
   "duckdb>=1.1",
+  "aiohttp>=3.9,<4",  # the HTTP server (server.py); discord.py needs it too
 ]
 
 [project.optional-dependencies]

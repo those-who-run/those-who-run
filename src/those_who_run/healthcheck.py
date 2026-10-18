@@ -41,9 +41,17 @@ def _port_flag(argv: Sequence[str]) -> int | None:
     return None
 
 
+def _engine_host(bind: str) -> str:
+    """Where the engineer answers: loopback when it listens on every address,
+    else the one address it is bound to (GT7_BIND_ADDRESS)."""
+    if bind in ("", "0.0.0.0", "::"):
+        return "127.0.0.1"
+    return f"[{bind}]" if ":" in bind else bind
+
+
 def health_urls(settings: Settings, mode: str | None, argv: Sequence[str] = ()) -> list[str]:
     """The URLs to probe: one for a known mode, both when the mode is unknown."""
-    run_url = f"http://127.0.0.1:{settings.metrics_port}/healthz"
+    run_url = f"http://{_engine_host(settings.bind_address)}:{settings.metrics_port}/healthz"
     web_url = f"http://127.0.0.1:{_port_flag(argv) or settings.web_port}/_stcore/health"
     if mode == "run":
         return [run_url]

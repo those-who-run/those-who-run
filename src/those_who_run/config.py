@@ -164,6 +164,10 @@ class Settings:
     pitwall_url: str | None = None  # where the pit wall is served; results cards link there
     cache_dir: Path | None = None  # the speech cache; None is the XDG cache dir
     cache_max_mb: int = 100
+    # The engineer's HTTP server: GT7_METRICS_PORT and, when set, GT7_CONTROL_PORT
+    # (ADR 0001 point 3) listen on this address.
+    bind_address: str = "0.0.0.0"
+    control_port: int | None = None  # the control API's port (9851 on the NUC); None is off
 
     @property
     def speech_cache_dir(self) -> Path:
@@ -183,6 +187,7 @@ class Settings:
         "GT7_RECORD_KEEP",
         "GT7_WEB_PORT",
         "GT7_CACHE_MAX_MB",
+        "GT7_CONTROL_PORT",
         "LOG_LEVEL",
         "GT7_CACHE_DIR",  # not parsed, but checked: it must not be under GT7_DATA_DIR
     )
@@ -228,6 +233,8 @@ class Settings:
             pitwall_url=e.get("PITWALL_URL") or None,
             cache_dir=Path(e["GT7_CACHE_DIR"]) if e.get("GT7_CACHE_DIR") else default_cache_dir(e),
             cache_max_mb=parsed("GT7_CACHE_MAX_MB", _int_env(100, minimum=0), 100),
+            bind_address=e.get("GT7_BIND_ADDRESS") or "0.0.0.0",
+            control_port=parsed("GT7_CONTROL_PORT", _optional_port_env, None),
         )
         if check is None or "GT7_CACHE_DIR" in check:
             settings.check_cache_dir()
@@ -311,6 +318,10 @@ def _int_env(
 
 def _port_env(default: int) -> Callable[[Mapping[str, str], str], int]:
     return _int_env(default, minimum=1, maximum=65535)
+
+
+def _optional_port_env(env: Mapping[str, str], name: str) -> int | None:
+    return _port_env(0)(env, name) if env.get(name) else None
 
 
 def _float_env(

@@ -18,6 +18,7 @@ from those_who_run.callouts import CalloutQueue
 from those_who_run.config import DEFAULT_RULES
 from those_who_run.engine import Engine
 from those_who_run.replay import read_recording, replay
+from those_who_run.results import build_card
 from those_who_run.rules import FuelRule, build_rules
 from those_who_run.state import Phase, race_ended, race_restarted, race_started
 from those_who_run.store import SessionStore
@@ -36,6 +37,7 @@ WILLOW_STOP = (
 SUGO_STOPS = Path(__file__).parent / "fixtures" / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
 SUGO_REPLAY = Path(__file__).parent / "fixtures" / "real-nuc-sugo-replay-2026-10-18.jsonl.gz"
 LAGUNA_DEMO = Path(__file__).parent / "fixtures" / "real-nuc-laguna-seca-demo-2026-10-18.jsonl.gz"
+SUGO_RESTARTS = Path(__file__).parent / "fixtures" / "real-nuc-sugo-restarts-2026-10-18.jsonl.gz"
 
 
 def _spoken_when(path):
@@ -178,10 +180,11 @@ async def test_real_qualifying_restart_and_quit(tmp_path):
 
 
 def test_real_restart_goes_straight_back_to_lap_1():
-    """The one restart recorded (qualifying, 2026-10-14) takes the counter from lap 2
-    to lap 1 in one frame: no lap 0 between, with the car moved and the tank
-    refilled on that frame. So a restart during lap 1 would read lap 1 -> lap 1
-    and is not detected; it waits for a recording (#157)."""
+    """The restart in qualifying (2026-10-14) takes the counter from lap 2 to lap 1
+    in one frame: no lap 0 between, with the car moved and the tank refilled on
+    that frame. A race restart goes through a loading screen at lap 0 instead,
+    on lap 1 as on lap 2 (SUGO 2026-10-18, see the next test), so lap 1 -> lap 1
+    is never seen (#157)."""
     states = list(read_recording(QUALI))
     (i,) = [i for i, s in enumerate(states) if i and race_restarted(states[i - 1], s)]
     before, after = states[i - 1], states[i]
@@ -523,3 +526,50 @@ async def test_real_2026_10_15_unflagged_group_are_demos(name, tmp_path, caplog)
         "ignoring a demo race: GT7's cars-on-track flag is off from the start and it came"
         " straight from the menu with no loading screen"
     ]
+
+
+async def test_real_restart_during_lap_1_ends_the_session_and_starts_a_clean_one(tmp_path):
+    """Three two-lap races at SUGO, NUC 2026-10-18 (outing 20261018-130722): the
+    driver restarts from the pause menu on lap 2, then on lap 1, then finishes P2.
+    Both restarts reset the lap counter through a loading screen at lap 0, with the
+    car back on the rolling-start line and the tank refilled, so each ends its
+    session (as a quit would) and the next race starts a new one: lap 1 -> lap 1
+    never happens (#157 AC1). The lap-1 restart's session has no full lap and gets
+    no card; the race after it starts clean: briefed again from P10, its own rolling
+    start, no stops, and SUGO confirmed from its own laps."""
+    states = list(read_recording(SUGO_RESTARTS, strict=True))
+    resets = [
+        (prev, cur)
+        for prev, cur in zip(states, states[1:], strict=False)
+        if prev.current_lap >= 1 and cur.phase is Phase.LOADING and cur.current_lap == 0
+    ]
+    assert [(p.current_lap, round(p.t - states[0].t)) for p, _ in resets] == [(2, 282), (1, 336)]
+    for prev, cur in resets:
+        assert round(cur.fuel_level) == 100 > prev.fuel_level
+        assert race_ended(prev, cur) and not race_restarted(prev, cur)
+
+    cards: list[dict] = []
+    store = SessionStore(tmp_path, on_end=cards.append)
+    engine = Engine(build_rules(DEFAULT_RULES["rules"]), CalloutQueue(max_age=None), store)
+    tracks = []
+    for s in states:
+        engine.process(s)
+        if store.session is not None and engine.track is not None:
+            tracks.append((store.session.session_id, engine.track.confidence))
+    store.close()
+    assert engine.races_started == 3
+    assert [(c["laps_completed"], c["finished"]) for c in cards] == [
+        (1, False),
+        (0, False),
+        (2, True),
+    ]
+    assert [build_card(c) is None for c in cards] == [False, True, False]
+    assert (cards[1]["laps"][0]["lap"], cards[1]["laps"][0]["complete"]) == (1, False)
+    last = cards[2]
+    assert last["session_kind"]["start"] == "rolling"
+    assert last["pit_stops"] == []
+    assert last["track"]["name"] == "Sportsland SUGO"
+    assert last["track"]["confidence"] == "confirmed"
+    assert (last["final_position"], last["total_time_ms"]) == (2, 169772)
+    # the lap-1 restart's lap is not carried over: two laps, both its own
+    assert [x["lap"] for x in last["laps"]] == [1, 2]

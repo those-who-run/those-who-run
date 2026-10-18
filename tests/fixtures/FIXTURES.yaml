@@ -327,6 +327,22 @@ fixtures:
         log line saying why.
     tests: [test_best_lap_stored, test_real_recording]
 
+  - file: real-nuc-sugo-restarts-2026-10-18.jsonl.gz
+    date: 2026-10-18
+    track: Sportsland SUGO
+    car: "Mazda RX-VISION GT3 EVO '26"
+    kind: [lap_race (rolling), lap_race (rolling), lap_race (rolling)]
+    outing: "20261018-130722"
+    source: >-
+      NUC outing 20261018-130722, the whole outing at 2 Hz: three two-lap races,
+      restarted from the pause menu on lap 2 and then on lap 1, then finished P2.
+    pins:
+      - A restart on lap 1 or lap 2 resets the lap counter through a loading
+        screen at lap 0, so it ends the session like a quit, and the next race
+        starts a clean one (#157 AC1).
+      - The lap-1 restart's session has no full lap and no card.
+    tests: [test_real_recording]
+
 outings:
   - id: "20261016-183946"
     date: 2026-10-16
@@ -519,6 +535,21 @@ outings:
       Frame for frame the demo of the 2026-10-15 Nordschleife fixture. No
       sessions, as the engineer ignores it.
     cited_by: [63, 260]
+
+  - id: "20261018-130722"
+    date: 2026-10-18
+    track: [Sportsland SUGO]
+    car: ["Mazda RX-VISION GT3 EVO '26"]
+    kind: [lap_race (rolling)]
+    frames: 32778
+    sha256: 546ed22b3e1a8f0f241d0f9c6e512c733a3bf32d0792aca14c0aeefc26443653
+    note: >-
+      Three 2-lap races at Sportsland SUGO in the Mazda RX-VISION GT3 EVO '26:
+      restarted from the pause menu on lap 2 (after a pause that GT7 sent as
+      1.2 s of paused frames and then 45 s of identical in_race frames), restarted
+      on lap 1, then P2 of 20 in 2:49.772. Source of
+      real-nuc-sugo-restarts-2026-10-18.
+    cited_by: [157, 229]
 
 lost:
   - id: "20261016-180243"

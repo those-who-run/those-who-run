@@ -297,7 +297,10 @@ def race_ended(prev: RaceState | None, state: RaceState) -> bool:
 
 def race_restarted(prev: RaceState | None, state: RaceState) -> bool:
     """GT7 jumped straight back to lap 1 while driving: the restart option in the
-    pause menu (seen in qualifying 2026-10-14, with the fuel refilled too)."""
+    pause menu (seen in qualifying 2026-10-14, with the fuel refilled too). A race
+    restart, on lap 1 as on lap 2, goes through a loading screen at lap 0 instead
+    (SUGO 2026-10-18, #157), which ``race_ended`` ends the session on; so a restart
+    on lap 1 never reads lap 1 -> lap 1."""
     return (
         prev is not None
         and prev.phase in (Phase.IN_RACE, Phase.PAUSED)

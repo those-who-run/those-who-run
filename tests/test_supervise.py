@@ -4,8 +4,8 @@ import asyncio
 import logging
 
 from tests.conftest import make_state
+from those_who_run.app import ingest_loop, speak_loop
 from those_who_run.callouts import Callout, CalloutQueue
-from those_who_run.cli.run import ingest_loop, speak_loop
 from those_who_run.supervise import Supervisor
 
 
@@ -41,7 +41,7 @@ async def test_speak_loop_keeps_speaking_after_a_failed_play(caplog):
     queue.push(callout("Pit this lap.", 0.0))
     queue.push(callout("Final lap.", 1.0))
     player = FlakyPlayer()
-    task = asyncio.create_task(speak_loop(queue, player, clock=lambda: 2.0, idle_secs=0.001))
+    task = asyncio.create_task(speak_loop(queue, player, clock=lambda: 2.0))
     with caplog.at_level(logging.ERROR):
         await wait_for(lambda: player.spoken)
     task.cancel()

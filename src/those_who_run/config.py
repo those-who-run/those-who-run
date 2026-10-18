@@ -258,6 +258,13 @@ class Settings:
             raise ConfigError(f"missing required environment variables: {', '.join(missing)}")
         return LiveSettings(self.ps5_ip, self.discord_token, self.discord_channel_id)
 
+    def require_voice_model(self) -> Path:
+        if not self.voice_model.exists():
+            raise ConfigError(
+                f"voice model not found: {self.voice_model} (set GT7_VOICE_MODEL, or `make voice`)"
+            )
+        return self.voice_model
+
 
 def default_cache_dir(env: Mapping[str, str] | None = None) -> Path:
     """``$XDG_CACHE_HOME/those-who-run``, else ``~/.cache/those-who-run``."""

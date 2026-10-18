@@ -7,7 +7,6 @@ import asyncio
 import logging
 import time
 
-from those_who_run.cli.common import require_voice_model
 from those_who_run.config import ConfigError, Settings, load_rules_config
 
 log = logging.getLogger("those_who_run")
@@ -34,7 +33,7 @@ async def run_say(settings: Settings, text: str) -> int:
         raise ConfigError("DISCORD_BOT_TOKEN and DISCORD_VOICE_CHANNEL_ID are required")
     rules_cfg = load_rules_config(settings.rules_file)
     speech = PiperSpeech(
-        require_voice_model(settings),
+        settings.require_voice_model(),
         settings.speech_cache_dir,
         rules_cfg["voice"],
         max_cache_bytes=settings.cache_max_bytes,

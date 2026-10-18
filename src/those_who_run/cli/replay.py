@@ -8,7 +8,6 @@ import logging
 from pathlib import Path
 
 from those_who_run.callouts import CalloutQueue
-from those_who_run.cli.common import require_voice_model
 from those_who_run.config import Settings, load_rules_config
 from those_who_run.engine import Engine
 from those_who_run.rules import build_rules
@@ -63,7 +62,7 @@ async def run_replay(
     if wav_out is not None:
         from those_who_run.speech import PiperSpeech
 
-        speech = PiperSpeech(require_voice_model(settings), wav_out / ".cache", rules_cfg["voice"])
+        speech = PiperSpeech(settings.require_voice_model(), wav_out / ".cache", rules_cfg["voice"])
         player: ConsolePlayer = WavDirPlayer(speech, wav_out)
     else:
         player = ConsolePlayer()

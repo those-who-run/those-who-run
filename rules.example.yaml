@@ -39,12 +39,18 @@ rules:
     thresholds_laps: [10, 5, 3, 2, 1]
     rolling_laps: 3
     refuel_epsilon: 0.5
+    round_up_laps: 0.25    # within this of the next whole lap, the count is rounded up
     # template: "Fuel. {laps} remaining."
+    # template_short: "Fuel. Just under {laps}."   # a count that was rounded up
     # template_critical: "Fuel critical. Less than one lap."
-    pit_window: true       # "Pit this lap." once per stint when the estimate drops under pit_laps
-    pit_laps: 2            # ... and the race needs more than that
+    pit_window: true       # "Box next lap." at pit_laps laps of fuel, "Pit this lap." under it,
+    pit_laps: 2            # ... once per stint each, when the race needs more than that
     pit_priority: 5
+    # template_pit_next: "Box next lap."
     # template_pit: "Pit this lap."
+    tight_margin_laps: 0.5  # the fuel covers the race by less than this: one call a stint
+    # template_tight: "Fuel to the flag, just. Save a little."
+    # template_last_lap_enough: "Fuel is fine to the end."   # the final lap, after a warning
   final_lap:
     enabled: true
     priority: 10

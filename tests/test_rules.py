@@ -94,8 +94,9 @@ def test_fuel_thresholds(sim):
         "Fuel. nine laps remaining.",  # crosses 10
         "Fuel. five laps remaining.",
         "Fuel. three laps remaining.",
+        "Box next lap.",  # the instruction comes first, then the number
         "Fuel. two laps remaining.",
-        "Pit this lap.",  # the instruction comes first, then the number
+        "Pit this lap.",
         "Fuel. one lap remaining.",
         "Fuel critical. Less than one lap.",
     ]
@@ -145,10 +146,15 @@ def test_fuel_refuel_resets_announcements(sim):
         .frames
     )
     texts = run_rule(FuelRule(), frames)
-    # lap1 -> 3 left (10,5,3 crossed, says three); lap2 -> 2; lap3 refuel -> 4 (nothing new);
-    # lap4 -> 3 again because the announced set was cleared on refuel
-    assert texts[:2] == ["Fuel. three laps remaining.", "Fuel. two laps remaining."]
-    assert "Fuel. three laps remaining." in texts[2:]
+    # lap1 -> 3 left (10,5,3 crossed, says three); lap2 -> 2 and box next lap;
+    # lap3 refuel -> 4 (nothing new); lap4 -> 3 again because the announced set
+    # was cleared on refuel
+    assert texts[:3] == [
+        "Fuel. three laps remaining.",
+        "Box next lap.",
+        "Fuel. two laps remaining.",
+    ]
+    assert "Fuel. three laps remaining." in texts[3:]
 
 
 def test_fuel_critical_priority_is_configurable(sim):
@@ -828,9 +834,10 @@ def test_fuel_reassures_on_the_final_lap_only_after_a_warning(sim):
     worried = [frame(0, 1, 100), frame(1, 2, 70), frame(2, 3, 55), frame(3, 4, 45)]
     assert run_rule(FuelRule(cfg), worried) == [
         "Fuel. two laps remaining.",
+        "Fuel to the flag, just. Save a little.",  # 2.44 laps for the last two
         "Fuel is fine to the end.",
     ]
-    assert run_rule(FuelRule(), worried) == ["Fuel. two laps remaining."], "no built-in phrase"
+    assert run_rule(FuelRule(), worried)[-1] == "Fuel is fine to the end.", "a built-in phrase"
     relaxed = sim(total_laps=4, fuel=100, burn=10).race([100000] * 3, finish=False).frames
     assert run_rule(FuelRule(cfg), relaxed) == []
 
@@ -852,6 +859,39 @@ def test_variants_rotate_without_repeating(sim):
         said += run_rule(rule, sim(total_laps=2).race([100000] * 2).frames)
     assert set(said) == {"Final lap.", "Last lap now.", "One lap to go."}
     assert all(a != b for a, b in zip(said, said[1:], strict=False))
+
+
+def _fuel_frame(t, lap, fuel, total_laps=20):
+    return make_state(t=t, current_lap=lap, total_laps=total_laps, fuel_level=fuel)
+
+
+def test_fuel_count_is_rounded_up_within_a_quarter_lap():
+    """2.96 laps is "just under three", not "two" (SUGO, 2026-10-18, #247), and the
+    pit calls go by the same count."""
+    frames = [_fuel_frame(0, 1, 100.0), _fuel_frame(1, 2, 74.75)]
+    assert run_rule(FuelRule(), frames) == ["Fuel. Just under three laps."]
+    assert run_rule(FuelRule({"round_up_laps": 0}), frames) == [
+        "Box next lap.",
+        "Fuel. two laps remaining.",
+    ]
+    frames += [_fuel_frame(2, 3, 47.3)]  # 1.80 laps: box next lap, just under two
+    assert run_rule(FuelRule(), frames)[1:] == ["Box next lap.", "Fuel. Just under two laps."]
+
+
+def test_fuel_tight_to_the_flag_once_a_stint():
+    """1.94 laps for the last two: one call, then quiet to the flag, even on 0.99
+    laps for the last one; a stop arms it again."""
+    rule = FuelRule()
+    frames = [_fuel_frame(0, 1, 100.0, 3), _fuel_frame(1, 2, 66.0, 3), _fuel_frame(2, 3, 33.0, 3)]
+    assert run_rule(rule, frames) == ["Fuel to the flag, just. Save a little."]
+    rule.on_pit(PitStatus(True, (_stop(3, None),)))
+    rule.on_pit(PitStatus(False, (_stop(3, 4),)))
+    assert not rule.tight_announced
+    # with a margin of half a lap or more, or in a timed race, it says nothing
+    roomy = [_fuel_frame(0, 1, 100.0, 3), _fuel_frame(1, 2, 80.0, 3)]
+    assert run_rule(FuelRule(), roomy) == []
+    timed = [_fuel_frame(0, 1, 100.0, 0), _fuel_frame(1, 2, 66.0, 0)]
+    assert "Fuel to the flag, just. Save a little." not in run_rule(FuelRule(), timed)
 
 
 def test_fuel_is_not_measured_across_a_telemetry_gap():

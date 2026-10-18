@@ -37,8 +37,11 @@ PLACEHOLDERS = {
     },
     "fuel": {
         "template": {"laps"},
+        "template_short": {"laps"},
         "template_critical": set(),
+        "template_pit_next": set(),
         "template_pit": set(),
+        "template_tight": set(),
         "template_last_lap_enough": set(),
     },
     "final_lap": {"template": set()},

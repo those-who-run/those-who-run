@@ -31,6 +31,7 @@ GILLES_STOP = (
 WILLOW_STOP = (
     Path(__file__).parent / "fixtures" / "real-nuc-willow-springs-pit-stop-2026-10-17.jsonl.gz"
 )
+SUGO_STOPS = Path(__file__).parent / "fixtures" / "real-nuc-sugo-two-stops-2026-10-18.jsonl.gz"
 
 
 def test_fixture_phases_cover_the_whole_session():
@@ -193,6 +194,7 @@ async def test_real_pit_stop_race(tmp_path):
         "Six laps. P one of two.",
         "Down to second.",
         "Up to first.",
+        "Box next lap.",  # 2.11 laps of fuel: lap 3 is the in-lap
         "Fuel. two laps remaining.",
         "Lap one. fifty-seven point one.",  # from the grid, short: not a best
         "Pit this lap.",
@@ -249,6 +251,7 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
         "Up to ninth.",
         "Lap seven. one forty-two point two. four point seven over best.",
         "Up to sixth.",
+        "Fuel to the flag, just. Save a little.",  # 4.47 laps of fuel for the last four
         "Lap eight. one thirty-seven point eight. zero point three over best.",
     ]
     assert [lap for lap, _ in laps] == [5, 6, 7, 8, 9]
@@ -284,9 +287,47 @@ async def test_real_pit_stop_crossed_in_the_exit_cut(tmp_path):
     assert stop["fuel_after"] == pytest.approx(65.35, abs=0.01)  # a part refuel
 
 
-async def test_real_race_with_the_pit_call_ignored(tmp_path):
-    """Suzuka East, six laps from P10 of twenty, NUC 2026-10-15. The driver ignored
-    the pit call and finished on the last litre."""
+async def test_real_fuel_calls_through_two_stops(tmp_path):
+    """SUGO, twelve laps, two stops (in at the end of laps 4 and 8), NUC 2026-10-18.
+    After the first stop the old floor said "two laps" on 2.99, "Box this lap" a
+    lap early on 1.83, then nothing on the real box lap, and nothing in a last
+    stint that made the flag by 0.13 of a lap (#247)."""
+    _, texts, _ = await _replay_with_store(SUGO_STOPS, tmp_path)
+    calls = [t for t in texts if t.startswith(("Fuel", "Pit", "Box", "Lap"))]
+    assert calls == [
+        # stint 1, as before, and "box next lap" with 2.06 laps (in on lap 4)
+        "Fuel. three laps remaining.",  # 3.51
+        "Lap one. one thirty-four point one.",
+        "Box next lap.",
+        "Fuel. two laps remaining.",  # 2.06
+        "Lap two. one twenty-two point two.",
+        "Pit this lap.",
+        "Fuel critical. Less than one lap.",  # 0.89
+        "Lap three. one twenty-three point seven. one point five over best.",
+        "Lap four. one thirty point one. seven point nine over best.",
+        # stint 2: the out-lap is not measured, stint 1's laps still weigh in
+        "Fuel. Just under three laps.",  # 2.99, laps 6, 7 and 8
+        "Lap five. one forty-seven point three. twenty-five point one over best.",
+        "Box next lap.",
+        "Fuel. Just under two laps.",  # 1.83
+        "Lap six. one twenty-two point nine. zero point seven over best.",
+        "Pit this lap.",  # lap 8, the in-lap
+        "Fuel. one lap remaining.",  # 1.06
+        "Lap seven. one twenty-three point two. one point zero over best.",
+        "Lap eight. one forty-seven point seven. twenty-five point five over best.",
+        # stint 3: 3.17 laps for three, then quiet to the flag on 3.3 per cent
+        "Fuel to the flag, just. Save a little.",
+        "Lap nine. one forty-seven point five. twenty-five point three over best.",
+        "Lap ten. one twenty-three point six. one point four over best.",
+        "Lap eleven. one twenty-two point eight. zero point six over best.",
+        "Lap twelve. one twenty-three point four. one point two over best.",
+    ]
+
+
+async def test_real_race_finished_on_the_last_litre(tmp_path):
+    """Suzuka East, six laps from P10 of twenty, NUC 2026-10-15. The driver did not
+    stop and finished on the last litre: 3.26 laps of fuel for the last three is
+    tight, not a pit call (the old floor said "Pit this lap." after lap 4, #247)."""
     _, texts, laps = await _replay_with_store(NO_STOP, tmp_path)
     assert texts == [
         "Six laps. P ten of twenty.",
@@ -306,12 +347,10 @@ async def test_real_race_with_the_pit_call_ignored(tmp_path):
         "Down to fifth.",
         "Up to fourth.",
         "Lap three. one oh three point one. New best by one point five.",
+        "Fuel to the flag, just. Save a little.",
         "Up to third.",
         "Up to second.",
-        "Pit this lap.",
         "Lap four. one oh one point two. New best by one point nine.",
-        "Fuel. one lap remaining.",
-        "Fuel critical. Less than one lap.",
         "Final lap.",
         "Lap five. one oh three point four. two point two over best.",
         "Lap six. one oh four point zero. two point eight over best.",

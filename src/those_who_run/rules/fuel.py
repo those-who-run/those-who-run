@@ -2,7 +2,8 @@
 
 Consumption is measured at each line crossing (fuel at lap start minus fuel at
 lap end) and averaged over the last ``rolling_laps`` laps. Warnings are only
-given when the estimate is shorter than the laps left in a lap-count race.
+given when the estimate is shorter than the laps left in a lap-count race, or
+covers them only just.
 
 Pit stops come from the engine's pit detector (``those_who_run.pitstop``). The
 in-lap and the out-lap are not measured: both include the pit lane at the
@@ -13,13 +14,22 @@ pit call are armed again, and the estimate is redone from the new level at
 once. A rise in fuel level over a lap still counts as a stop, for a stop the
 detector did not see.
 
-The pit call is the instruction that goes with the numbers: once the estimate
-says the lap after this one cannot be completed, "Pit this lap." is spoken once
-per stint, ahead of the threshold phrase for the same crossing.
+The estimate is spoken as whole laps, rounded up when it is within
+``round_up_laps`` of the next one (2.99 is "just under three laps", not "two"),
+and the thresholds and the pit calls go by that count too. The rolling average
+reads heavy after a stop, from the last stint's laps (SUGO, 2026-10-18: 2.99
+laps called "two" with three in the tank, #247).
 
-When fuel was a worry this stint (any warning given) and the estimate says the
-final lap is covered, ``template_last_lap_enough`` is spoken as the final lap
-starts, if it is configured. It has no built-in phrase.
+The pit calls are the instruction that goes with the numbers, ahead of the
+threshold phrase for the same crossing, each once per stint: "Box next lap."
+when the count is ``pit_laps``, and "Pit this lap." once it is under it (the
+lap after this one cannot be completed). The second comes even when the first
+was given, so the lap the driver has to box is always called.
+
+When the count covers the race, nothing is said, except once per stint when
+the margin is under ``tight_margin_laps``: "Fuel to the flag, just." When fuel
+was a worry this stint (a threshold, pit or critical call) and the estimate
+covers the final lap, ``template_last_lap_enough`` is spoken as it starts.
 
 A crossing in the pits says nothing: the tank is about to be filled, or has
 just been. GT7 can put the line in any part of a stop: in the entry cut-scene
@@ -63,7 +73,11 @@ class FuelRule(Rule):
         self.pit_window = bool(self.cfg.get("pit_window", True))
         self.pit_laps = float(self.cfg.get("pit_laps", 2.0))
         self.pit_priority = int(self.cfg.get("pit_priority", 5))
+        self.pit_next_announced = False
         self.pit_announced = False
+        self.round_up = float(self.cfg.get("round_up_laps", 0.25))
+        self.tight_margin = float(self.cfg.get("tight_margin_laps", 0.5))
+        self.tight_announced = False
         self.consumption: deque[float] = deque(maxlen=self.rolling)
         self.announced: set[int] = set()
         self.critical_announced = False
@@ -92,7 +106,9 @@ class FuelRule(Rule):
     def _new_stint(self) -> None:
         self.announced.clear()
         self.critical_announced = False
+        self.pit_next_announced = False
         self.pit_announced = False
+        self.tight_announced = False
 
     def evaluate(self, prev: RaceState | None, state: RaceState) -> list[Callout]:
         if self.lap_start_fuel is None and state.in_race and state.current_lap >= 1:
@@ -135,20 +151,30 @@ class FuelRule(Rule):
         ):
             return []
         laps_left = state.laps_left
-        if laps_left is not None and self.laps_remaining >= laps_left:
+        whole = math.floor(self.laps_remaining + self.round_up)
+        if laps_left is not None and whole >= laps_left:
+            if not self.tight_announced and self.laps_remaining - laps_left < self.tight_margin:
+                self.tight_announced = True
+                text = self.template("template_tight", "Fuel to the flag, just. Save a little.")
+                return [self.callout(text, state)]
             warned = bool(self.announced) or self.pit_announced or self.critical_announced
-            if warned and laps_left == 1 and self.phrases.has("template_last_lap_enough"):
-                return [self.callout(self.template("template_last_lap_enough", ""), state)]
+            if warned and laps_left == 1 and self.laps_remaining >= laps_left:
+                text = self.template("template_last_lap_enough", "Fuel is fine to the end.")
+                return [self.callout(text, state)]
             return []
 
         out: list[Callout] = []
-        if self.pit_window and not self.pit_announced and self.laps_remaining < self.pit_laps:
-            self.pit_announced = True
-            text = self.template("template_pit", "Pit this lap.")
-            out.append(self.callout(text, state, priority=self.pit_priority))
+        if self.pit_window and not self.pit_announced:
+            if whole < self.pit_laps:
+                self.pit_announced = self.pit_next_announced = True
+                text = self.template("template_pit", "Pit this lap.")
+                out.append(self.callout(text, state, priority=self.pit_priority))
+            elif not self.pit_next_announced and whole < self.pit_laps + 1:
+                self.pit_next_announced = True
+                text = self.template("template_pit_next", "Box next lap.")
+                out.append(self.callout(text, state, priority=self.pit_priority))
 
-        whole = math.floor(self.laps_remaining)
-        if whole < 1:
+        if self.laps_remaining < 1:
             if not self.critical_announced:
                 self.critical_announced = True
                 self.announced.update(self.thresholds)
@@ -156,13 +182,12 @@ class FuelRule(Rule):
                 out.append(self.callout(text, state, priority=self.critical_priority))
             return out
 
-        crossed = [
-            t for t in self.thresholds if self.laps_remaining <= t and t not in self.announced
-        ]
+        crossed = [t for t in self.thresholds if whole <= t and t not in self.announced]
         if crossed:
             self.announced.update(crossed)
-            text = self.template("template", "Fuel. {laps} remaining.").format(
-                laps=laps_words(whole)
-            )
-            out.append(self.callout(text, state))
+            if whole > self.laps_remaining:
+                text = self.template("template_short", "Fuel. Just under {laps}.")
+            else:
+                text = self.template("template", "Fuel. {laps} remaining.")
+            out.append(self.callout(text.format(laps=laps_words(whole)), state))
         return out

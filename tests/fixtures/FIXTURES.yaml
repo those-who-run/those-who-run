@@ -105,7 +105,8 @@ fixtures:
     outing: null
     source: NUC outing from about 16:56 UTC, since pruned. A six-lap race.
     pins:
-      - A finished race, flag to results, with the pit call ignored.
+      - A finished race on the last litre, flag to results, called tight to the
+        flag and never told to pit.
       - The results card for a finished race.
       - The engine records the session kind in the session, the metrics and
         the rules.
@@ -270,7 +271,10 @@ fixtures:
     pins:
       - Two pit stops whose finish line is crossed in the pit lane, at the
         60 km/h cut, and three stints.
-    tests: [test_pitstop]
+      - Fuel calls after a stop are rounded, not floored, "box next lap" comes
+        before "box this lap" on the real in-lap, and a tight last stint gets
+        one call.
+    tests: [test_pitstop, test_real_recording]
 
 outings:
   - id: "20261016-183946"

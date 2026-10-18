@@ -60,10 +60,18 @@ rules:
       - "Calculated fuel is {laps}."
       - "You have fuel for {laps}."
       - "Expect {laps} from this tank."
+    template_short:            # the estimate rounded up to {laps}: 2.99 is "just under three laps"
+      - "Fuel. Just under {laps}."
+      - "Just under {laps} of fuel."
+      - "Fuel is just short of {laps}."
     template_critical:
       - "Fuel critical. Less than one lap."
       - "Fuel critical. Empty soon."
       - "Running on fumes now."
+    template_pit_next:         # the lap after this one is the last the fuel covers
+      - "Box next lap."
+      - "Pit next lap."
+      - "One more lap, then box."
     template_pit:
       - "Pit this lap."
       - "Box this lap. Box."
@@ -73,6 +81,10 @@ rules:
       - "Fuel is fine to the end."
       - "You have the fuel to finish."
       - "Fuel is safe."
+    template_tight:            # the fuel covers the race by under tight_margin_laps
+      - "Fuel to the flag, just. Save a little."
+      - "Fuel is tight to the flag. Save a little."
+      - "Just enough fuel to the end. Lift a little."
   final_lap:
     template:
       - "Final lap."

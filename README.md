@@ -18,7 +18,7 @@ No cloud required. No subscription. One small box on your LAN.
 
 ```
  ┌───────────────────────────────────────────────┐
- │  THOSE WHO RUN        走り屋        v0.6.1     │
+ │  THOSE WHO RUN        走り屋        v0.6.2     │
  │  PS5 ──UDP 33740──▶ engineer ──Piper──▶ Discord │
  │  ⏱️  lap times   ⛽ fuel   🚩 final lap   P1▲   │
  └───────────────────────────────────────────────┘
@@ -144,7 +144,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.6.1
+  muldoon/those-who-run:0.6.2
 ```
 
 From source:
@@ -483,7 +483,7 @@ see #26), so the same image runs it with a different command, sharing the
 data volume with the engineer:
 
 ```sh
-podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.6.1 web
+podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.6.2 web
 ```
 
 It listens on all addresses and has no login: keep it on the LAN. The image's

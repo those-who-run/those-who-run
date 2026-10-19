@@ -5,6 +5,7 @@ per reader. Each guide opens with who it is for.
 
 ## Guides
 
+- [Architecture](architecture.md): the engineer, the store and the pit wall, and a release, in three diagrams. Start here.
 - [Setup](setup.md): requirements, the configuration table, running from the image or from source, the audio check, and the commands table.
 - [The engineer](engineer.md): what it says and the script, the rules and their settings, session kind, track detection, cars, the results channel, and sessions.
 - [The pit wall](pitwall.md): the web app as a driver uses it, the data API, the store, the preview on a phone or iPad, and the pitwall image.

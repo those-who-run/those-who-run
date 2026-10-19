@@ -134,7 +134,6 @@ is unchanged by the rebrand.
 | `GT7_CONTINUE_WINDOW_SECS` | `600` | After the engineer restarts mid-race, a session joined part way within this long of the one the shutdown ended (same car and kind) continues it. That session's results card waits this long for it. `0` never continues. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
-| `GT7_WEB_PORT` | `8501` | The pit wall (`those-who-run web`). |
 | `GT7_PITWALL_PORT` | `9852` | The pit wall's data API and web app (`those-who-run pitwall`). |
 | `GT7_PITWALL_STATIC` | unset | The built web app `pitwall` serves, as `--static` (which wins). The pitwall image sets `/app/web`. |
 | `GT7_ENGINEER_URL` | `http://those-who-run:9850` | Where `pitwall` reaches the engineer's read-only port, for `/api/engine/status` and `/api/engine/dash`. |
@@ -158,7 +157,7 @@ podman run --rm \
 From source:
 
 ```sh
-make venv            # needs uv: .venv from uv.lock, with the dev, engineer and web extras
+make venv            # needs uv: .venv from uv.lock, with the dev and engineer extras
 make voice           # downloads the Piper voice into ./voices, sha256-checked
 GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/those-who-run run
 ```
@@ -185,7 +184,7 @@ those-who-run replay session.jsonl --wav-out ./out
 
 # keep the sessions it finds, to look at them in the pit wall
 those-who-run replay session.jsonl --store ./replayed
-GT7_DATA_DIR=./replayed those-who-run web
+GT7_DATA_DIR=./replayed those-who-run pitwall --static web/dist
 ```
 
 A replay never writes to `GT7_DATA_DIR`: the sessions it finds go to a
@@ -450,26 +449,32 @@ those-who-run rebuild-best
 
 ## Pit wall
 
-`those-who-run web` serves the pit wall, a Streamlit app over the session
-store, on port 8501 (`--port` or `GT7_WEB_PORT`). Phase 1 (#33) shows what is
-stored today:
+The pit wall is a React app over the session store, served with its read-only
+data API by `those-who-run pitwall` on port 9852 (`--port` or
+`GT7_PITWALL_PORT`, `--address` to bind; ADR 0003). One column, so it works on
+a phone straight after a race:
 
-- **Sessions:** newest first, each with its results card (title, result, best
-  lap, car, fuel used) and the date in your browser's time zone. Filter by
-  track, car, session kind and dates. A session still being driven is listed
-  too, from the index.
-- **Laps:** time, gap to the best lap, fuel used and left, position (only in a
-  field GT7 flags, as on the card), top speed and flags: **pit** and **out** for
-  the in-lap and out-lap the pit-stop detector stored (tyre-only stops
-  included; sessions stored before it fall back to a rise in fuel), **partial**
-  for the lap the session ended in. GT7 does not report track limits.
-- **Lap compare:** speed, throttle, brake, gear and RPM of two laps over time
-  from each lap's start, from the same session or another at the same track.
-  Drag a chart to zoom. Distance replaces time once #15 lands.
+- **Sessions** (`/`): grouped by day in your browser's time zone, newest first,
+  each with its results card (title, result, best lap, car, fuel used). The
+  session being driven is pinned at the top with the engineer's lap and
+  position, and follows its laps without a reload. Filter by track, car,
+  session kind and dates; the filters live in the URL. A session with no full
+  lap is tucked away until asked for (`?all=1`).
+- **A session** (`/sessions/<id>`): the result first, then stat tiles, the race
+  story (lap time and position by lap) and the laps: time, gap to the best lap,
+  fuel used and left, position (only in a field GT7 flags, as on the card), top
+  speed and flags: **pit** and **out** for the in-lap and out-lap the pit-stop
+  detector stored (tyre-only stops included; sessions stored before it fall back
+  to a rise in fuel), **partial** for the lap the session ended in. GT7 does not
+  report track limits. Pick two laps to compare; the picks are in the URL.
+- **Lap compare** (`/sessions/<id>/compare?a=&b=`): speed, throttle, brake, gear
+  and RPM of two laps over time from each lap's start, from the same session or
+  another at the same track, with one cursor across every chart (a horizontal
+  drag scrubs on a phone), drag or pinch to zoom. Distance replaces time once
+  #15 lands.
 
-Each session has its own link, `?session=<id>`. The pit wall only reads: the
-index is opened read-only and no session data is written. One column, so it
-works on a phone straight after a race.
+A results card's old link, `/?session=<id>`, opens that session. The pit wall
+only reads: the index is opened read-only and no session data is written.
 
 Because the index is in WAL mode, a reader still needs to write SQLite's
 shared-memory file, `index.sqlite-shm`, next to it, and needs `-wal` and `-shm`
@@ -479,29 +484,47 @@ wall can only open the index while the engineer is running. Mount the data
 directory read-write for the pit wall; it still opens the index `mode=ro`
 (see #35).
 
-Streamlit is an optional extra, so the engineer's own install stays lean. The
-engineer itself is the `engineer` extra (Discord, Piper, gt-telem, metrics); the
-core install is only what the data API needs (aiohttp, DuckDB, PyYAML):
+It needs only the core install (aiohttp, DuckDB, PyYAML), not the `engineer`
+extra (Discord, Piper, gt-telem, metrics), and the built web app (`make
+web-build`, which needs Node; see [The web app](#the-web-app)):
 
 ```sh
-pip install -e ".[engineer,web]" # make venv installs both
-GT7_DATA_DIR=./data those-who-run web        # http://localhost:8501
+make web-build
+GT7_DATA_DIR=./data those-who-run pitwall --static web/dist   # http://localhost:9852
 ```
 
-The image includes the extra (about 300 MB of Streamlit, pandas and pyarrow;
-see #26), so the same image runs it with a different command, sharing the
-data volume with the engineer:
+Its configuration:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GT7_DATA_DIR` | `./data` | The session store it reads. |
+| `GT7_PITWALL_PORT` | `9852` | Its port (`--port` wins). |
+| `GT7_PITWALL_STATIC` | unset | The built web app (`--static` wins). The pitwall image sets `/app/web`. |
+| `GT7_ENGINEER_URL` | `http://those-who-run:9850` | The engineer's read-only port, for the live chip and `/api/engine/dash`. |
+| `GT7_ENGINEER_CONTROL_URL` | `http://those-who-run:9851` | The engineer's control port, for `/api/engine/control/*`. |
+
+The pitwall image (below) carries the built app:
 
 <!-- x-release-please-start-version -->
 ```sh
-podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.7.3 web
+podman run --rm -p 9852:9852 -v ./data:/data muldoon/those-who-run:0.7.3-pitwall
 ```
 <!-- x-release-please-end -->
 
-It listens on all addresses and has no login: keep it on the LAN. The image's
+It listens on all addresses and has no login: keep it on the LAN. The images'
 health check is `those-who-run healthcheck`: it probes the engineer's `/healthz`
-on `GT7_METRICS_PORT` for `run`, and the pit wall's `/_stcore/health` on
-`GT7_WEB_PORT` (or `--port`) for `web`.
+on `GT7_METRICS_PORT` for `run`, and the pit wall's `/healthz` on
+`GT7_PITWALL_PORT` (or `--port`) for `pitwall`.
+
+**On the phone and iPad from a laptop**: `make web-preview` builds `web/dist`,
+copies the NUC's store into `.preview/` (git-ignored) by `tar` out of the pit
+wall pod's `/data` with `kubectl exec` (it only reads there, never writes), and
+runs `those-who-run pitwall --address 0.0.0.0 --static web/dist` over the copy.
+Open `http://<laptop>:9852` on the home Wi-Fi. `PREVIEW_CONTEXT` (default
+`my-cluster`) names the kube context. `/api/engine/*` goes to the live
+engineer, on port 9850 of the node its pod runs on (asked of the cluster), so
+the engineer's status is live while the sessions are the copy;
+`PREVIEW_ENGINEER` overrides it.
 
 ### The data API
 
@@ -529,7 +552,7 @@ DuckDB and PyYAML.
   `src/those_who_run/pitwall/api_models.py` and committed as
   `web/openapi.json`. Change a model, run `make openapi` and commit the file:
   `make check` fails while it is stale.
-- **Read-only**, as `web` is: the index is opened `mode=ro` per request and
+- **Read-only**: the index is opened `mode=ro` per request and
   nothing is written under `GT7_DATA_DIR`. Responses carry an `ETag` that
   changes only when the engineer writes (a trace's, only when its lap file
   does), so polling gets 304; JSON over 1 KB is gzipped.
@@ -554,13 +577,13 @@ curl -s localhost:9852/api/v1/sessions | jq '.sessions[0]'
 
 ### The web app
 
-`web/` is the React pit wall that replaces Streamlit in #238 (ADR 0003): Vite,
+`web/` is the React pit wall (ADR 0003): Vite,
 React and TypeScript (strict), Tailwind, Radix through shadcn/ui components in
 `web/src/components/ui/`, TanStack Query, and React Router in data mode. It
 builds to static files in `web/dist`, which `those-who-run pitwall --static
-web/dist` serves (or `GT7_PITWALL_STATIC`). Today it is one page, the session
-list, each title linking to `/sessions/<id>`; a results card's old
-`/?session=<id>` link lands there too.
+web/dist` serves (or `GT7_PITWALL_STATIC`): the session list, the session page
+and lap compare ([Pit wall](#pit-wall)); a results card's old `/?session=<id>`
+link lands on `/sessions/<id>`.
 
 Every page sits in the shell (`web/src/app/`, #296): a header with the 走り屋
 wordmark and the **live engineer chip**, which asks `/api/engine/status` every
@@ -614,24 +637,17 @@ make web-check       # ESLint, tsc, Vitest, client freshness, bundle budget, Pla
 cd web && npx playwright install chromium   # once, for web-check
 ```
 
-**On the phone and iPad**, before #238 deploys it: `make web-preview` builds
-`web/dist`, copies the NUC's store into `.preview/` (git-ignored) by `tar` out of
-the pit wall pod's `/data` with `kubectl exec` (it only reads there, never
-writes), and runs `those-who-run pitwall --address 0.0.0.0 --static web/dist`
-over the copy. Open `http://<laptop>:9852` on the home Wi-Fi. `PREVIEW_CONTEXT`
-(default `my-cluster`) names the kube context. `/api/engine/*` goes to the live
-engineer, on port 9850 of the node its pod runs on (asked of the cluster), so the
-engineer's status is live while the sessions are the copy; `PREVIEW_ENGINEER`
-overrides it.
+**On the phone and iPad** from a laptop: `make web-preview` ([Pit wall](#pit-wall)).
 
 ### The pitwall image
 
 `docker build --target pitwall` (`make build-pitwall`) is the pit wall alone:
 the core install and `web/dist` at `/app/web`, with `GT7_PITWALL_STATIC=/app/web`
 and `CMD ["pitwall"]` on port 9852. It has no Discord, Piper, gt-telem,
-prometheus-client, Streamlit, audio libraries, voice or Node (about 210 MB). Each
+prometheus-client, audio libraries, voice or Node (about 210 MB). Each
 release pushes it as `muldoon/those-who-run:<version>-pitwall`, next to the
-engineer's tag. The default target is still the engineer's image, unchanged.
+engineer's tag. The default target is the engineer's image (about 940 MB), which
+has no pit wall in it.
 
 ### Pit wall on the NUC
 
@@ -639,8 +655,8 @@ On the NUC the pit wall is at **https://pitwall.nuc.home.arpa** (LAN only, no
 login). The certificate is from the home lab's own CA, which each phone or
 tablet trusts once (home-lab `manifests/cert-manager/README.md`); plain
 HTTP redirects to HTTPS. It's the Deployment `those-who-run-pitwall` in namespace
-`those-who-run`, next to the engineer. It uses the same image and tag, with
-`args: ["web"]`. The manifests are in
+`those-who-run`, next to the engineer. It runs the pitwall image of the same
+release, `muldoon/those-who-run:<version>-pitwall`, with `args: ["pitwall"]`. The manifests are in
 the deployment repo under
 `manifests/those-who-run/` (a kustomize base and `overlays/local`), and
 their layout follows [ADR 0001](docs/adr/0001-data-and-network.md):
@@ -648,10 +664,11 @@ their layout follows [ADR 0001](docs/adr/0001-data-and-network.md):
 - The data volume is mounted read-write at `/data`, so SQLite can create the
   index's `-shm` and `-wal` files while the engineer is stopped. It's mounted
   again with `subPath: sessions` at `/data/sessions`, read-only.
-- It uses only the `those-who-run-env` ConfigMap: no Secret, no admin token.
-- It has no hostPort. The only way in is a ClusterIP Service on 8501 and the
+- It uses only the `those-who-run-env` ConfigMap (with `GT7_ENGINEER_URL` and
+  `GT7_ENGINEER_CONTROL_URL`): no Secret, no admin token.
+- It has no hostPort. The only way in is a ClusterIP Service on 9852 and the
   Traefik Ingress `those-who-run-pitwall-ingress`.
-- Probes are on `/_stcore/health`. Its limits (1 CPU, 768Mi) stay well under
+- Probes are on `/healthz` on 9852. Its limits (1 CPU, 768Mi) stay well under
   the engineer's request, so it can't starve the engineer during a race.
 - It uses `RollingUpdate`. It takes no lock, so restarting it never touches the
   engineer, and the reverse holds too.
@@ -668,7 +685,7 @@ by itself (see [Releasing](#releasing)). Each sync of the app runs gates
    down and not answering doesn't hold the gate, so a fix can reach it.
 3. **The engineer** (`Recreate`, one writer).
 4. **The smoke check.** It confirms that `those-who-run --version` matches the tag
-   and that both pods run that image. It also checks that `/healthz` is ok with
+   and that the pods run that release's images (the pit wall's with `-pitwall`). It also checks that `/healthz` is ok with
    every task alive, that `/metrics` is served, and that the pit wall answers 200
    over HTTPS. A failure marks the sync Failed.
 
@@ -687,7 +704,7 @@ make roll-those-who-run TAG=0.6.2 ARGS=--now          # emergencies: roll now, m
 make roll-those-who-run TAG=0.6.2 ARGS=--pitwall-only # just the pit wall, any time
 ```
 
-It bumps `newTag` in `base/kustomization.yaml` (one tag for both Deployments),
+It bumps the `newTag` lines in `base/kustomization.yaml`,
 waits until the engineer's `/healthz` has said `idle` for `IDLE_SECS` (300),
 then applies the overlay and waits for both rollouts. A restart mid-race costs
 the voice and splits the session, so it never forces: after `TIMEOUT_SECS`
@@ -696,7 +713,7 @@ the voice and splits the session, so it never forces: after `TIMEOUT_SECS`
 
 ```sh
 # check it
-curl -s --cacert local-ca.crt https://pitwall.nuc.home.arpa/_stcore/health    # ok
+curl -s --cacert local-ca.crt https://pitwall.nuc.home.arpa/healthz    # "ok":true
 # (add --resolve pitwall.nuc.home.arpa:443:192.0.2.216 if the name doesn't resolve)
 kubectl --context=my-cluster -n those-who-run exec deploy/those-who-run-pitwall -- \
   touch /data/sessions/x                               # fails: Read-only file system
@@ -800,8 +817,10 @@ merge.
 2. **Ship it.** Merge the release PR. release-please tags the merge commit
    `vx.y.z`, creates the GitHub release from the changelog, then calls
    `.github/workflows/release.yml`. That runs `make check`, fails unless the tag is
-   `v` plus `__version__`, builds the image, runs `--version` and `web --help` in it,
-   and pushes `muldoon/those-who-run:x.y.z` and `latest`.
+   `v` plus `__version__`, builds both images, runs `--version` in each, checks
+   neither has the old pit wall's packages and smoke-tests the pit wall
+   (`scripts/smoke-pitwall.sh`), and pushes `muldoon/those-who-run:x.y.z`, `latest`
+   and `x.y.z-pitwall`.
 3. **The home-lab bump.** A final release then opens a PR in home-lab (with
    `HOME_LAB_TOKEN`) that changes only `newTag` in
    `manifests/those-who-run/base/kustomization.yaml`. home-lab's checks build the

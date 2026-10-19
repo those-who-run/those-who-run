@@ -243,6 +243,19 @@ describe("its states (R7)", () => {
     expect(alert.textContent).toContain("Couldn't read the session store.");
     expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
   });
+
+  // A lap file that isn't Parquet is the API's 500 on /laps (test_pitwall_api.py):
+  // the error state, not a blank page (was AppTest's, #238 R6).
+  it("shows the error state when a lap file can't be read", async () => {
+    serve({ session: SESSIONS.raceFinished, laps: { status: 500, error: "internal server error" } });
+    renderAt("/sessions/20261018-191204");
+    const alert = await screen.findByRole("alert", {}, { timeout: 3_000 });
+    expect(alert.textContent).toContain("Couldn't load the laps.");
+    expect(alert.textContent).toContain("internal server error");
+    expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
+    // The session's own figures still show above it.
+    expect(document.querySelector("[data-slot=session-hero]")).toBeTruthy();
+  });
 });
 
 describe("live (R6)", () => {
@@ -272,6 +285,28 @@ describe("live (R6)", () => {
     const asked = lapAsks(fetch);
     await act(() => vi.advanceTimersByTimeAsync(15_000));
     expect(lapAsks(fetch)).toBe(asked);
+  });
+
+  // The picks are the URL's, so a lap landing doesn't move them (was AppTest's, #238 R6).
+  it("keeps the picks as a live lap lands", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const api: Api = {
+      session: open,
+      laps: LAPS.slice(0, 3),
+      engine: engine({ activity: "driving", session: liveSession({ id: "live-1", lap: 4 }) }),
+    };
+    serve(api);
+    const router = renderAt("/sessions/live-1?pick=3,2");
+    expect(await screen.findByRole("link", { name: "Compare L2 and L3" })).toBeTruthy();
+
+    api.laps = LAPS.slice(0, 4);
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    expect(await screen.findByText("Lap 5 in progress")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Compare L2 and L3" })).toBeTruthy();
+    expect(router.state.location.search).toBe("?pick=3,2");
+    const picked = (lap: number) =>
+      (screen.getByRole("checkbox", { name: `Pick lap ${lap} to compare` }) as HTMLInputElement).checked;
+    expect([picked(2), picked(3), picked(4)]).toEqual([true, true, false]);
   });
 
   it("isn't live for another session", async () => {

@@ -162,7 +162,6 @@ class Settings:
     record_dir: Path | None = None
     record_keep: int = 20
     results_channel_id: int | None = None  # a text channel for results cards; None is off
-    web_port: int = 8501  # the pit wall, ``those-who-run web``
     # The pit wall's data API, ``those-who-run pitwall`` (#236), and the engineer's
     # two ports it forwards /api/engine/* to (ADR 0001 point 3).
     pitwall_port: int = 9852
@@ -196,7 +195,6 @@ class Settings:
         "GT7_IDLE_DISCONNECT_SECS",
         "GT7_TELEMETRY_TIMEOUT_SECS",
         "GT7_RECORD_KEEP",
-        "GT7_WEB_PORT",
         "GT7_PITWALL_PORT",
         "GT7_CACHE_MAX_MB",
         "GT7_CONTROL_PORT",
@@ -243,7 +241,6 @@ class Settings:
             record_dir=Path(e["GT7_RECORD_DIR"]) if e.get("GT7_RECORD_DIR") else None,
             record_keep=parsed("GT7_RECORD_KEEP", _int_env(20, minimum=0), 20),
             results_channel_id=parsed("DISCORD_RESULTS_CHANNEL_ID", _id_env, None) or None,
-            web_port=parsed("GT7_WEB_PORT", _port_env(8501), 8501),
             pitwall_port=parsed("GT7_PITWALL_PORT", _port_env(9852), 9852),
             engineer_url=e.get("GT7_ENGINEER_URL") or "http://those-who-run:9850",
             engineer_control_url=e.get("GT7_ENGINEER_CONTROL_URL") or "http://those-who-run:9851",

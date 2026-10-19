@@ -3,7 +3,7 @@
 A command module has ``HELP`` (its line in ``--help``), ``SETTINGS`` (the
 parsed environment variables it reads), ``configure(parser)`` to add its
 arguments and ``run(args, settings)`` returning the exit code. Heavy optional
-imports (Discord, Piper, Streamlit, gt-telem) stay inside ``run``, so a command
+imports (Discord, Piper, gt-telem) stay inside ``run``, so a command
 loads only what it uses.
 """
 
@@ -29,7 +29,6 @@ from those_who_run.cli import (
     say,
     thin,
     tracks,
-    web,
 )
 from those_who_run.config import ConfigError, Settings
 from those_who_run.store import StoreBusy
@@ -58,7 +57,6 @@ COMMANDS: dict[str, Command] = {
     "recordings": recordings,
     "post": post,
     "rebuild-best": rebuild_best,
-    "web": web,
     "pitwall": pitwall,
     "healthcheck": healthcheck,
 }

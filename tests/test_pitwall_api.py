@@ -357,6 +357,8 @@ async def test_same_track(api, store):
     [
         ("/api/v1/sessions/20990101-000000", 404),
         ("/api/v1/sessions/bad%20id", 404),
+        ("/api/v1/sessions/..%2Fetc", 404),  # a hand-edited link (was AppTest's, #238 R6)
+        ("/api/v1/sessions/..%2Fetc/laps", 404),
         ("/api/v1/sessions/20990101-000000/laps", 404),
         ("/api/v1/sessions/20990101-000000/same-track", 404),
         ("/api/v1/sessions/20990101-000000/laps/1/trace", 404),
@@ -386,6 +388,20 @@ async def test_a_lap_file_gone_is_a_404(api, store):
     (store / "sessions" / row.session_id / lap.file).unlink()
     resp = await api.get(f"/api/v1/sessions/{row.session_id}/laps/{lap.lap}/trace")
     assert resp.status == 404
+
+
+async def test_a_corrupt_lap_file_is_a_json_error_and_the_rest_still_reads(api, store):
+    """A lap file that isn't Parquet: the page's error state, not a crash, and the
+    other laps and sessions still read (was AppTest's, #238 R6)."""
+    row = data.list_sessions(store)[-1]
+    laps = data.lap_summaries(store, row.session_id)
+    (store / "sessions" / row.session_id / laps[1].file).write_bytes(b"not parquet")
+    for path in ("laps", f"laps/{laps[1].lap}/trace"):
+        resp = await api.get(f"/api/v1/sessions/{row.session_id}/{path}")
+        assert resp.status == 500 and "error" in await resp.json(), path
+    resp = await api.get(f"/api/v1/sessions/{row.session_id}/laps/{laps[0].lap}/trace")
+    assert resp.status == 200
+    assert (await api.get("/api/v1/sessions")).status == 200
 
 
 # R10: traces keep peaks
@@ -925,16 +941,13 @@ def test_static_from_the_environment(monkeypatch, tmp_path):
     assert main(["pitwall"]) == 2
 
 
-# The engineer extra's packages, and Streamlit: the pitwall image has none of them.
+# The engineer extra's packages: the pitwall image has none of them.
 NOT_IN_THE_PITWALL_IMAGE = (
     "discord",
     "piper",
     "onnxruntime",
     "gt_telem",
     "prometheus_client",
-    "streamlit",
-    "pandas",
-    "pyarrow",
     "numpy",
 )
 

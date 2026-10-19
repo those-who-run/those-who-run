@@ -5,11 +5,11 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web web-build web-dev web-check web-preview archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
-	@echo "venv     - create .venv from uv.lock with the dev, engineer and web extras (needs uv)"
+	@echo "venv     - create .venv from uv.lock with the dev and engineer extras (needs uv)"
 	@echo "lock     - re-resolve uv.lock after changing dependencies in pyproject.toml"
 	@echo "voice    - download the Piper voice into ./voices"
 	@echo "lint     - ruff check + format check"
@@ -23,7 +23,6 @@ help:
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "build-pitwall - podman build the slim pit wall image, $(IMAGE_NAME):$(VERSION)-pitwall"
 	@echo "replay   - replay FILE=recording.jsonl"
-	@echo "web      - the Streamlit pit wall on http://localhost:8501 (until #238)"
 	@echo "web-build - build the React pit wall into web/dist (needs Node, web/.node-version)"
 	@echo "web-dev  - Vite's dev server on http://localhost:5173, /api proxied to a local pitwall"
 	@echo "web-check - ESLint, tsc, Vitest, the client and brand.css freshness checks, the bundle budget, Playwright"
@@ -35,7 +34,7 @@ help:
 # Python version from .python-version, packages from uv.lock: the same set CI and
 # the image install.
 venv:
-	uv sync --frozen --extra dev --extra engineer --extra web
+	uv sync --frozen --extra dev --extra engineer
 
 lock:
 	uv lock
@@ -109,9 +108,6 @@ build-pitwall:
 replay:
 	$(PY) -m those_who_run replay $(FILE)
 
-web:
-	$(PY) -m those_who_run web
-
 # The React pit wall (web/, ADR 0003). Node is a development requirement only: the
 # version in web/.node-version, packages from web/package-lock.json with npm ci.
 # A missing Node or Playwright browser fails, as a skipped test does (#161).
@@ -141,7 +137,7 @@ web-check: $(WEB_DEPS)
 	cd web && npm run budget
 	cd web && TWR=$(TWR) npx playwright test
 
-# The new pit wall on the phone and iPad before #238 deploys it: web/dist over a
+# The pit wall on the phone and iPad from a laptop: web/dist over a
 # copy of the NUC's store, taken read-only from the pit wall pod (tar out of /data;
 # nothing is written there). Open http://<this laptop>:9852 on the home Wi-Fi.
 # /api/engine/* goes to the engineer's read-only port on the node it runs on (its

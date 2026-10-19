@@ -1,10 +1,9 @@
-"""``those-who-run healthcheck``: the container's HEALTHCHECK, for ``run``, ``web``
-and ``pitwall``.
+"""``those-who-run healthcheck``: the container's HEALTHCHECK, for ``run`` and
+``pitwall``.
 
-The engineer (``run``) answers ``/healthz`` on GT7_METRICS_PORT; the Streamlit
-pit wall (``web``) answers ``/_stcore/health`` on GT7_WEB_PORT or its
-``--port``; the data API (``pitwall``, the pitwall image) answers ``/healthz``
-on GT7_PITWALL_PORT or its ``--port``. The mode comes from the container's main
+The engineer (``run``) answers ``/healthz`` on GT7_METRICS_PORT; the pit wall
+(``pitwall``, the pitwall image) answers ``/healthz`` on GT7_PITWALL_PORT or its
+``--port``. The mode comes from the container's main
 process (PID 1), so one HEALTHCHECK serves every mode. Standard library only: no curl in the image.
 """
 
@@ -17,11 +16,11 @@ from pathlib import Path
 
 from those_who_run.config import Settings
 
-MODES = ("run", "web", "pitwall")
+MODES = ("run", "pitwall")
 
 
 def mode_of(argv: Sequence[str]) -> str | None:
-    """``run``, ``web`` or ``pitwall`` from a process's arguments, None when it is none."""
+    """``run`` or ``pitwall`` from a process's arguments, None when it is none."""
     for arg in argv:
         if arg in MODES:
             return arg
@@ -54,14 +53,12 @@ def _engine_host(bind: str) -> str:
 def health_urls(settings: Settings, mode: str | None, argv: Sequence[str] = ()) -> list[str]:
     """The URLs to probe: one for a known mode, both when the mode is unknown."""
     run_url = f"http://{_engine_host(settings.bind_address)}:{settings.metrics_port}/healthz"
-    web_url = f"http://127.0.0.1:{_port_flag(argv) or settings.web_port}/_stcore/health"
+    pitwall_url = f"http://127.0.0.1:{_port_flag(argv) or settings.pitwall_port}/healthz"
     if mode == "run":
         return [run_url]
-    if mode == "web":
-        return [web_url]
     if mode == "pitwall":
-        return [f"http://127.0.0.1:{_port_flag(argv) or settings.pitwall_port}/healthz"]
-    return [run_url, web_url]
+        return [pitwall_url]
+    return [run_url, pitwall_url]
 
 
 def pid1_argv(proc: Path = Path("/proc/1/cmdline")) -> list[str]:

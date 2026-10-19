@@ -41,7 +41,7 @@ def clean_env(monkeypatch, tmp_path):
     [
         ("GT7_METRICS_PORT", "nine", "must be an integer"),
         ("GT7_METRICS_PORT", "0", "between 1 and 65535"),
-        ("GT7_WEB_PORT", "70000", "between 1 and 65535"),
+        ("GT7_PITWALL_PORT", "70000", "between 1 and 65535"),
         ("GT7_RECORD_KEEP", "-1", "0 or more"),
         ("GT7_IDLE_DISCONNECT_SECS", "soon", "must be a number"),
         ("GT7_IDLE_DISCONNECT_SECS", "-5", "0 or more"),

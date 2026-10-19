@@ -1,4 +1,4 @@
-"""Pit wall phase 1 (#33): the data layer over a store built in tmp_path, and the page."""
+"""Pit wall phase 1 (#33): the data layer over a store built in tmp_path."""
 
 import json
 import sqlite3
@@ -7,10 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from those_who_run.__main__ import build_parser
 from those_who_run.callouts import CalloutQueue
-from those_who_run.cli.web import streamlit_flags
-from those_who_run.config import DEFAULT_RULES, Settings
+from those_who_run.config import DEFAULT_RULES
 from those_who_run.engine import Engine
 from those_who_run.pitwall import data
 from those_who_run.replay import read_recording
@@ -203,36 +201,6 @@ def test_session_ids_cannot_leave_the_store(store_dir):
     assert data.session_summary(store_dir, "20990101-000000") is None
 
 
-def test_web_command():
-    args = build_parser().parse_args(["web"])
-    assert args.command == "web" and args.port is None and args.address == "0.0.0.0"
-    assert build_parser().parse_args(["web", "--port", "9000"]).port == 9000
-    assert Settings.from_env({}).web_port == 8501
-    assert Settings.from_env({"GT7_WEB_PORT": "8600"}).web_port == 8600
-    flags = streamlit_flags(8600, "0.0.0.0")
-    assert "--server.port=8600" in flags and "--server.headless=true" in flags
-    assert "--theme.primaryColor=#D21F1B" in flags
-
-
-def test_page_renders_both_views(store_dir, monkeypatch):
-    testing = pytest.importorskip("streamlit.testing.v1")
-    import those_who_run.pitwall as pitwall
-
-    monkeypatch.setenv("GT7_DATA_DIR", str(store_dir))
-    script = str(Path(pitwall.__file__).with_name("app.py"))
-    at = testing.AppTest.from_file(script, default_timeout=60).run()
-    assert not at.exception
-    assert "**Unknown track · 4-lap race**" in [m.value for m in at.markdown]
-
-    race = data.list_sessions(store_dir)[-1]
-    at.query_params["session"] = race.session_id
-    at.run()
-    assert not at.exception
-    assert len(at.dataframe[0].value) == 4
-    assert [s.label for s in at.selectbox] == ["Lap A", "Lap B"]
-    assert at.selectbox[0].value == 3  # the best lap
-
-
 # old stores, same-track matching and errors (#160)
 
 
@@ -309,78 +277,3 @@ def test_old_and_new_lap_files_read_together(store_dir):
     tmp.replace(old)
     laps = data.lap_summaries(store_dir, race.session_id)
     assert [r.top_speed_kph for r in laps] == [150.0] * 4
-
-
-def _app(store_dir: Path, monkeypatch):
-    testing = pytest.importorskip("streamlit.testing.v1")
-    import those_who_run.pitwall as pitwall
-
-    monkeypatch.setenv("GT7_DATA_DIR", str(store_dir))
-    script = str(Path(pitwall.__file__).with_name("app.py"))
-    return testing.AppTest.from_file(script, default_timeout=60)
-
-
-def test_page_renders_an_empty_data_dir(tmp_path, monkeypatch):
-    at = _app(tmp_path, monkeypatch).run()
-    assert not at.exception
-    assert any("No sessions" in i.value for i in at.info)
-
-
-@pytest.mark.parametrize("session_id", ["../etc", "20990101-000000"])
-def test_page_shows_an_error_for_a_bad_session_link(store_dir, monkeypatch, session_id):
-    at = _app(store_dir, monkeypatch)
-    at.query_params["session"] = session_id
-    at.run()
-    assert not at.exception
-    assert len(at.error) == 1
-
-
-def test_page_shows_an_error_for_a_corrupt_lap_file(store_dir, monkeypatch):
-    race = data.list_sessions(store_dir)[-1]
-    (store_dir / "sessions" / race.session_id / "lap-02.parquet").write_bytes(b"not parquet")
-    at = _app(store_dir, monkeypatch)
-    at.query_params["session"] = race.session_id
-    at.run()
-    assert not at.exception
-    assert len(at.error) == 1 and "Could not read the store" in at.error[0].value
-
-
-def test_page_shows_an_error_for_a_locked_index(store_dir, monkeypatch):
-    # In WAL mode readers go past a writer's transaction; only exclusive locking
-    # mode shuts them out.
-    monkeypatch.setattr(data, "READ_TIMEOUT_SECS", 0.1)
-    db = sqlite3.connect(store_dir / "index.sqlite")
-    db.execute("PRAGMA locking_mode=EXCLUSIVE")
-    db.execute("BEGIN EXCLUSIVE")
-    try:
-        at = _app(store_dir, monkeypatch).run()
-    finally:
-        db.rollback()
-        db.close()
-    assert not at.exception
-    assert len(at.error) == 1 and "Could not read the store" in at.error[0].value
-
-
-def test_lap_picks_survive_a_new_lap(tmp_path, monkeypatch, sim):
-    live = sim(total_laps=6, burn=5).menu().at_track().race([98000, 97000, 99000], finish=False)
-    drive(tmp_path, live.frames, close=False)
-    (row,) = data.list_sessions(tmp_path)
-    at = _app(tmp_path, monkeypatch)
-    at.query_params["session"] = row.session_id
-    at.run()
-    assert [s.value for s in at.selectbox] == [2, 1]  # best, then the next quickest
-    at.selectbox[0].set_value(3)
-    at.selectbox[1].set_value(2)
-    at.run()
-    db = sqlite3.connect(tmp_path / "index.sqlite")
-    db.execute(
-        "INSERT INTO laps (session_id, lap, lap_time_ms, complete, frames, file, recorded_at)"
-        " VALUES (?, 4, 96000, 1, 3, 'lap-04.parquet', ?)",
-        (row.session_id, T0),
-    )
-    db.commit()
-    db.close()
-    at.run()
-    assert not at.exception
-    assert at.selectbox[0].options[-1].startswith("Lap 4")
-    assert [s.value for s in at.selectbox] == [3, 2]

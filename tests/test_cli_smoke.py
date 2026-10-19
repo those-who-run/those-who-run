@@ -15,7 +15,6 @@ import os
 import signal
 import socket
 import sqlite3
-import sys
 import time
 from contextlib import closing
 from pathlib import Path
@@ -231,24 +230,6 @@ def test_post_unknown_session_or_no_full_lap(data_dir, sim):
     assert main(["post", "20990101-000000", "--dry-run"]) == 2
     sid = store_session(data_dir, sim(total_laps=3).menu().at_track().race([], finish=True).frames)
     assert main(["post", sid, "--dry-run"]) == 1
-
-
-def test_web(data_dir, monkeypatch):
-    seen: dict[str, Any] = {}
-
-    def fake_main(args: list[str], **kw: Any) -> int:
-        seen["args"], seen["kw"] = args, kw
-        return 0
-
-    monkeypatch.setattr("streamlit.web.cli.main", fake_main)
-    assert main(["web", "--port", "8642"]) == 0
-    assert seen["args"][1].endswith("app.py") and "--server.port=8642" in seen["args"]
-    assert os.environ["GT7_DATA_DIR"] == str(data_dir.resolve())
-
-
-def test_web_without_streamlit(data_dir, monkeypatch):
-    monkeypatch.setitem(sys.modules, "streamlit.web", None)
-    assert main(["web"]) == 2
 
 
 def test_ctrl_c_is_exit_130(data_dir, monkeypatch):

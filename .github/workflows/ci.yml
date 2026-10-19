@@ -80,11 +80,9 @@ jobs:
           tags: muldoon/those-who-run:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      # The image starts and both of its modes parse: what the release checks too.
+      # The image starts: what the release checks too.
       - name: Smoke test the image
-        run: |
-          docker run --rm muldoon/those-who-run:ci --version
-          docker run --rm muldoon/those-who-run:ci web --help > /dev/null
+        run: docker run --rm muldoon/those-who-run:ci --version
       - name: Build the pit wall (no push)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -99,3 +97,7 @@ jobs:
       # No engineer packages and no Node; /healthz and the web app answer.
       - name: Smoke test the pit wall image
         run: scripts/smoke-pitwall.sh muldoon/those-who-run:ci-pitwall
+      # The old pit wall is gone from both images (#238 AC4), and their sizes go to
+      # the summary (#26).
+      - name: No web extra in either image
+        run: scripts/smoke-no-web-extra.sh muldoon/those-who-run:ci muldoon/those-who-run:ci-pitwall

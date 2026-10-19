@@ -1,6 +1,6 @@
 """Pit wall data access: the session index and the lap files, read-only, as plain data.
 
-Nothing here imports Streamlit, so it is tested on its own. The SQLite index is
+Plain data with no web framework, so it is tested on its own. The SQLite index is
 opened read-only (``mode=ro``) and never created; the Parquet laps are read
 through an in-memory DuckDB connection. The engineer may be writing a session
 while the pit wall reads it, so a session without ``summary.json`` is still

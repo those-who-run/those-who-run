@@ -123,7 +123,7 @@ jobs:
       - name: Smoke test the image
         run: |
           docker run --rm those-who-run:smoke --version | tee /dev/stderr | grep -F " $PACKAGE"
-          docker run --rm those-who-run:smoke web --help > /dev/null
+          scripts/smoke-no-web-extra.sh those-who-run:smoke
       # The pit wall's image (ADR 0003 point 7): the data API and the web app.
       - name: Build the pit wall
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0

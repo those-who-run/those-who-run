@@ -2,7 +2,7 @@
 # Base images are pinned by digest for reproducible rebuilds; Dependabot bumps them.
 #
 # Two images from one file (ADR 0001 point 5, amended by ADR 0003 point 7):
-#   (default)         the engineer, `run`, with the Streamlit pit wall until #238
+#   (default)         the engineer, `run`
 #   --target pitwall  the pit wall: the data API and the built web app, nothing else
 # BuildKit builds only the stages the target needs, so the engineer's build never
 # runs Node or reads web/.
@@ -18,8 +18,8 @@ RUN npm run build
 
 # The pit wall: `those-who-run pitwall` serving /api/v1 over GT7_DATA_DIR and the
 # web app from /app/web. The core install only (aiohttp, DuckDB, PyYAML): no
-# engineer extra (Discord, Piper, gt-telem, prometheus-client), no Streamlit, no
-# audio libraries, no voice and no Node.
+# engineer extra (Discord, Piper, gt-telem, prometheus-client), no audio
+# libraries, no voice and no Node.
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS pitwall
 
 WORKDIR /app
@@ -90,18 +90,17 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 # Dependencies from the lockfile first, in their own layer: a change under src/
 # does not reinstall them. The engineer extra is Discord, Piper, gt-telem and
-# metrics. The web extra is the Streamlit pit wall (`those-who-run web`), so one
-# image runs both until #238; it adds Streamlit, pandas and pyarrow, roughly 300 MB (#26).
+# metrics. The pit wall is its own image (--target pitwall).
 COPY pyproject.toml uv.lock ./
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --extra engineer --extra web
+    uv sync --frozen --no-install-project --extra engineer
 
 COPY README.md LICENSE rules.example.yaml ./
 COPY src ./src
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-editable --extra engineer --extra web \
+    uv sync --frozen --no-editable --extra engineer \
     && useradd --uid 1000 --user-group --home-dir /app --no-create-home engineer \
     && mkdir -p /data \
     && chown -R engineer:engineer /data
@@ -113,14 +112,13 @@ ENV PATH=/app/.venv/bin:$PATH \
     GT7_DATA_DIR=/data \
     XDG_CACHE_HOME=/tmp/.cache \
     GT7_METRICS_PORT=9850 \
-    GT7_WEB_PORT=8501 \
     PYTHONUNBUFFERED=1
 
 USER 1000:1000
-EXPOSE 33740/udp 9850/tcp 8501/tcp
+EXPOSE 33740/udp 9850/tcp
 VOLUME ["/data"]
 
-# Probes /healthz for `run` or Streamlit's health for `web`, on the configured port.
+# Probes the engineer's /healthz on GT7_METRICS_PORT.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
     CMD ["those-who-run", "healthcheck"]
 

@@ -30,7 +30,7 @@ GLYPH_FUEL = "⛽"
 
 
 def hex_colour(value: int) -> str:
-    """0xD21F1B -> '#D21F1B', for CSS, Streamlit and docs."""
+    """0xD21F1B -> '#D21F1B', for CSS and docs."""
     return f"#{value:06X}"
 
 

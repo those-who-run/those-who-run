@@ -7,6 +7,8 @@
 
 **A self-hosted voice race engineer for Gran Turismo 7.**
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/those-who-run/those-who-run/badge)](https://scorecard.dev/viewer/?uri=github.com/those-who-run/those-who-run)
+
 <!-- x-release-please-start-version -->
 Current release: v0.7.4
 <!-- x-release-please-end -->

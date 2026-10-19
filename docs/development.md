@@ -65,6 +65,16 @@ of the script, and the author writes the description, so a PR can change the
 script, the workflow or just write the line. It makes the reason visible; the
 maintainer's review is what decides.
 
+**Scorecard.** `.github/workflows/scorecard.yml` runs
+[OpenSSF Scorecard](https://github.com/ossf/scorecard/blob/main/docs/checks.md)
+weekly, on every push to `main` and on demand (`gh workflow run scorecard.yml`).
+It scores the settings and workflows nothing in `make check` can see (token
+permissions, pinned dependencies, dangerous workflows, SAST), publishes the result
+behind the badge at the top of the README and uploads it to code scanning. It
+runs with the Actions token, which can't read branch rules, so its
+Branch-Protection check comes back inconclusive. It gates nothing: a drop is
+drift to look into.
+
 Every target, as `make help` lists it:
 
 | Target | What it does |

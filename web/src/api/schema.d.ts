@@ -169,12 +169,18 @@ export interface components {
             /** @description The open session; null when none is open */
             session: components["schemas"]["LiveSession"] | null;
         };
-        /** @description The values each filter can take, from the sessions there are. */
+        FilterOption: {
+            /** @description The value, as its query parameter takes it */
+            value: string;
+            /** @description Sessions this value would leave, with the other filters applied (not its own) */
+            count: number;
+        };
+        /** @description The values each filter can take, from every session, each with a count. */
         FilterOptions: {
             /** @description Track names, as Session.track.name has them */
-            track: string[];
+            track: components["schemas"]["FilterOption"][];
             /** @description Car names */
-            car: string[];
+            car: components["schemas"]["FilterOption"][];
             /** @description Session kinds */
             kind: components["schemas"]["KindOption"][];
         };
@@ -194,6 +200,8 @@ export interface components {
             value: string;
             /** @description The kind's name */
             label: string;
+            /** @description Sessions this value would leave, with the other filters applied (not its own) */
+            count: number;
         };
         LapList: {
             /** @description The session */
@@ -333,6 +341,10 @@ export interface components {
             sessions: components["schemas"]["Session"][];
             /** @description Filter values from every session, not just these */
             options: components["schemas"]["FilterOptions"];
+            /** @description Sessions in the store */
+            total: number;
+            /** @description Sessions that match the filters: the length of sessions */
+            matched: number;
         };
         /** @description The PS5's telemetry feed. */
         TelemetryLink: {
@@ -398,6 +410,12 @@ export interface operations {
                 car?: string;
                 /** @description Only sessions with this session kind key; empty matches all */
                 kind?: string;
+                /** @description Only sessions started on or after this day, in tz (else the pit wall's zone): "2026-10-17" */
+                from?: string;
+                /** @description Only sessions started on or before this day, in tz (else the pit wall's zone): "2026-10-17" */
+                to?: string;
+                /** @description The time zone from and to are days in, an IANA name: "Europe/Dublin". The browser's own; without it, the pit wall's zone (UTC in its container) */
+                tz?: string;
             };
             header?: never;
             path?: never;
@@ -420,6 +438,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A bad parameter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
             };
             /** @description Unhealthy, or the index is busy */
             503: {

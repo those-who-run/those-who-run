@@ -30,16 +30,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import hashlib
 import json
 import logging
 import os
 import sqlite3
 import weakref
 from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import aiohttp
 from aiohttp import web
@@ -51,6 +54,7 @@ from those_who_run.pitwall import data
 from those_who_run.pitwall.api_models import (
     DEFAULT_POINTS,
     MAX_POINTS,
+    FilterOption,
     FilterOptions,
     Health,
     KindOption,
@@ -88,6 +92,11 @@ class Reader:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
         self.sessions = lru_cache(maxsize=2)(lambda stamp: data.list_sessions(data_dir))
+        # the list as filtered, per stamp and filter: a page polling one view
+        # re-reads nothing until the engineer writes
+        self.session_list = lru_cache(maxsize=32)(
+            lambda stamp, want, tz: build_session_list(self.sessions(stamp), want, tz)
+        )
         self.laps = lru_cache(maxsize=16)(
             lambda session_id, stamp: data.lap_summaries(data_dir, session_id)
         )
@@ -219,25 +228,72 @@ def _session_id(request: web.Request) -> str:
     return session_id
 
 
+def _day(request: web.Request, name: str) -> date | None:
+    """A ``YYYY-MM-DD`` query parameter, or None when it is absent or empty."""
+    text = request.query.get(name, "")
+    if not text:
+        return None
+    try:
+        if len(text) != 10:
+            raise ValueError(text)
+        return date.fromisoformat(text)
+    except ValueError:
+        raise web.HTTPBadRequest(reason=f"{name} is a date, YYYY-MM-DD") from None
+
+
+def session_filter(request: web.Request) -> data.SessionFilter:
+    """The list's filters from the query: empty values match everything."""
+    q = request.query
+    return data.SessionFilter(
+        track=q.get("track") or None,
+        car=q.get("car") or None,
+        kind=q.get("kind") or None,
+        since=_day(request, "from"),
+        until=_day(request, "to"),
+    )
+
+
+def _zone(request: web.Request) -> ZoneInfo | None:
+    """The ``tz`` query parameter as a zone, or None (the pit wall's own zone)
+    when it is absent or empty. The pit wall's container runs in UTC; the
+    browser sends its own zone so a day is the viewer's day."""
+    name = request.query.get("tz", "")
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError, ValueError:
+        raise web.HTTPBadRequest(reason="tz is a time zone name, Europe/Dublin") from None
+
+
+def build_session_list(
+    rows: list[data.SessionRow], want: data.SessionFilter, tz: ZoneInfo | None = None
+) -> SessionList:
+    shown = _values(data.filter_sessions(rows, want, tz))
+    counts = data.option_counts(rows, want, tz)
+    return SessionList(
+        sessions=shown,
+        options=FilterOptions(
+            track=[FilterOption(v, n) for v, n in counts["track"].items()],
+            car=[FilterOption(v, n) for v, n in counts["car"].items()],
+            kind=[KindOption(k, LABELS.get(k, k), n) for k, n in counts["kind"].items()],
+        ),
+        total=len(rows),
+        matched=len(shown),
+    )
+
+
 async def list_sessions(request: web.Request) -> web.Response:
     reader = request.app[READER]
+    want, tz = session_filter(request), _zone(request)
     stamp = reader.stamp()
-    q = request.query
-    want = data.SessionFilter(track=q.get("track"), car=q.get("car"), kind=q.get("kind"))
-
-    def read() -> SessionList:
-        rows = reader.sessions(stamp)
-        options = data.filter_options(rows)
-        return SessionList(
-            sessions=_values(data.filter_sessions(rows, want)),
-            options=FilterOptions(
-                track=options["track"],
-                car=options["car"],
-                kind=[KindOption(k, LABELS.get(k, k)) for k in options["kind"]],
-            ),
-        )
-
-    return await _cached(request, etag_of(stamp), read, "")
+    # The filters and the zone are in the ETag, as in the URL: one stamp, one
+    # body per view.
+    view = repr((dataclasses.astuple(want), tz and tz.key))
+    key = hashlib.blake2s(view.encode(), digest_size=6).hexdigest()
+    return await _cached(
+        request, etag_of(stamp, key), lambda: reader.session_list(stamp, want, tz), ""
+    )
 
 
 def _values(rows: list[data.SessionRow]) -> list[Any]:

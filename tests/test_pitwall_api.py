@@ -15,6 +15,7 @@ import stat
 import threading
 import time
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -129,7 +130,8 @@ async def test_sessions_laps_and_traces_are_what_data_returns(api, store):
     assert body["sessions"] == [plain(r.values) for r in rows]
     assert [s["session_id"] for s in body["sessions"]] == [r.session_id for r in rows]
     options = data.filter_options(rows)
-    assert body["options"]["track"] == options["track"]
+    assert [t["value"] for t in body["options"]["track"]] == options["track"]
+    assert [c["value"] for c in body["options"]["car"]] == options["car"]
     assert [k["value"] for k in body["options"]["kind"]] == options["kind"]
 
     for row in rows:
@@ -186,6 +188,158 @@ async def test_filters(api, store):
         assert [s["session_id"] for s in body["sessions"]] == [r.session_id for r in want]
     body = await (await api.get("/api/v1/sessions", params={"kind": "no-such-kind"})).json()
     assert body["sessions"] == [] and body["options"]["track"]  # options are from every session
+    assert all(t["count"] == 0 for t in body["options"]["track"])  # a choice that empties it
+
+
+def day(at: float) -> str:
+    """The local day a session started at ``at`` is on, as ``?from=`` takes it."""
+    return datetime.fromtimestamp(at).date().isoformat()
+
+
+async def test_date_filter(api, store):
+    """#318 AC1: from and to are inclusive local days on started_at."""
+    rows = data.list_sessions(store)
+    assert len(rows) == 3  # the drift session never starts one
+
+    async def ids(**params: str) -> list[str]:
+        body = await (await api.get("/api/v1/sessions", params=params)).json()
+        return [s["session_id"] for s in body["sessions"]]
+
+    def started(lo: float, hi: float) -> list[str]:
+        return [r.session_id for r in rows if day(lo) <= day(r.started_at) <= day(hi)]
+
+    pit_stops = started(T0 + DAY, T0 + 2 * DAY)
+    assert len(pit_stops) == 2
+    assert await ids(**{"from": day(T0 + DAY), "to": day(T0 + 2 * DAY)}) == pit_stops
+    assert await ids(**{"from": day(T0 + 2 * DAY)}) == started(T0 + 2 * DAY, T0 + 2 * DAY)
+    assert await ids(**{"from": day(T0 + 3 * DAY)}) == []
+    assert await ids(to=day(T0)) == started(T0, T0)
+    one_day = day(T0 + DAY)
+    assert await ids(**{"from": one_day, "to": one_day}) == started(T0 + DAY, T0 + DAY)
+    assert await ids(**{"from": day(T0 + 3 * DAY), "to": day(T0)}) == []
+    assert await ids(**{"from": "", "to": ""}) == [r.session_id for r in rows]
+
+
+async def test_dates_are_days_in_the_viewers_zone(tmp_path):
+    """The pit wall runs in UTC; the viewer may not. A race at 23:30 UTC on
+    17 October is on the 18th in Dublin (IST, UTC+1), and one at 23:30 UTC on
+    25 October, after the clocks go back, is on the 25th there too."""
+    stop = recording(PIT_STOP)
+    before = datetime(2026, 10, 17, 23, 30, tzinfo=UTC).timestamp()
+    after = datetime(2026, 10, 25, 23, 30, tzinfo=UTC).timestamp()
+    drive(tmp_path, stop, before)
+    drive(tmp_path, stop, after)
+    api = await start(server.make_app(tmp_path, engineer_url=f"http://127.0.0.1:{closed_port()}"))
+    try:
+        newer, older = (r.session_id for r in data.list_sessions(tmp_path))
+
+        async def on(day: str, tz: str | None) -> list[str]:
+            params = {"from": day, "to": day} | ({"tz": tz} if tz else {})
+            resp = await api.get("/api/v1/sessions", params=params)
+            body = await resp.json()
+            assert body["matched"] == len(body["sessions"])
+            counts = sum(t["count"] for t in body["options"]["track"])
+            assert counts == body["matched"]  # the counts follow the zone
+            return [s["session_id"] for s in body["sessions"]]
+
+        assert await on("2026-10-17", "UTC") == [older]
+        assert await on("2026-10-18", "UTC") == []
+        assert await on("2026-10-17", "Europe/Dublin") == []
+        assert await on("2026-10-18", "Europe/Dublin") == [older]
+        assert await on("2026-10-25", "Europe/Dublin") == [newer]
+        assert await on("2026-10-26", "Europe/Dublin") == []
+        assert await on("2026-10-25", "America/New_York") == [newer]
+
+        utc = await api.get("/api/v1/sessions", params={"tz": "UTC"})
+        dublin = await api.get("/api/v1/sessions", params={"tz": "Europe/Dublin"})
+        assert utc.headers["ETag"] != dublin.headers["ETag"]  # the zone is in the key
+        again = await api.get(
+            "/api/v1/sessions",
+            params={"tz": "Europe/Dublin"},
+            headers={"If-None-Match": dublin.headers["ETag"]},
+        )
+        assert again.status == 304
+        for bad in ("Europe/Nowhere", "../../etc/passwd", "/etc/localtime", "UTC+1"):
+            resp = await api.get("/api/v1/sessions", params={"tz": bad})
+            assert resp.status == 400
+            assert await resp.json() == {"error": "tz is a time zone name, Europe/Dublin"}
+    finally:
+        await api.close()
+
+
+@pytest.mark.parametrize(
+    "value", ["yesterday", "2026-13-01", "2026-10-1", "20261017", "1792087200"]
+)
+async def test_a_bad_date_is_a_400(api, value):
+    for name in ("from", "to"):
+        resp = await api.get("/api/v1/sessions", params={name: value})
+        assert resp.status == 400
+        assert await resp.json() == {"error": f"{name} is a date, YYYY-MM-DD"}
+
+
+async def test_total_and_matched(api, store):
+    """#318 AC2: total is the store, matched the sessions after the filters."""
+    rows = data.list_sessions(store)
+    suzuka = "Suzuka Circuit East Course"
+    for params, want in (
+        ({}, len(rows)),
+        ({"track": suzuka}, 2),
+        ({"track": suzuka, "from": day(T0 + 2 * DAY)}, 1),
+        ({"track": suzuka, "kind": "no-such-kind"}, 0),
+    ):
+        body = await (await api.get("/api/v1/sessions", params=params)).json()
+        assert body["total"] == len(rows) == 3
+        assert body["matched"] == len(body["sessions"]) == want
+
+
+async def test_option_counts_leave_out_their_own_filter(api, store):
+    """#318 AC3, R3: each option counts the sessions it would leave with the
+    other filters as they are."""
+    rows = data.list_sessions(store)
+    races = [r for r in rows if r.kind == "lap_race"]
+    assert races
+    body = await (await api.get("/api/v1/sessions", params={"kind": "lap_race"})).json()
+    tracks = {t["value"]: t["count"] for t in body["options"]["track"]}
+    assert set(tracks) == {r.track for r in rows}  # every track, even with none left
+    assert tracks == {t: sum(r.track == t for r in races) for t in tracks}
+    assert tracks == {"Circuit Gilles Villeneuve": 1, "Suzuka Circuit East Course": 2}
+    params = {"kind": "lap_race", "from": day(T0 + DAY)}
+    later = await (await api.get("/api/v1/sessions", params=params)).json()
+    tracks = {t["value"]: t["count"] for t in later["options"]["track"]}
+    assert tracks == {"Circuit Gilles Villeneuve": 0, "Suzuka Circuit East Course": 2}
+    # the kind's own options ignore the kind chosen: every kind still counts
+    kinds = {k["value"]: k["count"] for k in body["options"]["kind"]}
+    assert kinds == {k: sum(r.kind == k for r in rows) for k in kinds}
+    assert sum(kinds.values()) == len(rows)
+
+    # two filters: track counts follow the date, car counts the track and the date
+    suzuka = "Suzuka Circuit East Course"
+    since = day(T0 + 2 * DAY)
+    params = {"track": suzuka, "from": since}
+    body = await (await api.get("/api/v1/sessions", params=params)).json()
+    later = [r for r in rows if day(r.started_at) >= since]
+    tracks = {t["value"]: t["count"] for t in body["options"]["track"]}
+    assert tracks == {t: sum(r.track == t for r in later) for t in tracks}
+    both = [r for r in later if r.track == suzuka]
+    cars = {c["value"]: c["count"] for c in body["options"]["car"]}
+    assert cars == {c: sum(r.car == c for r in both) for c in cars}
+    assert body["matched"] == len(both) == 1
+
+
+async def test_each_filter_has_its_own_etag(api):
+    """#318 R5: the filters are part of the cache key."""
+    every = await api.get("/api/v1/sessions")
+    races = await api.get("/api/v1/sessions", params={"kind": "lap_race"})
+    assert every.headers["ETag"] != races.headers["ETag"]
+    again = await api.get(
+        "/api/v1/sessions",
+        params={"kind": "lap_race"},
+        headers={"If-None-Match": races.headers["ETag"]},
+    )
+    assert again.status == 304
+    # an empty value is no filter: the same body, the same tag
+    empty = await api.get("/api/v1/sessions", params={"track": "", "from": ""})
+    assert empty.headers["ETag"] == every.headers["ETag"]
 
 
 async def test_same_track(api, store):

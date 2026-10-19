@@ -40,6 +40,35 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions started on or after this day, in tz (else the pit wall's zone): \"2026-10-17\"",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions started on or before this day, in tz (else the pit wall's zone): \"2026-10-17\"",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "description": "The time zone from and to are days in, an IANA name: \"Europe/Dublin\". The browser's own; without it, the pit wall's zone (UTC in its container)",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -55,6 +84,16 @@
           },
           "304": {
             "description": "Not modified: nothing has changed since the ETag sent in If-None-Match"
+          },
+          "400": {
+            "description": "A bad parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "503": {
             "description": "Unhealthy, or the index is busy",
@@ -483,21 +522,39 @@
         ],
         "additionalProperties": false
       },
+      "FilterOption": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The value, as its query parameter takes it"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Sessions this value would leave, with the other filters applied (not its own)"
+          }
+        },
+        "required": [
+          "value",
+          "count"
+        ],
+        "additionalProperties": false
+      },
       "FilterOptions": {
         "type": "object",
-        "description": "The values each filter can take, from the sessions there are.",
+        "description": "The values each filter can take, from every session, each with a count.",
         "properties": {
           "track": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/FilterOption"
             },
             "description": "Track names, as Session.track.name has them"
           },
           "car": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/FilterOption"
             },
             "description": "Car names"
           },
@@ -555,11 +612,16 @@
           "label": {
             "type": "string",
             "description": "The kind's name"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Sessions this value would leave, with the other filters applied (not its own)"
           }
         },
         "required": [
           "value",
-          "label"
+          "label",
+          "count"
         ],
         "additionalProperties": false
       },
@@ -1018,11 +1080,21 @@
               }
             ],
             "description": "Filter values from every session, not just these"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Sessions in the store"
+          },
+          "matched": {
+            "type": "integer",
+            "description": "Sessions that match the filters: the length of sessions"
           }
         },
         "required": [
           "sessions",
-          "options"
+          "options",
+          "total",
+          "matched"
         ],
         "additionalProperties": false
       },

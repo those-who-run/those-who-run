@@ -89,6 +89,33 @@ def test_filter_by_track_and_car():
     assert data.filter_options(rows)["car"] == ["Civic"]
 
 
+def test_option_counts_use_the_other_filters():
+    """#318 R3: an option counts what it would leave with the other filters,
+    never its own, so a choice that empties the list shows 0."""
+
+    def row(track: str, kind: str, car: str | None, day: int) -> data.SessionRow:
+        return data.SessionRow("x", T0 + day * DAY, None, track, kind, car, "", "", (), 1, True)
+
+    rows = [
+        row("Suzuka", "lap_race", "Civic", 0),
+        row("Suzuka", "solo_timed", "Civic", 0),
+        row("SUGO", "lap_race", "GR86", 1),
+        row("SUGO", "lap_race", None, 2),
+    ]
+    races = data.SessionFilter(kind="lap_race")
+    counts = data.option_counts(rows, races, UTC)
+    assert counts["track"] == {"SUGO": 2, "Suzuka": 1}  # lap races per track
+    assert counts["kind"] == {"lap_race": 3, "solo_timed": 1}  # not its own filter
+    assert counts["car"] == {"Civic": 1, "GR86": 1}
+
+    f = data.SessionFilter(track="Suzuka", kind="lap_race", since=date(2026, 10, 16))
+    counts = data.option_counts(rows, f, UTC)
+    assert counts["track"] == {"SUGO": 2, "Suzuka": 0}
+    assert counts["kind"] == {"lap_race": 0, "solo_timed": 0}
+    assert counts["car"] == {"Civic": 0, "GR86": 0}
+    assert data.option_counts(rows, data.SessionFilter(), UTC)["car"] == {"Civic": 2, "GR86": 1}
+
+
 def test_lap_table_follows_the_pit_detector(store_dir):
     """The sim tops the fuel up after lap 2 without GT7's pit cut-scenes: the pit-stop
     detector (#20) sees no stop, and the table follows it."""

@@ -24,7 +24,8 @@ import json
 import math
 import re
 import sqlite3
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, tzinfo
 from pathlib import Path
 from typing import Any
@@ -422,6 +423,25 @@ def filter_sessions(
         )
 
     return [s for s in sessions if keep(s)]
+
+
+FACETS = ("track", "car", "kind")
+
+
+def option_counts(
+    sessions: list[SessionRow], f: SessionFilter, tz: tzinfo | None = None
+) -> dict[str, dict[str, int]]:
+    """Per filter, each value it can take (``filter_options``) and how many
+    sessions it would leave with the *other* filters as they are (#318): a
+    value that would empty the list counts 0, and a filter's own choice never
+    hides its alternatives."""
+    options = filter_options(sessions)
+    out: dict[str, dict[str, int]] = {}
+    for key in FACETS:
+        rest = filter_sessions(sessions, replace(f, **{key: None}), tz)
+        counts = Counter(getattr(s, key) for s in rest)
+        out[key] = {value: counts[value] for value in options[key]}
+    return out
 
 
 # laps

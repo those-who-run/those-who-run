@@ -140,18 +140,28 @@ class Trace:
         return len(self.t)
 
 
+_COUNT = "Sessions this value would leave, with the other filters applied (not its own)"
+
+
+@dataclass(frozen=True, slots=True)
+class FilterOption:
+    value: str = doc("The value, as its query parameter takes it")
+    count: int = doc(_COUNT)
+
+
 @dataclass(frozen=True, slots=True)
 class KindOption:
     value: str = doc("The kind key, as ?kind= takes it")
     label: str = doc("The kind's name")
+    count: int = doc(_COUNT)
 
 
 @dataclass(frozen=True, slots=True)
 class FilterOptions:
-    """The values each filter can take, from the sessions there are."""
+    """The values each filter can take, from every session, each with a count."""
 
-    track: list[str] = doc("Track names, as Session.track.name has them")
-    car: list[str] = doc("Car names")
+    track: list[FilterOption] = doc("Track names, as Session.track.name has them")
+    car: list[FilterOption] = doc("Car names")
     kind: list[KindOption] = doc("Session kinds")
 
 
@@ -161,6 +171,8 @@ class SessionList:
 
     sessions: list[Session] = doc("The sessions that match, newest first")
     options: FilterOptions = doc("Filter values from every session, not just these")
+    total: int = doc("Sessions in the store")
+    matched: int = doc("Sessions that match the filters: the length of sessions")
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +204,15 @@ def _filter(name: str, what: str) -> Param:
     return Param(name, "query", f"Only sessions with this {what}; empty matches all")
 
 
+def _date(name: str, when: str) -> Param:
+    return Param(
+        name,
+        "query",
+        f'Only sessions started {when} this day, in tz (else the pit wall\'s zone): "2026-10-17"',
+        {"type": "string", "format": "date"},
+    )
+
+
 # Every route the app has, beside the models it returns. The WebSocket and the
 # control pass-through are not here: their shapes belong to the engineer.
 ROUTES: tuple[Route, ...] = (
@@ -205,8 +226,16 @@ ROUTES: tuple[Route, ...] = (
             _filter("track", "track name"),
             _filter("car", "car name"),
             _filter("kind", "session kind key"),
+            _date("from", "on or after"),
+            _date("to", "on or before"),
+            Param(
+                "tz",
+                "query",
+                'The time zone from and to are days in, an IANA name: "Europe/Dublin".'
+                " The browser's own; without it, the pit wall's zone (UTC in its container)",
+            ),
         ),
-        errors=(503,),
+        errors=(400, 503),
         etag=True,
     ),
     Route(

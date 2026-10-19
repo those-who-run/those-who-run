@@ -1,3 +1,3 @@
 """Those Who Run (走り屋): a self-hosted voice race engineer for Gran Turismo 7."""
 
-__version__ = "0.7.3"  # x-release-please-version (release-please bumps it)
+__version__ = "0.7.4"  # x-release-please-version (release-please bumps it)

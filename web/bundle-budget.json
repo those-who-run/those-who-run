@@ -3,7 +3,7 @@
   "route": 61440,
   "routes": {
     "src/routes/kit.tsx": 59669,
-    "src/routes/not-found.tsx": 244,
+    "src/routes/not-found.tsx": 359,
     "src/routes/session.tsx": 17653,
     "src/routes/sessions.tsx": 6489
   }

@@ -2,7 +2,9 @@
 <html lang="en-GB">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover: from the home screen the app draws under the notch and the
+         home indicator, and the shell keeps clear of them with env(safe-area-inset-*). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!-- Dark only (ADR 0004 point 2): the brand's deep black, before the CSS arrives. -->
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#111111" />
@@ -17,7 +19,11 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Those Who Run · pit wall</title>
+    <!-- Add to Home Screen on iOS (#296 R8): the name under the icon, and the status
+         bar drawn over the header, which pads itself below it. -->
+    <meta name="apple-mobile-web-app-title" content="Pit wall" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Pit wall</title>
   </head>
   <body>
     <div id="root"></div>

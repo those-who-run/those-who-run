@@ -562,6 +562,19 @@ web/dist` serves (or `GT7_PITWALL_STATIC`). Today it is one page, the session
 list, each title linking to `/sessions/<id>`; a results card's old
 `/?session=<id>` link lands there too.
 
+Every page sits in the shell (`web/src/app/`, #296): a header with the 走り屋
+wordmark and the **live engineer chip**, which asks `/api/engine/status` every
+5 s while the tab is visible and says "Live · Suzuka Circuit · L3", "Paused",
+"Replay", "Demo", "Idle" (or "In the menus"), or "Engineer offline" when the
+engineer doesn't answer; the pages carry on either way. Tap it for the
+engineer's version, telemetry and voice, a link to the live session, and the
+pit wall's own version; when the two versions differ it says a deploy is
+rolling out. The sections' navigation (`web/src/app/sections.ts`) appears once
+there are two. **Add to Home Screen** on the iPhone (Safari, Share, Add to Home
+Screen) gives the 走り屋 icon and opens the pit wall full screen with no Safari
+bars, from `web/public/manifest.webmanifest`; there is no service worker, so a
+deploy is never hidden behind a stale cache.
+
 - **Data** comes only through the client generated from `web/openapi.json` into
   `web/src/api/schema.d.ts` (`npm run api` in `web/` after `make openapi`), and
   the TanStack Query hooks in `web/src/api/hooks.ts`. ESLint fails `fetch` or
@@ -587,6 +600,8 @@ list, each title linking to `/sessions/<id>`; a results card's old
   checks nothing scrolls sideways and saves screenshots to
   `web/test-results/screenshots/`, which CI uploads. The helpers in `web/e2e/`
   (the server, the viewports, the screenshot) are shared by every page's spec.
+  Behind the pit wall is a stub engineer (`web/e2e/engineer.ts`), down unless a
+  test asks for a state with `setEngineer(page, "driving")`.
 
 Node (26 LTS) is pinned in `web/.node-version` and `engines`, every package
 exactly in `web/package-lock.json`, installed with `npm ci`. Add or change a

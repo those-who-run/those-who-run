@@ -1,5 +1,6 @@
 // Starts the real pit wall over a store replayed from fixtures, serving web/dist
-// (ADR 0003 point 5). Specs get its address as PITWALL_URL, through ./pitwall.ts.
+// (ADR 0003 point 5), with a stub engineer behind it (./engineer.ts, #296). Specs
+// get its address as PITWALL_URL, through ./pitwall.ts.
 //
 // The store is made the way the Python tests make one: `those-who-run replay
 // <fixture> --store <dir>` for each fixture in STORE_FIXTURES, into a temporary
@@ -11,6 +12,8 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { setPitwallVersion, startEngineer } from "./engineer";
 
 const WEB = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const ROOT = resolve(WEB, "..");
@@ -78,21 +81,26 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     }
   }
 
+  // The stub engineer (./engineer.ts): down unless a test asks for a scenario, so
+  // /api/engine/status is a 502 and the data routes carry on. No control port.
+  const engineer = await startEngineer();
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
-  const server = spawn(
-    command,
-    ["pitwall", "--address", "127.0.0.1", "--port", String(port), "--static", dist],
-    // No engineer anywhere: /api/engine/* answer 502, the data routes carry on.
-    { env: { ...env, GT7_ENGINEER_URL: "http://127.0.0.1:9", GT7_ENGINEER_CONTROL_URL: "http://127.0.0.1:9" }, stdio: "inherit" },
-  );
+  const server = spawn(command, ["pitwall", "--address", "127.0.0.1", "--port", String(port), "--static", dist], {
+    env: { ...env, GT7_ENGINEER_URL: engineer.url, GT7_ENGINEER_CONTROL_URL: "http://127.0.0.1:9" },
+    stdio: "inherit",
+  });
   const exited = new Promise<void>((r) => server.once("exit", () => r()));
   await waitForHealth(url, 15_000);
+  // The stub's engineer is on the pit wall's version unless a scenario says not.
+  setPitwallVersion(((await (await fetch(`${url}/healthz`)).json()) as { version: string }).version);
   process.env.PITWALL_URL = url;
 
   return async () => {
     server.kill("SIGTERM");
     await exited;
+    engineer.server.closeAllConnections();
+    await new Promise<void>((r) => engineer.server.close(() => r()));
     rmSync(tmp, { recursive: true, force: true });
   };
 }

@@ -14,6 +14,8 @@ const SECTIONS = [
   "StatTile",
   "SessionCard",
   "LiveBadge",
+  "LiveChip",
+  "Navigation",
   "EmptyState",
   "ErrorState",
   "Unknown",

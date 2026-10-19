@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 
+import { loadErrorState } from "./app/errors";
 import { routes } from "./routes";
 
 const queryClient = new QueryClient({
@@ -29,3 +30,7 @@ createRoot(root).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// The route error state, fetched now while its file is sure to exist: after a
+// deploy, an old tab's failed chunk load still has it to show (#296 R6).
+void loadErrorState().catch(() => {});

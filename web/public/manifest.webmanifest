@@ -1,8 +1,10 @@
 {
-  "name": "Those Who Run · pit wall",
+  "id": "/",
+  "name": "Those Who Run · Pit wall",
   "short_name": "Pit wall",
   "lang": "en-GB",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#111111",
   "theme_color": "#111111",

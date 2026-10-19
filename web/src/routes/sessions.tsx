@@ -3,8 +3,10 @@
 import { Link } from "react-router";
 
 import { useSessions } from "@/api/hooks";
+import { usePageTitle } from "@/app/title";
 
 export function Component() {
+  usePageTitle("Sessions");
   const sessions = useSessions();
 
   if (sessions.isPending) {
@@ -20,7 +22,12 @@ export function Component() {
     <ul className="space-y-2" aria-label="Sessions">
       {sessions.data.sessions.map((s) => (
         <li key={s.session_id}>
-          <Link className="underline break-words" to={`/sessions/${encodeURIComponent(s.session_id)}`}>
+          {/* `back`: the session's "All sessions" is then the browser's Back (#296 R7). */}
+          <Link
+            className="underline break-words"
+            to={`/sessions/${encodeURIComponent(s.session_id)}`}
+            state={{ back: true }}
+          >
             {s.title}
           </Link>
         </li>

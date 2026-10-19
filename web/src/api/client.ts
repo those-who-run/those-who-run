@@ -7,6 +7,8 @@ import type { components, paths } from "./schema";
 
 export type Session = components["schemas"]["Session"];
 export type SessionList = components["schemas"]["SessionList"];
+export type EngineStatus = components["schemas"]["EngineStatus"];
+export type Health = components["schemas"]["Health"];
 
 // Same origin: the pit wall serves the app and the API (ADR 0003 point 6). Nothing
 // runs at import: fetch is looked up per request, so a test can replace it.

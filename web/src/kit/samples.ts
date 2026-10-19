@@ -199,3 +199,38 @@ export const LAPS: LapRow[] = [
     clean: false,
   }),
 ];
+
+type EngineStatus = components["schemas"]["EngineStatus"];
+type LiveSession = components["schemas"]["LiveSession"];
+
+/** The kit's pit wall version, and the engineer's when the two match. */
+export const KIT_VERSION = "0.7.1";
+
+/** An engineer status (#292), for the live chip's states. */
+export function engine(over: Partial<EngineStatus> = {}): EngineStatus {
+  return {
+    version: KIT_VERSION,
+    started_at: KIT_NOW - 3 * HOUR,
+    activity: "idle",
+    idle_secs: 600,
+    telemetry: { connected: false, last_packet_age_s: null },
+    voice_connected: true,
+    session: null,
+    ...over,
+  };
+}
+
+/** The session the engineer has open, on a track it is sure of. */
+export function liveSession(over: Partial<LiveSession> = {}): LiveSession {
+  return {
+    id: "20261018-201500",
+    kind: "lap_race",
+    track: { id: 1, name: NAMES.willow, sure: true },
+    car: NAMES.rxVision,
+    lap: 3,
+    laps_total: 12,
+    position: 3,
+    cars: 16,
+    ...over,
+  };
+}

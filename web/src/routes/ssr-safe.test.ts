@@ -6,7 +6,14 @@
 import { describe, expect, it } from "vitest";
 
 const routeModules = import.meta.glob(["./*.tsx", "!./*.test.tsx"]);
-const appModules = import.meta.glob(["../routes.ts", "../api/*.ts", "!../api/*.d.ts", "!../api/*.test.ts"]);
+const appModules = import.meta.glob([
+  "../routes.ts",
+  "../api/*.ts",
+  "!../api/*.d.ts",
+  "!../api/*.test.ts",
+  "../app/*.{ts,tsx}",
+  "!../app/*.test.{ts,tsx}",
+]);
 
 describe("modules import under Node with no DOM", () => {
   it("runs with no DOM", () => {

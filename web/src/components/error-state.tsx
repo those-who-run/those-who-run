@@ -13,6 +13,7 @@ export function ErrorState({
   hint = "Retry, or check the engineer's logs.",
   detail,
   onRetry,
+  actionLabel = "Retry",
   retrying = false,
   className,
 }: {
@@ -23,6 +24,8 @@ export function ErrorState({
   /** The error itself (the API's message), shown on request. */
   detail?: string | null;
   onRetry?: () => void;
+  /** The button's words, when it does more than retry ("Reload to get the new version"). */
+  actionLabel?: string;
   retrying?: boolean;
   className?: string;
 }) {
@@ -46,7 +49,7 @@ export function ErrorState({
       {onRetry && (
         <Button variant="outline" onClick={onRetry} disabled={retrying}>
           <RotateCwIcon aria-hidden="true" />
-          {retrying ? "Retrying…" : "Retry"}
+          {retrying ? "Retrying…" : actionLabel}
         </Button>
       )}
     </section>

@@ -3,9 +3,15 @@
 // the phone and iPad through `make web-preview`, and where CI screenshots and runs
 // axe (web/e2e/kit.spec.ts). A new visual pattern lands here before a page uses it.
 // The sample data is web/src/kit/samples.ts.
-import { LinkIcon, SlidersHorizontalIcon } from "lucide-react";
+import { GaugeIcon, LinkIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 
+import type { EngineStatus, EngineView } from "@/api/hooks";
+import { EngineChip } from "@/app/engine-chip";
+import { Nav } from "@/app/nav";
+import type { Section as NavSection } from "@/app/sections";
+import { usePageTitle } from "@/app/title";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Gap, GapSkeleton } from "@/components/gap";
@@ -46,7 +52,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Unknown } from "@/components/unknown";
-import { KIT_NOW, KIT_TZ, LAPS, NAMES, SESSIONS } from "@/kit/samples";
+import { engine, KIT_NOW, KIT_TZ, KIT_VERSION, LAPS, liveSession, NAMES, SESSIONS } from "@/kit/samples";
 import { duration, fuelPerLap, lapTime, missing, raceTime, speedKph } from "@/lib/format";
 
 function Section({ id, title, note, children }: { id: string; title: string; note?: ReactNode; children: ReactNode }) {
@@ -79,6 +85,37 @@ function Row({ children }: { children: ReactNode }) {
 
 const BEST = LAPS.find((l) => l.best)!.time_ms!;
 
+const online = (status: EngineStatus): EngineView => ({ state: "online", status });
+
+/** The live chip in every state: its name, the engineer, the pit wall's version. */
+const CHIPS: [string, EngineView, string | null][] = [
+  ["driving", online(engine({ activity: "driving", idle_secs: 0, session: liveSession() })), KIT_VERSION],
+  [
+    "unknown track",
+    online(engine({ activity: "driving", idle_secs: 0, session: liveSession({ track: null, lap: 1 }) })),
+    KIT_VERSION,
+  ],
+  ["no session", online(engine({ activity: "driving", idle_secs: 0 })), KIT_VERSION],
+  [
+    "paused",
+    online(engine({ activity: "paused", session: liveSession({ track: { id: 2, name: NAMES.suzuka, sure: true } }) })),
+    KIT_VERSION,
+  ],
+  ["replay", online(engine({ activity: "replay" })), KIT_VERSION],
+  ["demo", online(engine({ activity: "demo" })), KIT_VERSION],
+  ["idle", online(engine()), KIT_VERSION],
+  ["in the menus", online(engine({ telemetry: { connected: true, last_packet_age_s: 0.1 } })), KIT_VERSION],
+  ["offline", { state: "offline" }, KIT_VERSION],
+  ["checking", { state: "checking" }, null],
+  ["deploy rolling out", online(engine({ version: "0.7.0" })), KIT_VERSION],
+];
+
+/** Two sections, so the navigation shows: the first is this page. */
+const NAV_SAMPLE: NavSection[] = [
+  { id: "sessions", label: "Sessions", to: "/_kit", icon: ListIcon, prefixes: [] },
+  { id: "live", label: "Live", to: "/_kit?section=live", icon: GaugeIcon, prefixes: [] },
+];
+
 function flags(l: (typeof LAPS)[number]): LapFlagKind[] {
   const out: LapFlagKind[] = [];
   if (l.pit) out.push("pit");
@@ -103,7 +140,18 @@ function Retry() {
   );
 }
 
+/** `/_kit?throw`: a page that fails as it renders, to show the route error state
+ * inside the shell (#296 R6, web/e2e/shell.spec.ts). */
+function useThrowOnRequest() {
+  const [params] = useSearchParams();
+  if (params.has("throw")) {
+    throw new Error("/_kit?throw: the kit failed on purpose");
+  }
+}
+
 export function Component() {
+  useThrowOnRequest();
+  usePageTitle("Component kit");
   const [shortSessions, setShortSessions] = useState(false);
   return (
     <article className="space-y-10 pb-16">
@@ -265,6 +313,30 @@ export function Component() {
             <LiveBadge state="paused" />
           </State>
         </Row>
+      </Section>
+
+      <Section
+        id="kit-live-chip"
+        title="LiveChip"
+        note="The header's engineer chip (app/live-chip.tsx). Tap for the engineer's version, telemetry and voice."
+      >
+        <Row>
+          {CHIPS.map(([name, view, pitwall]) => (
+            <State key={name} name={name}>
+              <EngineChip engine={view} pitwall={pitwall} />
+            </State>
+          ))}
+        </Row>
+      </Section>
+
+      <Section
+        id="kit-navigation"
+        title="Navigation"
+        note="With two sections or more: a tab bar below 1024 px, a side rail from there. The app has one, so it shows neither."
+      >
+        <div data-kit="nav-preview" className="overflow-hidden rounded-md border">
+          <Nav sections={NAV_SAMPLE} contained label="Sections (sample)" />
+        </div>
       </Section>
 
       <Section id="kit-empty-state" title="EmptyState">

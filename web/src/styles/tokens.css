@@ -46,6 +46,24 @@
   --scrim: rgb(0 0 0 / 0.6);
 }
 
+/* Gutters (docs/design.md, Space): 16 px on a phone, 24 px from 640 px, 32 px from
+   1024 px. The shell's px-gutter keeps them clear of the safe areas too. */
+:root {
+  --gutter: 1rem;
+}
+
+@media (width >= 40rem) {
+  :root {
+    --gutter: 1.5rem;
+  }
+}
+
+@media (width >= 64rem) {
+  :root {
+    --gutter: 2rem;
+  }
+}
+
 /* Motion: state changes only, never data (point 12). */
 :root {
   --motion-fast: 150ms;

@@ -56,11 +56,24 @@ class PageRequest extends Request {
   }
 }
 
+/** Answers the data API with `body`; the engineer is down, and the pit wall is 0.7.1. */
 function answer(status: number, body: unknown) {
   vi.stubGlobal("Request", PageRequest);
-  return vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async () => new Response(JSON.stringify(body), { status }));
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const path = new URL((input as Request).url).pathname;
+    if (path === "/api/engine/status") {
+      return new Response(JSON.stringify({ error: "the engineer is not answering" }), { status: 502 });
+    }
+    if (path === "/healthz") {
+      return new Response(JSON.stringify({ ok: true, version: "0.7.1", index: true, engineer: false }));
+    }
+    return new Response(JSON.stringify(body), { status });
+  });
+}
+
+/** The data API's paths the page asked for, without the shell's own calls. */
+function dataCalls(fetch: ReturnType<typeof answer>): string[] {
+  return fetch.mock.calls.map(([r]) => new URL((r as Request).url).pathname).filter((p) => p.startsWith("/api/v1/"));
 }
 
 describe("the session list, through the generated client", () => {
@@ -76,8 +89,7 @@ describe("the session list, through the generated client", () => {
     const link = await screen.findByRole("link", { name: SESSIONS.sessions[0]!.title });
     expect(link.getAttribute("href")).toBe("/sessions/20261017-162118");
     expect(screen.getByRole("link", { name: SESSIONS.sessions[1]!.title })).toBeTruthy();
-    const request = fetch.mock.calls[0]![0] as Request;
-    expect(new URL(request.url).pathname).toBe("/api/v1/sessions");
+    expect(dataCalls(fetch)).toEqual(["/api/v1/sessions"]);
   });
 
   it("says when there are none", async () => {
@@ -101,7 +113,9 @@ describe("the session list, through the generated client", () => {
 
   it("has a page for anything else", async () => {
     const router = renderAt("/nope");
-    expect(await screen.findByText("Nothing here")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Nothing here" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "All sessions" }).getAttribute("href")).toBe("/");
+    expect(document.title).toBe("Nothing here · Pit wall");
     expect(isRouteErrorResponse(router.state.errors)).toBe(false);
   });
 });

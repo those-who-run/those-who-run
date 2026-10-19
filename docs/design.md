@@ -291,6 +291,41 @@ change from upstream:
   `motion-safe:animate-pulse`.
 - `Separator`: unchanged.
 
+## The shell
+
+The frame every page sits in (#296), in `web/src/app/`:
+
+- **Header** (`header.tsx`): sticky, `--surface`, 56 px with the 2 px
+  `--accent` line, padded below the notch (`pt-safe`). The wordmark links home;
+  the page's title shows from 640 px; the live chip sits on the right.
+- **Live chip** (`engine-chip.tsx`, `live-chip.tsx`): a 44 px chip with a
+  `--border-strong` edge. "Live · <track> · L<lap>" with the pulsing red dot,
+  "Paused · <track>" with the hollow dot, "Replay", "Demo", "Idle" or "In the
+  menus", and "Engineer offline" in `--text-muted`, never an error colour. The
+  track is named only when the detector is sure; otherwise "Unknown track",
+  muted. A version mismatch adds a small `--info` dot, and the popover says
+  "Engineer 0.7.0, pit wall 0.7.1: a deploy is rolling out". The popover is
+  `--surface-raised`, so nothing in it is red. `/_kit` shows every state.
+- **Navigation** (`nav.tsx`, `sections.ts`): nothing until there are two
+  sections. Then a bottom tab bar (64 px with its top border, plus the home
+  indicator's inset) below 1024 px, and a 96 px side rail from 1024 px. The
+  active item has the 3 px `--accent` bar (top edge in the tab bar, left edge
+  in the rail) and white text; the others are muted. `/_kit` shows it with two
+  sample sections.
+- **Gutters and safe areas:** `px-gutter` is `--gutter` (16, 24, 32 px) or the
+  side's safe-area inset, whichever is larger; `pt-safe`, `pb-safe`,
+  `pb-page` and `pb-tab-bar` keep clear of the notch and the home indicator
+  (`viewport-fit=cover` in `index.html`).
+- **Titles:** each page calls `usePageTitle("<page>")`, giving
+  "<page> · Pit wall" in the tab and the header.
+- **Errors:** a page that throws shows `ErrorState` in place of the page, with
+  the shell working around it; a route chunk gone after a deploy offers
+  "Reload to get the new version". An unknown path is "Nothing here" with a
+  link home.
+- **Back:** `<ScrollRestoration />`, and `BackLink` ("All sessions"), which is
+  the browser's Back when the page was opened from the list
+  (`state={{ back: true }}`).
+
 ## States
 
 Every data view designs these five (ADR 0004 point 9):

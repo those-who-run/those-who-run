@@ -5,11 +5,12 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck workflow-lint test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
+.PHONY: help venv hooks web-deps lock voice lint fmt typecheck workflow-lint test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
-	@echo "venv     - create .venv from uv.lock with the dev and engineer extras (needs uv)"
+	@echo "venv     - create .venv from uv.lock with the dev and engineer extras (needs uv); outside CI, make hooks too"
+	@echo "hooks    - install the git hooks (.pre-commit-config.yaml), shared by every worktree; never skip them"
 	@echo "lock     - re-resolve uv.lock after changing dependencies in pyproject.toml"
 	@echo "voice    - download the Piper voice into ./voices"
 	@echo "lint     - ruff check + format check"
@@ -26,6 +27,7 @@ help:
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "build-pitwall - podman build the slim pit wall image, $(IMAGE_NAME):$(VERSION)-pitwall"
 	@echo "replay   - replay FILE=recording.jsonl"
+	@echo "web-deps - install web/node_modules from web/package-lock.json (npm ci)"
 	@echo "web-build - build the React pit wall into web/dist (needs Node, web/.node-version)"
 	@echo "web-dev  - Vite's dev server on http://localhost:5173, /api proxied to a local pitwall"
 	@echo "web-check - ESLint, tsc, Vitest, the client and brand.css freshness checks, the bundle budget, Playwright"
@@ -36,9 +38,22 @@ help:
 	@echo "clean    - remove .venv, caches, coverage and build output"
 
 # Python version from .python-version, packages from uv.lock: the same set CI and
-# the image install.
+# the image install. Outside CI it installs the git hooks too (make hooks), so a new
+# worktree can't be set up without them.
 venv:
 	uv sync --frozen --extra dev --extra engineer
+	@if [ -z "$$CI" ]; then $(MAKE) --no-print-directory hooks; fi
+
+# The pre-commit and commit-msg hooks (#339): scripts/git-hook.sh, which runs the
+# committing checkout's own .venv/bin/pre-commit (uv.lock pins it), so one install
+# serves every worktree. Then the hook environments, so the first commit is quick.
+# Never skip them (--no-verify, SKIP=): CI runs the same hooks on every file.
+hooks:
+	@test -x .venv/bin/pre-commit || { echo "pre-commit is missing: run make venv" >&2; exit 1; }
+	@d=$$(git rev-parse --git-path hooks) && mkdir -p "$$d" && \
+		for h in pre-commit commit-msg; do cp scripts/git-hook.sh "$$d/$$h" && chmod +x "$$d/$$h"; done && \
+		echo "installed the pre-commit and commit-msg hooks in $$d"
+	.venv/bin/pre-commit install-hooks
 
 lock:
 	uv lock
@@ -161,6 +176,8 @@ $(WEB_DEPS): web/package.json web/package-lock.json
 	@command -v node >/dev/null 2>&1 || { echo "Node is missing: install Node $$(cat web/.node-version) (web/.node-version) to build and check web/" >&2; exit 1; }
 	cd web && npm ci --no-audit --no-fund
 	@touch $@
+
+web-deps: $(WEB_DEPS)
 
 web-build: $(WEB_DEPS)
 	cd web && npm run build

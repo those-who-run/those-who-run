@@ -577,10 +577,9 @@ list, each title linking to `/sessions/<id>`; a results card's old
   `web/test-results/screenshots/`, which CI uploads. The helpers in `web/e2e/`
   (the server, the viewports, the screenshot) are shared by every page's spec.
 
-Node is pinned in `web/.node-version` and `engines`, every package exactly in
-`web/package-lock.json`, installed with `npm ci`. Adding a package needs npm 11
-(`npx npm@11 install`): npm 10 fails to resolve Vitest's optional peers, though
-`npm ci` from the lockfile works with either.
+Node (26 LTS) is pinned in `web/.node-version` and `engines`, every package
+exactly in `web/package-lock.json`, installed with `npm ci`. Add or change a
+package with the npm that ships with that Node.
 
 ```sh
 make web-build       # web/dist

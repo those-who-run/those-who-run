@@ -53,3 +53,7 @@ updates:
     groups:
       web:
         update-types: [minor, patch]
+    # TypeScript majors wait until the web app is ready for them (#312).
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]

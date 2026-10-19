@@ -159,6 +159,7 @@ Python in `tests/fixtures/format-cases.json`.
 | Position | `position(p, cars)` | `P3` + muted `/16`; hidden when not shown |
 | Fuel level | `fuelPct(v)` | `43%` |
 | Fuel per lap | `fuelPerLap(v)` | `3.2%` |
+| Fuel in GT7's units | `fuelAmount(v)` | `18.7 units`: only when the session has no `fuel_capacity`; with one, fuel is a share of the tank |
 | Speed | `speedKph(v)` | `287 km/h` |
 | Duration | `duration(ms)` | `9 min 57 s`, `1 h 04 min` |
 | Session date | `sessionDate(t, now, tz)` | `Today 14:04`, `Yesterday 21:10`, `Sat 17 Oct 14:04`, `Fri 17 Oct 2025 14:04` |
@@ -172,6 +173,11 @@ Rules:
 - `position` returns two parts, `{ position: "P3", of: "/16" }`, so the field
   can be muted. Whether to show it is the API's `position_shown`.
 - Fuel percentages round half to even, as Python's `round()` does on the card.
+- Fuel is a share of the tank (`100 × amount / fuel_capacity`) when the session
+  has a `fuel_capacity`. GT7 sends a level and a capacity, never litres: in all
+  25 recordings in `tests/fixtures/` (16 cars) the capacity is 100 while
+  driving, so one of GT7's units has been 1% of a tank. With no capacity the
+  page shows the raw amount, labelled "units" (#298).
 - The cases in `tests/fixtures/format-cases.json` are the definition: Vitest
   checks them all, and pytest checks those with a Python formatter
   (`results.race_time`).

@@ -14,6 +14,8 @@ import { createServer, type Server } from "node:http";
 
 import type { Page } from "@playwright/test";
 
+import { LIVE_SESSION_ID } from "./store";
+
 /** The engineer's version when a scenario doesn't say otherwise: the pit wall's
  * own, set by the global setup once the pit wall has answered /healthz. */
 let pitwallVersion = "0.0.0";
@@ -53,6 +55,13 @@ const SCENARIOS = {
     idle_secs: 0,
     telemetry: { connected: true, last_packet_age_s: 0.0 },
     session: live({ id: null, name: TRACK, sure: false }, 2),
+  },
+  // Driving the store's open session (./store.ts), for the live session page (#298).
+  "live-store": {
+    activity: "driving",
+    idle_secs: 0,
+    telemetry: { connected: true, last_packet_age_s: 0.0 },
+    session: { ...live({ id: 442, name: "Suzuka Circuit East Course", sure: true }, 5), id: LIVE_SESSION_ID },
   },
   "driving-no-session": { activity: "driving", idle_secs: 0, telemetry: { connected: true, last_packet_age_s: 0.0 } },
   paused: {

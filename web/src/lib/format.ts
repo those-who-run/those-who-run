@@ -102,6 +102,17 @@ export function fuelPerLap(v: Num, opts?: { fuelUse?: boolean | null } | null): 
   return known(v) && v >= 0 ? `${roundHalfEven(v, 1).toFixed(1)}%` : MISSING;
 }
 
+/** An amount of fuel in GT7's own units, for when the tank's size is unknown:
+ * `18.7 units`. GT7 sends a level and a capacity, not litres; in every recording
+ * so far the capacity is 100, so a unit has been 1% of a full tank, but GT7
+ * doesn't promise it (#298). Below 0 (a refuel) is missing. */
+export function fuelAmount(v: Num, opts?: { fuelUse?: boolean | null } | null): string {
+  if (opts?.fuelUse === false) {
+    return FUEL_OFF;
+  }
+  return known(v) && v >= 0 ? `${roundHalfEven(v, 1).toFixed(1)} units` : MISSING;
+}
+
 /** A speed: `287 km/h`. */
 export function speedKph(v: Num): string {
   return known(v) && v >= 0 ? `${Math.round(v)} km/h` : MISSING;

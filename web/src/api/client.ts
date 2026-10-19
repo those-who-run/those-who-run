@@ -7,6 +7,8 @@ import type { components, paths } from "./schema";
 
 export type Session = components["schemas"]["Session"];
 export type SessionList = components["schemas"]["SessionList"];
+export type LapList = components["schemas"]["LapList"];
+export type LapRow = components["schemas"]["LapRow"];
 export type EngineStatus = components["schemas"]["EngineStatus"];
 export type Health = components["schemas"]["Health"];
 

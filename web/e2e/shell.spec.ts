@@ -258,7 +258,8 @@ test("a page whose chunk is gone after a deploy offers a reload (AC6)", async ({
   await expect(alert).toContainText("The pit wall has been updated since this tab opened.");
   await page.unroute(/\/assets\/session-[^/]*\.js$/);
   await alert.getByRole("button", { name: "Reload to get the new version" }).click();
-  await expect(page.getByRole("heading", { name: first!.title })).toBeVisible();
+  // The session page names itself by its title; its heading is the track (#298).
+  await expect(page).toHaveTitle(`${first!.title} · Pit wall`);
 });
 
 test("axe passes on the shell with the popover open, which the keyboard reaches (AC7)", async ({ page }, testInfo) => {

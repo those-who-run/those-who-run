@@ -48,6 +48,13 @@
     { "fn": "fuelPerLap", "args": [-40.5], "out": "—" },
     { "fn": "fuelPerLap", "args": [null], "out": "—" },
 
+    { "fn": "fuelAmount", "args": [18.662], "out": "18.7 units" },
+    { "fn": "fuelAmount", "args": [130.393], "out": "130.4 units" },
+    { "fn": "fuelAmount", "args": [0], "out": "0.0 units" },
+    { "fn": "fuelAmount", "args": [-58.577], "out": "—" },
+    { "fn": "fuelAmount", "args": [null], "out": "—" },
+    { "fn": "fuelAmount", "args": [18.662, { "fuelUse": false }], "out": "Fuel off" },
+
     { "fn": "speedKph", "args": [287.4], "out": "287 km/h" },
     { "fn": "speedKph", "args": [0], "out": "0 km/h" },
     { "fn": "speedKph", "args": [null], "out": "—" },

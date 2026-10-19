@@ -11,28 +11,43 @@
 // no full lap, an empty one, and one whose index can't be read. Specs reach them
 // through `storeUrl(name)` in ./pitwall.ts, so the main store stays as every other
 // spec expects it.
+//
+// One session in the main store is then copied in as still open (./store.ts), for
+// the live session page (#298 AC5).
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { setPitwallVersion, startEngineer } from "./engineer";
+import { makeLiveSession } from "./store";
 
 const WEB = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const ROOT = resolve(WEB, "..");
 const FIXTURES = join(ROOT, "tests", "fixtures");
 
-/** Replayed into the store, in this order: a time trial (#297 AC1), then the race
- * and the pit stop (#237 AC1). The time trial stands in for #297's drift session:
- * since #260 the engineer ignores that recording as GT7's demo race, so it leaves
- * nothing in a store. It goes first, so the newest sessions are as they were. */
+/** Replayed into the store, in this order: a timed race the engineer joined on lap
+ * 7 (#298 R8), a time trial (#297 AC1), then the race and the pit stop (#237 AC1).
+ * The time trial stands in for #297's drift session: since #260 the engineer
+ * ignores that recording as GT7's demo race, so it leaves nothing in a store. The
+ * joined race and the time trial go first, so the newest sessions are as they were. */
 export const STORE_FIXTURES = [
+  "real-nuc-suzuka-joined-mid-race-2026-10-18.jsonl.gz",
   "real-nuc-fuji-timed-2026-10-15.jsonl.gz",
   "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz",
   "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz",
 ];
+
+/** The time trial, which the short store has too (#297 AC2). */
+const TIME_TRIAL = "real-nuc-fuji-timed-2026-10-15.jsonl.gz";
+
+/** The fixture the open session (./store.ts) is copied from: the pit stop's six laps. */
+export const LIVE_SOURCE_FIXTURE = "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz";
+
+/** Sessions in the main store: one per fixture, and the open one. */
+export const STORE_SESSIONS = STORE_FIXTURES.length + 1;
 
 /** The race's first minute, cut with `those-who-run thin`: a session with no full
  * lap (#297 AC2). */
@@ -99,7 +114,7 @@ function otherStores(command: string, tmp: string): Record<OtherStore, string> {
   const dirs = { short: join(tmp, "short"), empty: join(tmp, "empty"), broken: join(tmp, "broken") };
   const zeroLap = join(tmp, "zero-lap.jsonl.gz");
   run(command, ["thin", join(FIXTURES, ZERO_LAP.fixture), zeroLap, "--end", String(ZERO_LAP.end)], process.env);
-  replay(command, dirs.short, [join(FIXTURES, STORE_FIXTURES[0]!), zeroLap]);
+  replay(command, dirs.short, [join(FIXTURES, TIME_TRIAL), zeroLap]);
   mkdirSync(dirs.empty);
   mkdirSync(dirs.broken);
   writeFileSync(join(dirs.broken, "index.sqlite"), "not a database ".repeat(512));
@@ -142,11 +157,22 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const command = twr();
   const tmp = mkdtempSync(join(tmpdir(), "twr-e2e-"));
   const data = join(tmp, "data");
-  replay(
-    command,
-    data,
-    STORE_FIXTURES.map((f) => join(FIXTURES, f)),
-  );
+  const sessionIds = () => (existsSync(join(data, "sessions")) ? readdirSync(join(data, "sessions")) : []);
+  for (const fixture of STORE_FIXTURES) {
+    const before = new Set(sessionIds());
+    replay(command, data, [join(FIXTURES, fixture)]);
+    if (fixture === LIVE_SOURCE_FIXTURE) {
+      // The replay names its session by the clock: the one directory it added.
+      const [id] = sessionIds().filter((d) => !before.has(d));
+      if (!id) {
+        throw new Error(`those-who-run replay ${fixture} stored no session`);
+      }
+      makeLiveSession(data, id);
+      process.env.PITWALL_LIVE_SOURCE = id;
+    }
+  }
+  // For the live spec, which adds laps to the open session as the engineer would.
+  process.env.PITWALL_STORE = data;
   const others = otherStores(command, tmp);
 
   // The stub engineer (./engineer.ts): down unless a test asks for a scenario, so

@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 import { lapTime, raceTime } from "../src/lib/format";
 import { expectAccessible } from "./a11y";
 import { setEngineer } from "./engineer";
-import { STORE_FIXTURES } from "./global-setup";
+import { STORE_SESSIONS } from "./global-setup";
 import {
   apiSessions,
   expect,
@@ -18,6 +18,7 @@ import {
   storeUrl,
   test,
 } from "./pitwall";
+import { LIVE_SESSION_ID } from "./store";
 
 interface ApiSession {
   session_id: string;
@@ -61,7 +62,7 @@ async function expectTargets(page: Page): Promise<void> {
 
 test("lists the sessions under their day, each saying how it went (AC1, AC5)", async ({ page }, testInfo) => {
   const sessions = await sessionsAt(page);
-  expect(sessions).toHaveLength(STORE_FIXTURES.length);
+  expect(sessions).toHaveLength(STORE_SESSIONS);
   await page.goto("/");
   await expect(list(page).getByRole("link")).toHaveCount(sessions.length);
 
@@ -69,13 +70,20 @@ test("lists the sessions under their day, each saying how it went (AC1, AC5)", a
   const today = page.getByRole("heading", { level: 3, name: /^Today/ });
   await expect(today).toHaveText(`Today${sessions.length} sessions`);
   // The summary line, with no filter set.
-  await expect(page.getByRole("main").getByRole("paragraph").filter({ hasText: /^3 sessions$/ })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("paragraph").filter({ hasText: new RegExp(`^${sessions.length} sessions$`) })).toBeVisible();
 
   for (const s of sessions) {
     const c = card(page, s.session_id);
     await expect(c).toBeVisible();
     await expect(sessionLink(page, s.session_id)).toHaveAccessibleName(s.track.name);
-    if (s.finished) {
+    if (s.session_id === LIVE_SESSION_ID) {
+      // The open copy of the pit stop (./store.ts): still running, with 4 laps or 5
+      // (session.spec.ts adds one as this runs).
+      await expect(c).toContainText(/Running, [45] laps/);
+    } else if (s.kind === "timed_field") {
+      // The race the engineer joined on lap 7 (#298 R8).
+      await expect(c).toContainText("1 lap, P1 of 17");
+    } else if (s.finished) {
       // The race: its position and race time.
       await expect(c).toContainText("Position 1 of 2");
       await expect(c).toContainText(`in ${raceTime(s.total_time_ms)}`);
@@ -144,6 +152,8 @@ test("hides a session with no full lap until asked, and keeps ?all=1 (AC2)", asy
 test("filters by track in the URL; Back removes it and Clear all resets (AC3)", async ({ page }, testInfo) => {
   const sessions = await apiSessions(page);
   const target = sessions.find((s) => s.track.name === "Suzuka Circuit East Course")!;
+  // The pit stop, and its open copy (./store.ts).
+  const matching = sessions.filter((s) => s.track.name === target.track.name).length;
   await page.goto("/");
   await expect(list(page).getByRole("link")).toHaveCount(sessions.length);
 
@@ -151,7 +161,7 @@ test("filters by track in the URL; Back removes it and Clear all resets (AC3)", 
   const picker = page.getByRole("dialog", { name: "Track" });
   await expect(picker).toBeVisible();
   // The options come with their counts.
-  const option = picker.getByRole("button", { name: `${target.track.name} 1` });
+  const option = picker.getByRole("button", { name: `${target.track.name} ${matching}` });
   await expect(option).toBeVisible();
   await picker.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
   await expectAccessible(page, testInfo, "sessions-filter-open");
@@ -160,9 +170,9 @@ test("filters by track in the URL; Back removes it and Clear all resets (AC3)", 
   await expect(picker).toBeHidden();
 
   await expect(page).toHaveURL(/\?track=Suzuka\+Circuit\+East\+Course$/);
-  await expect(list(page).getByRole("link")).toHaveCount(1);
+  await expect(list(page).getByRole("link")).toHaveCount(matching);
   await expect(sessionLink(page, target.session_id)).toBeVisible();
-  await expect(page.getByText(`1 of ${sessions.length} sessions`)).toBeVisible();
+  await expect(page.getByText(`${matching} of ${sessions.length} sessions`)).toBeVisible();
   const active = page.getByRole("list", { name: "Active filters" });
   await expect(active.getByRole("button", { name: `Remove filter: ${target.track.name}` })).toBeVisible();
   await expectTargets(page);
@@ -174,7 +184,7 @@ test("filters by track in the URL; Back removes it and Clear all resets (AC3)", 
   await expect(page).toHaveURL(/\/$/);
   await expect(list(page).getByRole("link")).toHaveCount(sessions.length);
   await page.goForward();
-  await expect(list(page).getByRole("link")).toHaveCount(1);
+  await expect(list(page).getByRole("link")).toHaveCount(matching);
 
   await active.getByRole("button", { name: "Clear all" }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -256,7 +266,8 @@ test("a session's card opens its page (R2)", async ({ page }, testInfo) => {
   await page.goto("/");
   await sessionLink(page, first!.session_id).click();
   await expect(page).toHaveURL(`/sessions/${first!.session_id}`);
-  await expect(page.getByRole("heading", { name: first!.title })).toBeVisible();
+  // The session page names itself by its title; its heading is the track (#298).
+  await expect(page).toHaveTitle(`${first!.title} · Pit wall`);
   await expectNoHorizontalScroll(page);
   await expectAccessible(page, testInfo, "session");
 });
@@ -265,7 +276,8 @@ test("a results card's /?session=<id> lands on /sessions/<id>", async ({ page })
   const [first] = await apiSessions(page);
   await page.goto(`/?session=${first!.session_id}`);
   await expect(page).toHaveURL(`/sessions/${first!.session_id}`);
-  await expect(page.getByRole("heading", { name: first!.title })).toBeVisible();
+  // The session page names itself by its title; its heading is the track (#298).
+  await expect(page).toHaveTitle(`${first!.title} · Pit wall`);
 });
 
 test("an unknown path has a page of its own", async ({ page }, testInfo) => {

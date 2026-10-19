@@ -108,10 +108,11 @@ describe("the session list, through the generated client", () => {
   });
 
   it("follows /?session=<id> to the session", async () => {
-    answer(200, SESSIONS.sessions[0]);
+    answer(200, KIT.retired);
     const router = renderAt("/?session=20261017-162118");
-    expect(await screen.findByRole("heading", { name: SESSIONS.sessions[0]!.title })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 2, name: KIT.retired.track.name })).toBeTruthy();
     expect(router.state.location.pathname).toBe("/sessions/20261017-162118");
+    expect(document.title).toBe(`${KIT.retired.title} · Pit wall`);
   });
 
   it("has a page for anything else", async () => {

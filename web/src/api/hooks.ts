@@ -2,13 +2,15 @@
 // A page that needs a new route adds a hook here, not a fetch of its own.
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
-import { client, unwrap, type EngineStatus } from "./client";
+import { ApiError, client, unwrap, type EngineStatus } from "./client";
 
-export type { EngineStatus, Health } from "./client";
+export { ApiError } from "./client";
+export type { EngineStatus, Health, LapRow, Session } from "./client";
 
 export const queryKeys = {
   sessions: ["sessions"] as const,
   session: (id: string) => ["sessions", id] as const,
+  laps: (id: string) => ["sessions", id, "laps"] as const,
   engineStatus: ["engine", "status"] as const,
   health: ["health"] as const,
 };
@@ -52,26 +54,49 @@ export function useSessionList(filters: SessionFilters, { live = false }: { live
   });
 }
 
+/** Polling for a session's page: every 5 s while it is the engineer's live one and
+ * the tab is visible, otherwise not at all (focus still refetches). The pit wall
+ * answers 304 to the browser's If-None-Match until the engineer writes, so most
+ * asks cost a header. An unknown session is not asked about twice. */
+function sessionQuery(live: boolean) {
+  return {
+    refetchInterval: live ? LIVE_POLL_MS : (false as const),
+    refetchIntervalInBackground: false,
+    retry: (failures: number, error: Error) => !(error instanceof ApiError && error.status === 404) && failures < 1,
+  };
+}
+
+/** One session (`GET /api/v1/sessions/{id}`), polled while `live`. */
+export function useSession(id: string, { live = false }: { live?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.session(id),
+    queryFn: async ({ signal }) =>
+      unwrap(await client.GET("/api/v1/sessions/{id}", { params: { path: { id } }, signal })),
+    ...sessionQuery(live),
+  });
+}
+
 /** One session while it is live, for the list's pinned card when the list itself
- * doesn't have it (filtered out). Nothing is asked while `id` is null. */
+ * doesn't have it (filtered out). Nothing is asked while `id` is null. The same
+ * query as useSession's (key, fetch and options), so the list and the session
+ * page share one cache entry and agree on how it is polled. */
 export function useLiveSession(id: string | null) {
   return useQuery({
     queryKey: queryKeys.session(id ?? ""),
     queryFn: async ({ signal }) =>
       unwrap(await client.GET("/api/v1/sessions/{id}", { params: { path: { id: id ?? "" } }, signal })),
     enabled: id !== null,
-    refetchInterval: LIVE_POLL_MS,
-    refetchIntervalInBackground: false,
-    retry: false,
+    ...sessionQuery(true),
   });
 }
 
-/** One session (`GET /api/v1/sessions/{id}`). */
-export function useSession(id: string) {
+/** A session's lap table (`GET /api/v1/sessions/{id}/laps`), polled while `live`. */
+export function useLaps(id: string, { live = false }: { live?: boolean } = {}) {
   return useQuery({
-    queryKey: queryKeys.session(id),
+    queryKey: queryKeys.laps(id),
     queryFn: async ({ signal }) =>
-      unwrap(await client.GET("/api/v1/sessions/{id}", { params: { path: { id } }, signal })),
+      unwrap(await client.GET("/api/v1/sessions/{id}/laps", { params: { path: { id } }, signal })),
+    ...sessionQuery(live),
   });
 }
 

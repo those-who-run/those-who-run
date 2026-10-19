@@ -32,7 +32,7 @@ is unchanged by the rebrand.
 | `GT7_CONTROL_PORT` | unset | The control API's port (`9851` in ADR 0001). Unset, nothing listens there. |
 | `GT7_BIND_ADDRESS` | `0.0.0.0` | Address both engineer ports listen on. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
-| `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.home.arpa`. Card titles link to the session there. Unset, no link. |
+| `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.<your-domain>`. Card titles link to the session there. Unset, no link. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_PAUSE_LIMIT_SECS` | `0` (no limit) | End a session that has been paused this long, as ended paused. By default a pause of any length keeps the session, as GT7 keeps the race; losing the feed during a pause (the PS5 switched off or put to rest) ends it. |

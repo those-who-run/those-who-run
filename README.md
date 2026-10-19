@@ -63,7 +63,9 @@ podman run --rm \
   muldoon/those-who-run:0.7.4  # x-release-please-version
 ```
 
-Check the voice path with `those-who-run say "Radio check"`, then drive. Next:
+To check the voice path first, run the same command with `say "Radio check"`
+after the image name: the bot joins the channel, speaks and leaves. Then
+drive. Next:
 
 - every setting and command: [setup](docs/setup.md);
 - what it says and how to change it: [the engineer](docs/engineer.md);

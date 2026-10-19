@@ -77,11 +77,13 @@ Its configuration:
 
 The pitwall image (below) carries the built app:
 
-<!-- x-release-please-start-version -->
 ```sh
-podman run --rm -p 9852:9852 -v ./data:/data muldoon/those-who-run:0.7.4
+VERSION=0.7.4  # x-release-please-version
+podman run --rm -p 9852:9852 -v ./data:/data muldoon/those-who-run:${VERSION}-pitwall
 ```
-<!-- x-release-please-end -->
+
+(The tag is built from `VERSION` because release-please would read a
+`-pitwall` suffix as part of the version and drop it.)
 
 It listens on all addresses and has no login: keep it on the LAN. The images'
 health check is `those-who-run healthcheck`: it probes the engineer's `/healthz`
@@ -90,8 +92,8 @@ on `GT7_METRICS_PORT` for `run`, and the pit wall's `/healthz` on
 
 ## The preview on the phone and iPad
 
-**On the phone and iPad from a laptop**: `make web-preview
-PREVIEW_CONTEXT=<kube context>` builds `web/dist`, copies a deployed store into
+For a pit wall that runs in Kubernetes. **On the phone and iPad from a
+laptop**: `make web-preview PREVIEW_CONTEXT=<kube context>` builds `web/dist`, copies a deployed store into
 `.preview/` (git-ignored) by `tar` out of the pit wall pod's `/data` with
 `kubectl exec` (it only reads there, never writes), and runs `those-who-run
 pitwall --address 0.0.0.0 --static web/dist` over the copy. Open
@@ -152,7 +154,7 @@ curl -s localhost:9852/api/v1/sessions | jq '.sessions[0]'
 
 ## The store
 
-Every frame of every lap is kept, so the pit wall (milestone 2.0) can show
+Every frame of every lap is kept, so the pit wall can show
 racing lines, traces and growth over time. Under `GT7_DATA_DIR`:
 
 ```

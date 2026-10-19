@@ -8,7 +8,7 @@ Capture frames during a live session with `run --record session.jsonl`, or devel
 
 ```sh
 # capture a session from any machine on the LAN (uses discovery if no IP given)
-those-who-run record session.jsonl --ps5-ip 192.0.2.108
+those-who-run record session.jsonl --ps5-ip <ps5-address>
 
 # run the rules over it, printing callouts; optionally write WAVs to listen to
 those-who-run replay session.jsonl --wav-out ./out
@@ -33,7 +33,7 @@ A fixture also needs its entry in `tests/fixtures/FIXTURES.yaml`; see
 [Fixtures](development.md#fixtures) for that and for `--window`.
 
 ```sh
-kubectl -n those-who-run cp those-who-run-xxxx:/data/recordings/20261016-193001.jsonl.gz ./outing.jsonl.gz
+cp <data volume>/recordings/20261016-193001.jsonl.gz ./outing.jsonl.gz   # however your deployment reaches it
 those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl.gz --start 120 --end 600
 ```
 

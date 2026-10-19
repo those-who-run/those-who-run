@@ -3,7 +3,7 @@
 // the phone and iPad through `make web-preview`, and where CI screenshots and runs
 // axe (web/e2e/kit.spec.ts). A new visual pattern lands here before a page uses it.
 // The sample data is web/src/kit/samples.ts.
-import { GaugeIcon, LinkIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
+import { GaugeIcon, ListIcon } from "lucide-react";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
@@ -22,41 +22,18 @@ import { LiveBadge } from "@/components/live-badge";
 import { Position, PositionSkeleton } from "@/components/position";
 import { SessionCard, SessionCardSkeleton } from "@/components/session-card";
 import { StatTile, StatTileSkeleton } from "@/components/stat-tile";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Toggle } from "@/components/ui/toggle";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Unknown } from "@/components/unknown";
 import { engine, KIT_NOW, KIT_TZ, KIT_VERSION, LAPS, liveSession, NAMES, SESSIONS } from "@/kit/samples";
-import { duration, fuelPerLap, lapTime, missing, raceTime, speedKph } from "@/lib/format";
+import { fuelPerLap, lapTime, missing, raceTime, speedKph } from "@/lib/format";
 
-// The filter pattern (#297) is a chunk of its own: the kit's stays under the route ceiling.
+// The filter pattern (#297) and the primitives (#299) are chunks of their own: the
+// kit's stays under the route ceiling.
 const FilterSamples = lazy(() => import("@/kit/filter-samples").then((m) => ({ default: m.FilterSamples })));
+const PrimitiveSamples = lazy(() =>
+  import("@/kit/primitive-samples").then((m) => ({ default: m.PrimitiveSamples })),
+);
 
 function Section({ id, title, note, children }: { id: string; title: string; note?: ReactNode; children: ReactNode }) {
   return (
@@ -155,7 +132,6 @@ function useThrowOnRequest() {
 export function Component() {
   useThrowOnRequest();
   usePageTitle("Component kit");
-  const [shortSessions, setShortSessions] = useState(false);
   return (
     <article className="space-y-10 pb-16">
       <header className="space-y-1">
@@ -424,100 +400,9 @@ export function Component() {
       </Section>
 
       <Section id="kit-primitives" title="Primitives" note="shadcn/ui, restyled only through the tokens.">
-        <State name="Button: default, outline, ghost, link, icon, disabled" wide>
-          <Button>Compare laps</Button>
-          <Button variant="outline">All sessions</Button>
-          <Button variant="ghost">Clear</Button>
-          <Button variant="link">Open the results card</Button>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="Copy link">
-                <LinkIcon aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Copy link</TooltipContent>
-          </Tooltip>
-          <Button disabled>Compare laps</Button>
-        </State>
-        <State name="Badge: default, outline, muted" wide>
-          <Badge>New best</Badge>
-          <Badge variant="outline">12-lap race</Badge>
-          <Badge variant="muted">session</Badge>
-        </State>
-        <State name="Select" wide>
-          <Select defaultValue={NAMES.willow}>
-            <SelectTrigger aria-label="Track" className="max-w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[NAMES.willow, NAMES.tokyo, NAMES.gilles, NAMES.suzuka].map((n) => (
-                <SelectItem key={n} value={n}>
-                  {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </State>
-        <State name="Toggle: off and on" wide>
-          <Toggle variant="outline" pressed={shortSessions} onPressedChange={setShortSessions}>
-            Show short sessions
-          </Toggle>
-          <Toggle variant="outline" defaultPressed>
-            Fuel
-          </Toggle>
-        </State>
-        <State name="Sheet (from the bottom) and Dialog" wide>
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline">
-                <SlidersHorizontalIcon aria-hidden="true" />
-                Filters
-              </Button>
-            </SheetTrigger>
-            <SheetContent>
-              <SheetHeader>
-                <SheetTitle>Filters</SheetTitle>
-                <SheetDescription>Narrow the list by track, car and kind.</SheetDescription>
-              </SheetHeader>
-              <SheetFooter>
-                <SheetClose asChild>
-                  <Button>Show 12 sessions</Button>
-                </SheetClose>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline">About this session</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>About this session</DialogTitle>
-                <DialogDescription>
-                  Driven for {duration(596_826)} at {NAMES.willow}.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="outline">Close</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </State>
-        <State name="Card and Separator" wide>
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle>Engineer</CardTitle>
-              <CardDescription>Version 0.7.1, up 3 h 12 min</CardDescription>
-            </CardHeader>
-            <Separator />
-            <CardContent className="text-sm text-muted">Telemetry connected. Voice joined.</CardContent>
-          </Card>
-        </State>
-        <State name="Skeleton" wide>
-          <Skeleton className="h-6 w-48" />
-        </State>
+        <Suspense fallback={null}>
+          <PrimitiveSamples />
+        </Suspense>
       </Section>
     </article>
   );

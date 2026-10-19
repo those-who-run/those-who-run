@@ -24,7 +24,7 @@ export { expect };
 
 /** The address of the pit wall over one of the global setup's other stores
  * (#297): "short", "empty" or "broken". */
-export function storeUrl(name: "short" | "empty" | "broken"): string {
+export function storeUrl(name: "short" | "empty" | "broken" | "compare"): string {
   const url = (JSON.parse(process.env.PITWALL_STORES ?? "{}") as Record<string, string>)[name];
   if (!url) {
     throw new Error(`no pit wall for the ${name} store: run through playwright.config.ts's global setup`);

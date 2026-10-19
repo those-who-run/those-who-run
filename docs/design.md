@@ -161,6 +161,10 @@ Python in `tests/fixtures/format-cases.json`.
 | Fuel per lap | `fuelPerLap(v)` | `3.2%` |
 | Fuel in GT7's units | `fuelAmount(v)` | `18.7 units`: only when the session has no `fuel_capacity`; with one, fuel is a share of the tank |
 | Speed | `speedKph(v)` | `287 km/h` |
+| A chart's whole number (unit beside it) | `whole(v)` | `287`, `6,450` |
+| Throttle, brake | `pedalPct(v)` | `44%` |
+| Gear | `gear(v)` | `3`, `N` (0: neutral or reverse) |
+| Time into a lap | `traceTime(s)` | `48.3`, `1:02.0` |
 | Duration | `duration(ms)` | `9 min 57 s`, `1 h 04 min` |
 | Session date | `sessionDate(t, now, tz)` | `Today 14:04`, `Yesterday 21:10`, `Sat 17 Oct 14:04`, `Fri 17 Oct 2025 14:04` |
 | Missing | `missing()` | `—` (muted) |
@@ -206,7 +210,7 @@ it at the three widths and runs axe over it (`web/e2e/kit.spec.ts`).
 | `EmptyState` | `empty-state.tsx` | title, why, an optional action |
 | `ErrorState` | `error-state.tsx` | what failed, what to do, the detail behind a disclosure, Retry and Retrying |
 | `Unknown` | `unknown.tsx` | "Unknown track" or "Unknown car", muted, with the reason in a popover on tap; muted text alone when there is no reason |
-| `UPlot` (charts) | (#299) | one wrapper for every chart. Tokens: axes `--text-muted`, grid `--border`, lap A `--lap-a`, lap B `--lap-b` dashed |
+| `UPlot` (charts) | `web/src/charts/UPlot.tsx` | one wrapper for every chart (see [Charts](#charts)). Tokens: axes `--text-muted`, grid `--border`, lap A `--lap-a`, lap B `--lap-b` dashed |
 
 How they are built:
 
@@ -296,6 +300,58 @@ change from upstream:
 - `Skeleton`: `bg-surface-raised` (upstream `bg-accent`), `rounded-sm`, and
   `motion-safe:animate-pulse`.
 - `Separator`: unchanged.
+
+## Charts
+
+Every chart is uPlot (ADR 0003 point 2) through one wrapper,
+`web/src/charts/UPlot.tsx` (#299 R7). Lap compare uses it first; the session
+page's charts (#300), the track map and delta (#117) and corners (#34) reuse
+it rather than writing their own. uPlot is about 20 KB gzipped: import the
+wrapper only from a lazy route, never from the entry.
+
+```tsx
+<UPlot
+  options={options}   // (theme: ChartTheme) => uPlot options without width/height; memoise it
+  data={data}         // uPlot's AlignedData: [xs ascending, ...series]
+  height={140}        // CSS px; the width is the container's
+  xRange={zoom}       // [min, max] shown, or null for all of the data
+  onXRange={setZoom}  // a drag, a pinch, or null for a double click or tap
+  minSpan={1}         // the narrowest range a pinch reaches, in x units
+  onCreate={(u) => cleanup}  // the plot, for hooks the options can't reach
+  label="Speed, lap 5 solid against lap 6 dashed"  // the chart's accessible name
+/>
+```
+
+- **Lifecycle.** The plot is made in an effect, and again only when `options`
+  changes. New `data` is `setData`, a new width (a ResizeObserver) or `height`
+  is `setSize`, and unmount is `destroy`. A render never rebuilds a plot.
+- **Theme.** `options` is called with a `ChartTheme` read from the tokens when
+  the plot is made (`web/src/charts/theme.ts`): `axis` (`--text-muted`), `grid`
+  (`--border`), `lapA` (`--lap-a`), `lapB` (`--lap-b`) and `font` (`text-meta`
+  in the UI family). `themedAxis(theme, axis)` gives an axis in it, and lap B
+  takes `LAP_B_DASH`, so the laps never differ by colour alone. A canvas can't
+  take a CSS variable; nothing in `src/charts/` has a colour of its own.
+- **Zoom.** The x range is controlled: charts that share a range share the
+  state behind `xRange`. A mouse drag selects a range (uPlot never sets its own
+  scale), two fingers pinch it, and a double click or double tap asks for null.
+  Without `onXRange` the chart doesn't zoom. The element carries the range shown
+  as `data-x-range`.
+- **Cursor and touch.** Charts that share `cursor.sync.key` (uPlot.sync) share
+  one cursor. A finger moving sideways scrubs it (`web/src/charts/gestures.ts`),
+  publishing to the group as a mouse move does; a finger moving up or down is
+  the page scrolling (`touch-action: pan-y` on the plot), so a chart never traps
+  the scroll. uPlot's own legend and tooltip are off: a value the reader needs
+  goes in a readout outside the chart, never under the finger.
+- **Style.** `web/src/styles/charts.css` follows uPlot's stylesheet: the cursor
+  a `--text-muted` hairline, the drag selection a faint veil with
+  `--border-strong` edges. Both ship in the chunks that draw charts.
+- **Lap compare** (`web/src/routes/compare.tsx`, `web/src/compare/`): one chart
+  per channel, about 140 px tall on a phone and 180 px from 600 px of width,
+  all with the same 52 px y axis and padding so their plots line up; the x axis's
+  labels on the last only. A sticky readout under the header (`top-header`)
+  shows the cursor's time and each lap's value at its own nearest sample. Traces
+  are asked for at one point per device pixel of the chart's width, at most
+  1,500, in steps of 100.
 
 ## The shell
 

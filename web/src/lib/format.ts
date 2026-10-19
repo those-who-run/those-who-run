@@ -118,6 +118,41 @@ export function speedKph(v: Num): string {
   return known(v) && v >= 0 ? `${Math.round(v)} km/h` : MISSING;
 }
 
+/** A whole number on a chart or its readout, with the unit beside it: `287`, `6,450`. */
+export function whole(v: Num): string {
+  if (!known(v)) {
+    return MISSING;
+  }
+  const n = Math.round(v);
+  const text = Math.abs(n).toLocaleString("en-GB");
+  return n < 0 ? `${MINUS}${text}` : text;
+}
+
+/** A pedal, 0 to 100: `44%`. */
+export function pedalPct(v: Num): string {
+  return known(v) && v >= 0 ? `${Math.round(v)}%` : MISSING;
+}
+
+/** A gear: `3`, and `N` for GT7's 0 (neutral, or reverse). */
+export function gear(v: Num): string {
+  if (!known(v) || v < 0) {
+    return MISSING;
+  }
+  return v === 0 ? "N" : String(Math.round(v));
+}
+
+/** A moment in a lap, from its start, to the tenth of a second: `48.3`, `1:02.0`. */
+export function traceTime(s: Num): string {
+  if (!known(s) || s < 0) {
+    return MISSING;
+  }
+  const tenths = Math.round(s * 10);
+  const minutes = Math.trunc(tenths / 600);
+  const rest = tenths - minutes * 600;
+  const secs = `${Math.trunc(rest / 10)}.${rest % 10}`;
+  return minutes ? `${minutes}:${secs.padStart(4, "0")}` : secs;
+}
+
 /** A duration, to the second under an hour and to the minute from one:
  * `42 s`, `9 min 57 s`, `1 h 04 min`. */
 export function duration(ms: Num): string {

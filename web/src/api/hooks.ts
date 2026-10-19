@@ -5,7 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ApiError, client, unwrap, type EngineStatus } from "./client";
 
 export { ApiError } from "./client";
-export type { EngineStatus, Health, LapRow, Session } from "./client";
+export type { EngineStatus, Health, LapRow, Session, Trace } from "./client";
 
 export const queryKeys = {
   sessions: ["sessions"] as const,
@@ -13,6 +13,8 @@ export const queryKeys = {
   laps: (id: string) => ["sessions", id, "laps"] as const,
   engineStatus: ["engine", "status"] as const,
   health: ["health"] as const,
+  sameTrack: (id: string) => ["sessions", id, "same-track"] as const,
+  trace: (id: string, lap: number, points: number) => ["sessions", id, "laps", lap, "trace", points] as const,
 };
 
 /** How often the list and the live session are asked again while a session is
@@ -161,4 +163,43 @@ export function useHealth() {
     },
     staleTime: 60_000,
   });
+}
+
+/** Other sessions at this one's track, by a sure track id, newest first
+ * (`GET /api/v1/sessions/{id}/same-track`, #236 R1b). */
+export function useSameTrack(id: string) {
+  return useQuery({
+    queryKey: queryKeys.sameTrack(id),
+    queryFn: async ({ signal }) =>
+      unwrap(await client.GET("/api/v1/sessions/{id}/same-track", { params: { path: { id } }, signal })),
+  });
+}
+
+/** The most points a trace is asked for: about one per device pixel of a phone's chart. */
+export const TRACE_MAX_POINTS = 1_500;
+
+/** One lap's channels against time, thinned to `points` (at most TRACE_MAX_POINTS)
+ * (`GET /api/v1/sessions/{id}/laps/{lap}/trace`, #236). A lap file that is missing or
+ * still being written is a 404, which is not worth retrying. `lap` null asks nothing. */
+export function useTrace(id: string, lap: number | null, points: number) {
+  const n = Math.max(1, Math.min(TRACE_MAX_POINTS, Math.round(points)));
+  return useQuery({
+    queryKey: queryKeys.trace(id, lap ?? -1, n),
+    queryFn: async ({ signal }) =>
+      unwrap(
+        await client.GET("/api/v1/sessions/{id}/laps/{lap}/trace", {
+          params: { path: { id, lap: lap ?? 0 }, query: { points: n } },
+          signal,
+        }),
+      ),
+    enabled: lap !== null && id !== "",
+    retry: (count, error) => !isNotFound(error) && count < 1,
+    // A closed lap's trace never changes; the ETag makes a repeat a 304 anyway.
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** The API answered 404: no such session or lap, or the lap's file is not there. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
 }

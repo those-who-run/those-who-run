@@ -2,6 +2,7 @@
   "entry": 118955,
   "route": 61440,
   "routes": {
+    "src/routes/compare.tsx": 58873,
     "src/routes/kit.tsx": 61440,
     "src/routes/not-found.tsx": 359,
     "src/routes/session.tsx": 54371,

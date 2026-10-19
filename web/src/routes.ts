@@ -18,6 +18,7 @@ export function legacySessionLink({ request }: LoaderFunctionArgs) {
 export const pages: RouteObject[] = [
   { index: true, loader: legacySessionLink, lazy: () => import("./routes/sessions") },
   { path: "sessions/:id", lazy: () => import("./routes/session") },
+  { path: "sessions/:id/compare", lazy: () => import("./routes/compare") },
   // The component kit (#295): in every build, linked from nowhere.
   { path: "_kit", lazy: () => import("./routes/kit") },
   { path: "*", lazy: () => import("./routes/not-found") },

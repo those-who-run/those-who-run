@@ -54,8 +54,39 @@ export const STORE_SESSIONS = STORE_FIXTURES.length + 1;
 const ZERO_LAP = { fixture: "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz", end: 60 };
 
 /** The other pit walls (#297 AC2, AC6): the time trial and the zero-lap session;
- * no sessions at all; an index that isn't SQLite. */
-export type OtherStore = "short" | "empty" | "broken";
+ * no sessions at all; an index that isn't SQLite; and lap compare's (#299). */
+export type OtherStore = "short" | "empty" | "broken" | "compare";
+
+/** Lap compare's store (#299): the race, and two Suzuka East Course races at one
+ * sure track id, the pit stop and the session with no stop, so lap B can come from
+ * another session at the track. */
+export const COMPARE_FIXTURES = [
+  "real-nuc-gilles-villeneuve-race-2026-10-17.jsonl.gz",
+  "real-nuc-suzuka-pit-stop-2026-10-15.jsonl.gz",
+  "real-nuc-suzuka-no-stop-2026-10-15.jsonl.gz",
+];
+
+/** The lap whose Parquet file the setup deletes from the no-stop session in the
+ * compare store, so a spec sees a missing lap file (#299 AC5). The session's id and
+ * the lap are in process.env.E2E_MISSING_LAP, as `<session id>/<lap>`. */
+export const MISSING_LAP = 6;
+
+/** Makes the compare store at `dir`, and returns `<session id>/<lap>` of the lap
+ * file it deleted from the no-stop session (the last replayed). */
+function compareStore(command: string, dir: string): string {
+  const fixtures = COMPARE_FIXTURES.map((f) => join(FIXTURES, f));
+  replay(command, dir, fixtures.slice(0, -1));
+  const sessions = join(dir, "sessions");
+  const before = new Set(readdirSync(sessions));
+  replay(command, dir, fixtures.slice(-1));
+  const noStop = readdirSync(sessions).find((id) => !before.has(id));
+  const file = join(sessions, noStop ?? "", `lap-${String(MISSING_LAP).padStart(2, "0")}.parquet`);
+  if (!noStop || !existsSync(file)) {
+    throw new Error(`the compare store has no ${file} to delete`);
+  }
+  rmSync(file);
+  return `${noStop}/${MISSING_LAP}`;
+}
 
 function twr(): string {
   const command = process.env.TWR ?? join(ROOT, ".venv", "bin", "those-who-run");
@@ -111,7 +142,13 @@ function replay(command: string, data: string, recordings: string[]): void {
 
 /** The other stores, made under `tmp`: their data directories by name. */
 function otherStores(command: string, tmp: string): Record<OtherStore, string> {
-  const dirs = { short: join(tmp, "short"), empty: join(tmp, "empty"), broken: join(tmp, "broken") };
+  const dirs = {
+    short: join(tmp, "short"),
+    empty: join(tmp, "empty"),
+    broken: join(tmp, "broken"),
+    compare: join(tmp, "compare"),
+  };
+  process.env.E2E_MISSING_LAP = compareStore(command, dirs.compare);
   const zeroLap = join(tmp, "zero-lap.jsonl.gz");
   run(command, ["thin", join(FIXTURES, ZERO_LAP.fixture), zeroLap, "--end", String(ZERO_LAP.end)], process.env);
   replay(command, dirs.short, [join(FIXTURES, TIME_TRIAL), zeroLap]);

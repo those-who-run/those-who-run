@@ -101,7 +101,7 @@
 }
 
 /* Just under the sticky header (56 px with its line) and the notch: where a
-   sticky table header sits (#298 R3). */
+   sticky table header sits (#298 R3), and lap compare's readout (#299 R4). */
 @utility top-header {
   top: calc(var(--spacing) * 14 + env(safe-area-inset-top));
 }

@@ -11,6 +11,7 @@ export type LapList = components["schemas"]["LapList"];
 export type LapRow = components["schemas"]["LapRow"];
 export type EngineStatus = components["schemas"]["EngineStatus"];
 export type Health = components["schemas"]["Health"];
+export type Trace = components["schemas"]["Trace"];
 
 // Same origin: the pit wall serves the app and the API (ADR 0003 point 6). Nothing
 // runs at import: fetch is looked up per request, so a test can replace it.

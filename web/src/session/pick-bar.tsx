@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 
 import { comparePair, compareHref } from "./model";
 
+/** Compare's "Back to the session" is then the browser's Back, so the picks and
+ * the scroll come back with the page (#296 R7). */
+const BACK = { back: true };
+
 export function PickBar({
   sessionId,
   picks,
@@ -35,7 +39,7 @@ export function PickBar({
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 pb-2">
         {pair ? (
           <Button asChild>
-            <Link to={compareHref(sessionId, pair)}>
+            <Link to={compareHref(sessionId, pair)} state={BACK}>
               Compare L{pair[0]} and L{pair[1]}
             </Link>
           </Button>
@@ -43,7 +47,7 @@ export function PickBar({
           <p className="text-sm text-muted">L{picks[0]} picked. Pick one more lap to compare.</p>
         ) : (
           <Button asChild variant="outline">
-            <Link to={compareHref(sessionId, fallback!)}>Compare best and next fastest</Link>
+            <Link to={compareHref(sessionId, fallback!)} state={BACK}>Compare best and next fastest</Link>
           </Button>
         )}
         {picks.length > 0 && (

@@ -1,0 +1,21 @@
+/* The app's changes to uPlot's own stylesheet (docs/design.md, UPlot). Imported
+   by src/charts/UPlot.tsx after uPlot's, so both ship in the chunks that draw
+   charts, never in the entry. */
+
+/* A horizontal drag scrubs and a vertical one scrolls the page (#299 R5): the
+   browser keeps vertical panning, and charts/gestures.ts gets the rest. */
+.twr-chart .u-over {
+  touch-action: pan-y;
+}
+
+/* The drag-to-zoom selection: a faint white veil with a border-strong edge. */
+.twr-chart .u-select {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-inline: 1px solid var(--border-strong);
+}
+
+/* The cursor: a muted hairline. There is no horizontal line and there are no
+   points: the readout holds the values. */
+.twr-chart .u-cursor-x {
+  border-right: 1px solid var(--text-muted);
+}

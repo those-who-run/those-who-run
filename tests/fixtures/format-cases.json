@@ -59,6 +59,28 @@
     { "fn": "speedKph", "args": [0], "out": "0 km/h" },
     { "fn": "speedKph", "args": [null], "out": "—" },
 
+    { "fn": "whole", "args": [287.4], "out": "287" },
+    { "fn": "whole", "args": [6449.6], "out": "6,450" },
+    { "fn": "whole", "args": [0], "out": "0" },
+    { "fn": "whole", "args": [-12.2], "out": "−12" },
+    { "fn": "whole", "args": [null], "out": "—" },
+
+    { "fn": "pedalPct", "args": [44.3], "out": "44%" },
+    { "fn": "pedalPct", "args": [100], "out": "100%" },
+    { "fn": "pedalPct", "args": [0], "out": "0%" },
+    { "fn": "pedalPct", "args": [null], "out": "—" },
+
+    { "fn": "gear", "args": [3], "out": "3" },
+    { "fn": "gear", "args": [0], "out": "N" },
+    { "fn": "gear", "args": [null], "out": "—" },
+
+    { "fn": "traceTime", "args": [48.27], "out": "48.3" },
+    { "fn": "traceTime", "args": [62.04], "out": "1:02.0" },
+    { "fn": "traceTime", "args": [59.96], "out": "1:00.0" },
+    { "fn": "traceTime", "args": [5.04], "out": "5.0" },
+    { "fn": "traceTime", "args": [0], "out": "0.0" },
+    { "fn": "traceTime", "args": [null], "out": "—" },
+
     { "fn": "duration", "args": [596826], "out": "9 min 57 s" },
     { "fn": "duration", "args": [3840000], "out": "1 h 04 min" },
     { "fn": "duration", "args": [3723456], "out": "1 h 02 min" },

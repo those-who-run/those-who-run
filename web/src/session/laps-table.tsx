@@ -1,6 +1,7 @@
 // The laps table (#298 R3 to R5): a semantic <table> with a sticky header, the
 // flags as LapFlag badges in the Lap cell, the best lap in the timing-best style
 // and partial laps muted. Each row has a 44 px checkbox to pick it for compare.
+// Hovering, focusing or tapping a row highlights its lap on the race story (#300).
 //
 // On a phone (below 640 px) it shows Lap, Time, Gap and Pos; the fuel and top
 // speed move into a second row, a <td colspan>, that opens on a tap of the row or
@@ -50,6 +51,8 @@ export function LapsTable({
   picks,
   onPick,
   inProgress,
+  highlight = null,
+  onHighlight,
 }: {
   session: Session;
   laps: LapRow[];
@@ -58,6 +61,9 @@ export function LapsTable({
   onPick: (lap: number) => void;
   /** While live: the lap being driven, the table's last row. */
   inProgress?: number | null;
+  /** The lap highlighted here or on the race story's chart (#300 R4). */
+  highlight?: number | null;
+  onHighlight?: (lap: number | null) => void;
 }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
   const toggle = (lap: number) =>
@@ -114,8 +120,21 @@ export function LapsTable({
                 data-partial={l.invalid || undefined}
                 data-state={picked ? "selected" : undefined}
                 data-marked={picked ? "" : undefined}
-                onClick={(e) => onRowItself(e) && toggle(l.lap)}
-                className={cn("max-sm:cursor-pointer", l.invalid && "text-muted", expanded && "max-sm:border-b-0")}
+                data-highlighted={highlight === l.lap || undefined}
+                onClick={(e) => {
+                  onHighlight?.(l.lap);
+                  if (onRowItself(e)) {
+                    toggle(l.lap);
+                  }
+                }}
+                onMouseEnter={() => onHighlight?.(l.lap)}
+                onMouseLeave={() => onHighlight?.(null)}
+                onFocus={() => onHighlight?.(l.lap)}
+                className={cn(
+                  "max-sm:cursor-pointer data-highlighted:bg-surface-raised",
+                  l.invalid && "text-muted",
+                  expanded && "max-sm:border-b-0",
+                )}
               >
                 <TableCell className="w-11 px-0">
                   <label className="flex size-11 cursor-pointer items-center justify-center">

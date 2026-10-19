@@ -5,7 +5,8 @@ import type { Page } from "@playwright/test";
 
 import { expectAccessible } from "./a11y";
 import { setEngineer } from "./engineer";
-import { apiSessions, expect, expectNoHorizontalScroll, screenshot, test } from "./pitwall";
+import { lapTime } from "../src/lib/format";
+import { apiSessions, expect, expectNoHorizontalScroll, screenshot, storeUrl, test } from "./pitwall";
 import { addLap, LIVE_LAPS_AT_START, LIVE_SESSION_ID } from "./store";
 
 interface LapRow {
@@ -14,6 +15,10 @@ interface LapRow {
   clean: boolean;
   invalid: boolean;
   fuel_used: number | null;
+  position: number | null;
+  pit: boolean;
+  out_lap: boolean;
+  best: boolean;
 }
 
 /** The replayed session with this title (not the open copy), and its laps. */
@@ -215,6 +220,10 @@ test("a live session's new lap lands without a reload, under what is read (AC5)"
   await expect(page.locator("tbody tr[data-lap]")).toHaveCount(LIVE_LAPS_AT_START);
   const next = LIVE_LAPS_AT_START + 1;
   await expect(page.locator("tr[data-in-progress]")).toHaveText(`Lap ${next} in progress`);
+  // The race story (#300 R6): a point per stored lap.
+  const chart = page.locator("[data-slot=race-story]");
+  await expect(chart).toHaveAttribute("data-points", "1,2,3,4");
+  await expect(chart.getByRole("img")).toHaveAccessibleName(/^4 laps, /);
   await screenshot(page, testInfo, "session-live");
 
   // Read part way down, then the engineer commits a lap.
@@ -226,6 +235,9 @@ test("a live session's new lap lands without a reload, under what is read (AC5)"
   await expect(page.locator("tr[data-in-progress]")).toHaveText(`Lap ${next + 1} in progress`);
   expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
   await expect(tile(page, "Laps")).toContainText(`${next}of 6`);
+  // The new lap is a new point on the race story.
+  await expect(chart).toHaveAttribute("data-points", "1,2,3,4,5");
+  await expect(chart.getByRole("img")).toHaveAccessibleName(/^5 laps, /);
 
   // The engineer leaves the session: the page stops asking.
   await setEngineer(page, "idle");
@@ -296,4 +308,200 @@ test("Copy link copies the session's address (R9)", async ({ page, context, base
   await page.getByRole("button", { name: "Copy link" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Link copied." })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${baseURL}/sessions/${id}`);
+});
+
+// The race story (#300): one point per complete lap between the tiles and the table.
+
+const story = (page: Page) => page.locator("[data-slot=race-story]");
+
+/** Where lap `lap` is on the chart: its x, half way down the plot. The x range is
+ * the first lap to the last, with 0.4 of a lap either side (race-story.tsx). */
+async function pointAt(page: Page, lap: number): Promise<{ x: number; y: number }> {
+  // On a phone the chart starts below the fold, and the pick bar covers the foot of
+  // the screen: a tap lands only where the chart is seen.
+  await story(page)
+    .locator(".u-over")
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  const box = (await story(page).locator(".u-over").boundingBox())!;
+  const laps = (await story(page).getAttribute("data-points"))!.split(",").map(Number);
+  const lo = laps[0]! - 0.4;
+  const hi = laps[laps.length - 1]! + 0.4;
+  return { x: box.x + ((lap - lo) / (hi - lo)) * box.width, y: box.y + box.height / 2 };
+}
+
+/** A tap on a touch screen, a click with a mouse. */
+async function tapPoint(page: Page, lap: number, touch: boolean): Promise<void> {
+  const { x, y } = await pointAt(page, lap);
+  if (touch) {
+    await page.touchscreen.tap(x, y);
+  } else {
+    await page.mouse.click(x, y);
+  }
+}
+
+/** What the chart's summary should say, worked out from the API's laps. */
+function expectedSummary(laps: LapRow[], positionShown: boolean): string {
+  const complete = laps.filter((l) => !l.invalid && l.time_ms);
+  const best = complete.find((l) => l.best)!;
+  const parts = [`${complete.length} laps`, `best ${lapTime(best.time_ms)} on lap ${best.lap}`];
+  const pit = complete.filter((l) => l.pit).map((l) => l.lap);
+  const out = complete.filter((l) => l.out_lap).map((l) => l.lap);
+  if (pit.length === 1) {
+    parts.push(`pit on lap ${pit[0]}`);
+  }
+  if (out.length === 1) {
+    parts.push(`out lap ${out[0]}`);
+  }
+  if (positionShown) {
+    const first = complete[0]!.position!;
+    const last = complete[complete.length - 1]!.position!;
+    parts.push(complete.every((l) => l.position === first) ? `P${first} throughout` : `P${first} to P${last}`);
+  }
+  return parts.join(", ");
+}
+
+test.describe("the race story over the compare store's no-stop race", () => {
+  // The Suzuka race with no stop (P10 to P2) is in lap compare's store.
+  test.use({
+    baseURL: async ({}, use) => {
+      await use(storeUrl("compare"));
+    },
+  });
+
+  test("a point per complete lap, the best marked, positions that step (#300 AC1, AC5)", async ({
+    page,
+  }, testInfo) => {
+    const [noStop] = (process.env.E2E_MISSING_LAP ?? "").split("/");
+    const session = await (await page.request.get(`/api/v1/sessions/${noStop}`)).json();
+    const laps = (await (await page.request.get(`/api/v1/sessions/${noStop}/laps`)).json()).laps as LapRow[];
+    const complete = laps.filter((l) => !l.invalid && l.time_ms);
+    expect(complete.length).toBeGreaterThanOrEqual(3);
+    await page.goto(`/sessions/${noStop}`);
+
+    const chart = story(page);
+    await expect(chart.getByRole("heading", { name: "Race story" })).toBeVisible();
+    await expect(chart).toHaveAttribute("data-points", complete.map((l) => l.lap).join(","));
+    await expect(chart).toHaveAttribute("data-best", String(session.best_lap_no));
+    expect(session.position_shown).toBe(true);
+    await expect(chart).toHaveAttribute("data-positions", complete.map((l) => l.position).join(","));
+    // R5: the summary is the chart's accessible name: "6 laps, best 1:01.186 on lap 4, P10 to P2".
+    const summary = expectedSummary(laps, true);
+    expect(summary).toMatch(/^6 laps, best .* on lap \d, P10 to P2$/);
+    await expect(chart.getByRole("img", { name: summary })).toBeVisible();
+    await expect(chart.locator("canvas")).toBeVisible();
+
+    // It sits between the tiles and the table.
+    const top = async (selector: string) => (await page.locator(selector).first().boundingBox())!.y;
+    expect(await top("[data-slot=race-story]")).toBeGreaterThan(await top("[data-slot=stat-tile]"));
+    expect(await top("table")).toBeGreaterThan(await top("[data-slot=race-story]"));
+
+    // At most 160 px on a phone (R5).
+    const plot = (await chart.locator("[data-slot=chart]").boundingBox())!;
+    if (testInfo.project.name === "phone") {
+      expect(plot.height).toBeLessThanOrEqual(160);
+    }
+    // The readout names the lap under the mouse or finger, the best in its colour.
+    const best = Number(session.best_lap_no);
+    const touch = testInfo.project.name !== "desktop";
+    if (touch) {
+      await tapPoint(page, best, true);
+    } else {
+      const { x, y } = await pointAt(page, best);
+      await page.mouse.move(x, y);
+    }
+    const readout = chart.locator("[data-slot=story-readout]");
+    await expect(readout).toHaveAttribute("data-lap", String(best));
+    await expect(readout).toContainText(`Lap ${best}`);
+    await expect(readout).toContainText(lapTime(session.best_lap_ms));
+    await expect(readout).toContainText("(best lap)");
+
+    await expectNoHorizontalScroll(page);
+    await screenshot(page, testInfo, "session-race-story");
+    await expectAccessible(page, testInfo, "session-race-story");
+  });
+});
+
+test("the pit stop: pit and out laps hollow, the y range from the others (#300 AC2)", async ({ page }, testInfo) => {
+  const { id, laps } = await sessionTitled(page, PIT_STOP);
+  await page.goto(`/sessions/${id}`);
+  const chart = story(page);
+  await expect(chart).toHaveAttribute("data-points", "1,2,3,4,5,6");
+  await expect(chart).toHaveAttribute("data-hollow", "3,4");
+  // The range is set by laps 1, 2, 5 and 6, with a tenth of their spread either side.
+  const racing = laps.filter((l) => !l.pit && !l.out_lap && !l.invalid).map((l) => l.time_ms!);
+  const [lo, hi] = [Math.min(...racing), Math.max(...racing)];
+  const pad = (hi - lo) * 0.1;
+  await expect(chart).toHaveAttribute("data-y-range", `${Math.round(lo - pad)}-${Math.round(hi + pad)}`);
+  // The pit lap (1:22.5) and the out lap (1:09.9) are past the top: drawn at the
+  // edge, with a marker.
+  await expect(chart).toHaveAttribute("data-edges", "3:above,4:above");
+  await expect(chart.getByRole("img")).toHaveAccessibleName(expectedSummary(laps, true));
+  await expect(chart.getByRole("img")).toHaveAccessibleName(/pit on lap 3, out lap 4, P1 throughout$/);
+
+  // The pit lap's flag is in the readout.
+  await tapPoint(page, 3, testInfo.project.name !== "desktop");
+  const readout = chart.locator("[data-slot=story-readout]");
+  await expect(readout).toHaveAttribute("data-lap", "3");
+  await expect(readout.locator("[data-flag=pit]")).toHaveText("Pit");
+  await expectNoHorizontalScroll(page);
+  await screenshot(page, testInfo, "session-race-story-pit");
+  await expectAccessible(page, testInfo, "session-race-story-pit");
+});
+
+test("two complete laps: no chart, and no chart code asked for (#300 AC3)", async ({ page }, testInfo) => {
+  const chunks: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("race-story")) {
+      chunks.push(r.url());
+    }
+  });
+  const { id, laps } = await sessionTitled(page, RACE);
+  expect(laps.filter((l) => !l.invalid && l.time_ms).length).toBe(2);
+  await page.goto(`/sessions/${id}`);
+  await expect(row(page, 2)).toBeVisible();
+  await expect(story(page)).toHaveCount(0);
+  await expect(page.getByText("Race story")).toHaveCount(0);
+  expect(chunks, "the race story's chunk").toEqual([]);
+  await expectAccessible(page, testInfo, "session-no-race-story");
+});
+
+test("a point and its row highlight each other, and a tap picks the lap (#300 AC4)", async ({ page }, testInfo) => {
+  const { id } = await sessionTitled(page, PIT_STOP);
+  await page.goto(`/sessions/${id}`);
+  const chart = story(page);
+  await expect(chart.locator("canvas")).toBeVisible();
+  const touch = testInfo.project.name !== "desktop";
+  const pick = (lap: number) => page.getByRole("checkbox", { name: `Pick lap ${lap} to compare` });
+
+  // The row highlights the point: the readout names its lap.
+  if (touch) {
+    await row(page, 2).locator("td").nth(2).click();
+  } else {
+    await row(page, 2).hover();
+  }
+  await expect(row(page, 2)).toHaveAttribute("data-highlighted", "true");
+  await expect(chart.locator("[data-slot=story-readout]")).toHaveAttribute("data-lap", "2");
+
+  // A point highlights its row (a hover, with a mouse), and a tap picks it.
+  if (!touch) {
+    const { x, y } = await pointAt(page, 5);
+    await page.mouse.move(x, y);
+    await expect(row(page, 5)).toHaveAttribute("data-highlighted", "true");
+    await expect(row(page, 2)).not.toHaveAttribute("data-highlighted");
+  }
+  await tapPoint(page, 5, touch);
+  await expect(row(page, 5)).toHaveAttribute("data-highlighted", "true");
+  await expect(pick(5)).toBeChecked();
+  await expect(page).toHaveURL(`/sessions/${id}?pick=5`);
+
+  // As the table's checkboxes do: a third pick replaces the oldest.
+  await tapPoint(page, 1, touch);
+  await tapPoint(page, 6, touch);
+  await expect(page).toHaveURL(`/sessions/${id}?pick=1%2C6`);
+  await expect(pick(5)).not.toBeChecked();
+  await expect(
+    page.getByRole("region", { name: "Compare" }).getByRole("link", { name: "Compare L1 and L6" }),
+  ).toBeVisible();
+  await screenshot(page, testInfo, "session-race-story-picked");
+  await expectAccessible(page, testInfo, "session-race-story-picked");
 });

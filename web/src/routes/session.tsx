@@ -5,10 +5,11 @@
 // is being read.
 //
 // The page, top to bottom: SessionHero, the joined-mid-session note, SessionTiles,
-// the race story (#300 goes between the tiles and the table), LapsTable, PickBar.
+// the race story (#300, with three complete laps or more), LapsTable, PickBar. The
+// race story and the table share the picks (`?pick=`) and the highlighted lap.
 import { useQueryClient } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import { ApiError, queryKeys, useEngineStatus, useLaps, useSession, type LapRow, type Session } from "@/api/hooks";
@@ -17,12 +18,17 @@ import type { LiveState } from "@/components/live-badge";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SessionMenu } from "@/session/copy-link";
 import { SessionHero, SessionHeroSkeleton } from "@/session/hero";
 import { LapsTable, LapsTableSkeleton } from "@/session/laps-table";
 import { bestAndNext, lapInProgress, parsePicks, togglePick } from "@/session/model";
 import { PickBar } from "@/session/pick-bar";
+import { raceStory, type Story } from "@/session/story";
 import { SessionTiles, SessionTilesSkeleton } from "@/session/tiles";
+
+// The chart carries uPlot: a chunk of its own, asked for only once there is a story.
+const RaceStory = lazy(() => import("@/session/race-story").then((m) => ({ default: m.RaceStory })));
 
 /** The engineer's open session when it is this one (#292): its state and lap. */
 function useLive(id: string): { state: LiveState; lap: number | null } | null {
@@ -96,17 +102,35 @@ function JoinedNote({ lap }: { lap: number }) {
   );
 }
 
+/** While the chart loads: a block its height, under its heading. */
+function RaceStorySkeleton() {
+  return (
+    <div aria-hidden="true" className="space-y-2">
+      <p className="text-xl font-semibold">Race story</p>
+      <div className="min-h-7" />
+      {/* The chart's height: 150 px, 180 px from 600 px of width (race-story.tsx). */}
+      <Skeleton className="h-37.5 w-full min-[600px]:h-45" />
+    </div>
+  );
+}
+
 function Laps({
   session,
   laps,
   live,
+  picks: known,
+  setPicks,
+  highlight,
+  onHighlight,
 }: {
   session: Session;
   laps: LapRow[];
   live: { lap: number | null } | null;
+  picks: number[];
+  setPicks: (next: number[]) => void;
+  highlight: number | null;
+  onHighlight: (lap: number | null) => void;
 }) {
-  const [picks, setPicks] = usePicks();
-  const known = picks.filter((p) => laps.some((l) => l.lap === p));
   if (!laps.length && !live) {
     return (
       <EmptyState
@@ -123,6 +147,8 @@ function Laps({
         picks={known}
         onPick={(lap) => setPicks(togglePick(known, lap))}
         inProgress={live ? lapInProgress(laps, live.lap) : null}
+        highlight={highlight}
+        onHighlight={onHighlight}
       />
       <PickBar
         sessionId={session.session_id}
@@ -142,6 +168,15 @@ export function Component() {
   useLastLook(id, !!engineLive);
   // A session the store has closed is over, whatever the engineer last said.
   const live = session.data?.closed ? null : engineLive;
+
+  const rows = laps.data?.laps;
+  const story = useMemo<Story | null>(
+    () => (session.data && rows ? raceStory(session.data, rows) : null),
+    [session.data, rows],
+  );
+  const [picks, setPicks] = usePicks();
+  const known = picks.filter((p) => rows?.some((l) => l.lap === p));
+  const [highlight, setHighlight] = useState<number | null>(null);
 
   const missing = session.error instanceof ApiError && session.error.status === 404;
   usePageTitle(session.data?.title ?? (missing ? "Session not found" : `Session ${id}`));
@@ -169,18 +204,28 @@ export function Component() {
   }
 
   const s = session.data;
-  const rows = laps.data?.laps ?? [];
+  const lapRows = rows ?? [];
   return (
     <article className="space-y-6">
       <SessionHero
         session={s}
         live={live?.state}
-        lap={lapInProgress(rows, live?.lap)}
+        lap={lapInProgress(lapRows, live?.lap)}
         menu={<SessionMenu sessionId={s.session_id} />}
       />
       {s.joined_on_lap != null && <JoinedNote lap={s.joined_on_lap} />}
-      {laps.isPending ? <SessionTilesSkeleton /> : <SessionTiles session={s} laps={rows} />}
-      {/* #300: the race story (lap times and positions) goes here. */}
+      {laps.isPending ? <SessionTilesSkeleton /> : <SessionTiles session={s} laps={lapRows} />}
+      {story && (
+        <Suspense fallback={<RaceStorySkeleton />}>
+          <RaceStory
+            story={story}
+            picks={known}
+            highlight={highlight}
+            onHighlight={setHighlight}
+            onPick={(lap) => setPicks(togglePick(known, lap))}
+          />
+        </Suspense>
+      )}
       <section aria-label="Laps">
         {laps.isPending ? (
           <LapsTableSkeleton />
@@ -192,7 +237,15 @@ export function Component() {
             retrying={laps.isFetching}
           />
         ) : (
-          <Laps session={s} laps={rows} live={live} />
+          <Laps
+            session={s}
+            laps={lapRows}
+            live={live}
+            picks={known}
+            setPicks={setPicks}
+            highlight={highlight}
+            onHighlight={setHighlight}
+          />
         )}
       </section>
     </article>

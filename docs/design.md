@@ -327,8 +327,9 @@ wrapper only from a lazy route, never from the entry.
   is `setSize`, and unmount is `destroy`. A render never rebuilds a plot.
 - **Theme.** `options` is called with a `ChartTheme` read from the tokens when
   the plot is made (`web/src/charts/theme.ts`): `axis` (`--text-muted`), `grid`
-  (`--border`), `lapA` (`--lap-a`), `lapB` (`--lap-b`) and `font` (`text-meta`
-  in the UI family). `themedAxis(theme, axis)` gives an axis in it, and lap B
+  (`--border`), `lapA` (`--lap-a`), `lapB` (`--lap-b`), `text` (`--text`),
+  `best` (`--timing-best`), `background` (`--bg`, the inside of a hollow mark)
+  and `font` (`text-meta` in the UI family). `themedAxis(theme, axis)` gives an axis in it, and lap B
   takes `LAP_B_DASH`, so the laps never differ by colour alone. A canvas can't
   take a CSS variable; nothing in `src/charts/` has a colour of its own.
 - **Zoom.** The x range is controlled: charts that share a range share the
@@ -352,6 +353,21 @@ wrapper only from a lazy route, never from the entry.
   shows the cursor's time and each lap's value at its own nearest sample. Traces
   are asked for at one point per device pixel of the chart's width, at most
   1,500, in steps of 100.
+- **Race story** (#300, `web/src/session/race-story.tsx`, its figures in
+  `web/src/session/story.ts`): on the session page between the stat tiles and
+  the laps table, only with three complete laps or more (no chart and no empty
+  box below that, and its chunk, with uPlot, isn't loaded). One point per
+  complete lap on the lap-time axis (left), joined by a `--text` line; the best
+  lap larger in `--timing-best`; pit and out laps hollow. The y range is the
+  other laps' spread plus a tenth of it either side (at least 0.1 s), so a stop
+  doesn't flatten the racing laps; a lap past it is a hollow triangle at that
+  edge, pointing out. Position, when `position_shown`, is a dashed, stepped
+  `--text-muted` line on the right axis, P1 at the top. 150 px tall on a phone,
+  180 px from 600 px of width. A hover, a tap or a table row highlights a lap
+  both ways (a hairline on the chart, the raised fill on the row) and the
+  readout above the chart names it, with its Pit or Out flag; a tap or click
+  also picks it for compare, as its checkbox does. Its accessible name is the
+  summary: "12 laps, best 1:27.764 on lap 7, P6 to P2".
 
 ## The shell
 

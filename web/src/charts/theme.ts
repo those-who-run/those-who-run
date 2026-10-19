@@ -12,6 +12,12 @@ export interface ChartTheme {
   lapA: string;
   /** Lap B: `--lap-b` (white), dashed. */
   lapB: string;
+  /** Primary marks, such as a session's lap times: `--text`. */
+  text: string;
+  /** The session's best lap: `--timing-best`. */
+  best: string;
+  /** The page behind the chart, the inside of a hollow mark: `--bg`. */
+  background: string;
   /** Axis type: `text-meta` (13 px) in the UI family. */
   font: string;
 }
@@ -32,6 +38,9 @@ export function readChartTheme(el: Element = document.documentElement): ChartThe
     grid: token(style, "--border"),
     lapA: token(style, "--lap-a"),
     lapB: token(style, "--lap-b"),
+    text: token(style, "--text"),
+    best: token(style, "--timing-best"),
+    background: token(style, "--bg"),
     font: `13px ${family}`,
   };
 }

@@ -9,8 +9,30 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { LapRow, Session } from "@/api/hooks";
 import { engine, LAPS, liveSession, SESSIONS } from "@/kit/samples";
+import type { RaceStory as RaceStoryChart } from "@/session/race-story";
 
 import { Component } from "./session";
+
+// The race story's chart needs a canvas, which jsdom lacks: a stand-in with a
+// button per point, so the page's side of it (when it shows, the picks and the
+// highlight) is tested here, and the chart itself in e2e/session.spec.ts.
+vi.mock("@/session/race-story", () => ({
+  RaceStory: ({ story, picks, highlight, onHighlight, onPick }: Parameters<typeof RaceStoryChart>[0]) => (
+    <div
+      role="img"
+      aria-label={story.summary}
+      data-slot="race-story"
+      data-highlight={highlight ?? ""}
+      data-picks={picks.join(",")}
+    >
+      {story.points.map((p) => (
+        <button key={p.lap} type="button" onClick={() => onPick(p.lap)} onMouseEnter={() => onHighlight(p.lap)}>
+          Point {p.lap}
+        </button>
+      ))}
+    </div>
+  ),
+}));
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -262,6 +284,91 @@ describe("live (R6)", () => {
     await screen.findByRole("table");
     expect(document.querySelector("[data-slot=live-badge]")).toBeNull();
     expect(document.querySelector("tr[data-in-progress]")).toBeNull();
+  });
+});
+
+describe("the race story (#300)", () => {
+  const SUMMARY = "6 laps, best 1:37.764 on lap 4, pit on lap 3, out lap 5, P5 to P1";
+
+  it("sits between the tiles and the table, named by its summary (R1, R5)", async () => {
+    serve({ session: SESSIONS.raceFinished, laps: LAPS });
+    renderAt("/sessions/20261018-191204");
+    const chart = await screen.findByRole("img", { name: SUMMARY });
+    const summary = screen.getByRole("region", { name: "Summary" });
+    const table = screen.getByRole("table");
+    expect(summary.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chart.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One point per complete lap: lap 7 is partial.
+    expect(within(chart).getAllByRole("button").map((b) => b.textContent)).toEqual(
+      [1, 2, 3, 4, 5, 6].map((n) => `Point ${n}`),
+    );
+  });
+
+  it("isn't there with two complete laps: no chart, no box (R1)", async () => {
+    serve({ session: SESSIONS.raceFinished, laps: [...LAPS.slice(0, 2), LAPS[6]!] });
+    renderAt("/sessions/20261018-191204");
+    await screen.findByRole("table");
+    expect(document.querySelector("[data-slot=race-story]")).toBeNull();
+    expect(screen.queryByText("Race story")).toBeNull();
+  });
+
+  it("picks a lap on a tap, as its checkbox does (R4)", async () => {
+    const user = userEvent.setup();
+    serve({ session: SESSIONS.raceFinished, laps: LAPS });
+    const router = renderAt("/sessions/20261018-191204");
+    const chart = await screen.findByRole("img", { name: SUMMARY });
+    await user.click(within(chart).getByRole("button", { name: "Point 2" }));
+    expect((screen.getByRole("checkbox", { name: "Pick lap 2 to compare" }) as HTMLInputElement).checked).toBe(true);
+    await user.click(within(chart).getByRole("button", { name: "Point 4" }));
+    await user.click(within(chart).getByRole("button", { name: "Point 5" }));
+    // A third pick replaces the oldest.
+    await vi.waitFor(() => expect(router.state.location.search).toBe("?pick=4%2C5"));
+    expect(chart.dataset.picks).toBe("4,5");
+    expect((screen.getByRole("checkbox", { name: "Pick lap 2 to compare" }) as HTMLInputElement).checked).toBe(false);
+    // And a tap on a picked lap unpicks it.
+    await user.click(within(chart).getByRole("button", { name: "Point 5" }));
+    expect(chart.dataset.picks).toBe("4");
+  });
+
+  it("highlights a lap's row from its point, and its point from the row (R4)", async () => {
+    const user = userEvent.setup();
+    serve({ session: SESSIONS.raceFinished, laps: LAPS });
+    renderAt("/sessions/20261018-191204");
+    const chart = await screen.findByRole("img", { name: SUMMARY });
+    const row = (n: number) => document.querySelector(`tbody tr[data-lap="${n}"]`)!;
+
+    await user.hover(within(chart).getByRole("button", { name: "Point 3" }));
+    expect(row(3).hasAttribute("data-highlighted")).toBe(true);
+    expect(row(2).hasAttribute("data-highlighted")).toBe(false);
+
+    await user.hover(row(2));
+    expect(chart.dataset.highlight).toBe("2");
+    expect(row(3).hasAttribute("data-highlighted")).toBe(false);
+    await user.unhover(row(2));
+    expect(chart.dataset.highlight).toBe("");
+  });
+
+  it("gains a point as a live lap lands (R6)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const open: Session = { ...SESSIONS.raceFinished, closed: false, finished: false, session_id: "live-1" };
+    const api: Api = {
+      session: open,
+      laps: LAPS.slice(0, 2),
+      engine: engine({ activity: "driving", session: liveSession({ id: "live-1", lap: 3 }) }),
+    };
+    serve(api);
+    renderAt("/sessions/live-1");
+    expect(await screen.findByText("Lap 3 in progress")).toBeTruthy();
+    expect(document.querySelector("[data-slot=race-story]")).toBeNull();
+
+    api.laps = LAPS.slice(0, 3);
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    const chart = await screen.findByRole("img", { name: "3 laps, best 1:38.630 on lap 2, pit on lap 3, P5 to P3" });
+    expect(within(chart).getAllByRole("button")).toHaveLength(3);
+
+    api.laps = LAPS.slice(0, 4);
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+    await vi.waitFor(() => expect(within(chart).getAllByRole("button")).toHaveLength(4));
   });
 });
 

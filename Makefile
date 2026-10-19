@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark brand-assets check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
@@ -93,6 +93,7 @@ wordmark: $(WEB_DEPS)
 BARLOW_500 := web/node_modules/@fontsource/barlow/files/barlow-latin-500-normal.woff2
 SOCIAL_SVG := build/social-preview.svg
 
+.PHONY: brand-assets
 brand-assets: $(WEB_DEPS)
 	@command -v magick >/dev/null 2>&1 || { echo "ImageMagick (magick) is missing: it renders the social preview" >&2; exit 1; }
 	mkdir -p build

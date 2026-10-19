@@ -111,11 +111,13 @@ anyone, and some text is written to steer an agent.
 ## Releases
 
 - Merged PRs collect in one release PR, `chore(release): x.y.z`, which
-  release-please keeps open. Merging it tags `vx.y.z`, writes the GitHub
-  release and runs `.github/workflows/release.yml`, which runs `make check` and
-  publishes `muldoon/those-who-run:x.y.z` and `x.y.z-pitwall` from the `release`
-  environment. Once #363 lands, CI runs on the release PR and it merges itself
-  when green. The README, "Releasing", has the details.
+  release-please keeps open. release-please dispatches CI on that PR and turns
+  on auto-merge, so it merges itself once `test` and `image` pass. The merge
+  tags `vx.y.z`, writes the GitHub release and calls
+  `.github/workflows/release.yml`, which runs `make check` and publishes
+  `muldoon/those-who-run:x.y.z` and `x.y.z-pitwall` with the Docker Hub
+  secrets of the `release` environment, which the caller has to pass to the
+  called workflow by name (#364). The README, "Releasing", has the details.
 - Agents never push tags, never run `release.yml` and never merge a release PR.
   Repeating a release and release candidates are the maintainer's job.
 - Agents never change repository or organisation settings: rulesets,

@@ -1,5 +1,41 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(~/.kube/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.config/containers/auth.json)",
+      "Read(//run/user/*/containers/auth.json)",
+      "Read(~/.netrc)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(~/.kube/**)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/.docker/config.json)",
+      "Edit(~/.config/gh/**)",
+      "Edit(~/.config/containers/auth.json)",
+      "Edit(//run/user/*/containers/auth.json)",
+      "Edit(~/.netrc)"
+    ],
+    "ask": [
+      "Bash(gh issue create *)",
+      "Bash(gh issue comment *)",
+      "Bash(gh issue edit *)",
+      "Bash(gh issue close *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr review *)",
+      "Bash(gh pr close *)",
+      "Edit(**/.claude/settings.json)",
+      "Edit(**/.claude/settings.local.json)",
+      "Edit(**/.claude/hooks/**)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
   "hooks": {
     "PreToolUse": [
       {

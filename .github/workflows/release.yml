@@ -27,9 +27,9 @@ on:
         description: The v* tag release-please created.
         required: true
         type: string
-    # Not passed in: the publish job reads them from the `release` environment,
-    # which only main and v* tags can use. A caller can't hand environment secrets
-    # on (workflow_call has no environment), so these stay optional and unused.
+    # The caller passes them by name (release-please.yml); the values come
+    # from the `release` environment, which publish names and only main and v* tags
+    # can use.
     secrets:
       DOCKERHUB_USERNAME:
         required: false

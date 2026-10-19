@@ -37,7 +37,8 @@ on:
         required: false
 
 # Least privilege: the image goes to Docker Hub with its own secrets, so the
-# GITHUB_TOKEN only reads the repository.
+# GITHUB_TOKEN only reads the repository; publish alone adds what attestations
+# need (id-token, attestations).
 permissions:
   contents: read
 
@@ -108,6 +109,12 @@ jobs:
     needs: check
     # The Docker Hub token lives only here: main and v* tags, never a PR.
     environment: release
+    # Attestations (#356): the OIDC token Sigstore signs with, and the write to
+    # this repository's attestations. No other job has either.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
       IMAGE: muldoon/those-who-run
       VERSION: ${{ needs.check.outputs.version }}
@@ -148,22 +155,78 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       # The same build again, from this job's own layers (no Actions cache: nothing
       # another run wrote goes into a published image), pushed. `latest` only for a final release.
+      # BuildKit attaches its SLSA provenance and an SPDX SBOM to the image index;
+      # the SBOM is attested below too.
       - name: Push
+        id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
           push: true
+          provenance: mode=max
+          sbom: true
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ needs.check.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}
       # The pit wall next to it, <version>-pitwall (ADR 0001 point 5, amended by ADR
       # 0003). No `latest`: a deployment pins the version it runs.
       - name: Push the pit wall
+        id: push-pitwall
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           target: pitwall
           platforms: linux/amd64
           push: true
+          provenance: mode=max
+          sbom: true
           tags: ${{ env.IMAGE }}:${{ env.VERSION }}-pitwall
+      # Signed attestations for both images (#356), by digest, stored in this
+      # repository and pushed to Docker Hub next to the image: build provenance
+      # (this workflow, this commit) and the SBOM BuildKit made. Anyone can check
+      # them: gh attestation verify oci://docker.io/muldoon/those-who-run:<version>
+      # -R those-who-run/those-who-run (README, Releasing). No storage record: it
+      # would need artifact-metadata: write, for an org view nothing here uses.
+      - name: The SBOMs, from the pushed images
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          DIGEST_PITWALL: ${{ steps.push-pitwall.outputs.digest }}
+        run: |
+          sbom() {
+            docker buildx imagetools inspect "docker.io/$IMAGE@$2" \
+              --format '{{ json .SBOM.SPDX }}' > "$1"
+            jq -e '.spdxVersion' "$1" # fails on an image without one (null)
+          }
+          sbom sbom.spdx.json "$DIGEST"
+          sbom sbom-pitwall.spdx.json "$DIGEST_PITWALL"
+      - name: Attest the image's provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the image's SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the pit wall's provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.IMAGE }}
+          subject-digest: ${{ steps.push-pitwall.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest the pit wall's SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.IMAGE }}
+          subject-digest: ${{ steps.push-pitwall.outputs.digest }}
+          sbom-path: sbom-pitwall.spdx.json
+          push-to-registry: true
+          create-storage-record: false

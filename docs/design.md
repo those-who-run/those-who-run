@@ -111,7 +111,8 @@ Dashboards need 7:1 for values: `--text`, `--text-muted` (on `--bg`),
 | `dash-*` | by viewport height | dashboards (#240): the gear at least 40% of the height |
 
 Headings are sentence case. Small caps are used for one thing: stat tile
-labels (`text-meta`, 500, letter-spacing 0.04 em, upper case).
+labels (`text-meta`, 500, letter-spacing 0.04 em as `tracking-label`, upper
+case).
 
 ## Space, size and shape
 
@@ -136,6 +137,9 @@ labels (`text-meta`, 500, letter-spacing 0.04 em, upper case).
 | `--motion-fast` | 150 ms |
 | `--motion-base` | 200 ms |
 | `--ease-out` | `cubic-bezier(0.2, 0, 0, 1)` |
+| `animate-fade-in` | opacity from 0, `--motion-fast`: popovers, overlays, dialogs |
+| `animate-sheet-in` | up from below, `--motion-base`: the bottom sheet |
+| `animate-pulse` | the live dot and skeletons, `motion-safe:` only |
 
 - Motion is for state changes only: sheets, expanding rows, the live dot's
   pulse.
@@ -175,26 +179,63 @@ Rules:
 
 ## Components
 
-The kit is in `web/src/components/`, shown at `/_kit` (#295). Use it before
-writing anything new. A new pattern goes into the kit first.
+The kit is in `web/src/components/`, shown at `/_kit` (#295,
+`web/src/routes/kit.tsx`): open it on the pit wall, or on the phone and iPad
+through `make web-preview`. Use it before writing anything new. A new pattern goes into the
+kit first, with all its states, and `/_kit` shows it. `/_kit` is in every build
+but linked from nowhere. Its sample data is `web/src/kit/samples.ts`, typed as
+the API's generated types, with real names from the NUC's store. CI screenshots
+it at the three widths and runs axe over it (`web/e2e/kit.spec.ts`).
 
-| Component | States |
-|---|---|
-| `LapTime` | normal, best (`--timing-best`), invalid (`—`), sizes sm, md and xl |
-| `Gap` | faster, slower, best; the sign always shown |
-| `Position` | `P3/16`, `P1/1`, hidden |
-| `KindBadge` | the API's `kind_label` |
-| `LapFlag` | Pit, Out, Partial, Restart, each with a tap and keyboard explanation |
-| `StatTile` | value, `—`, with a sub-line, loading |
-| `SessionCard` | race finished, retired, timed, time trial, unknown track, live; stacked or row by container width |
-| `LiveBadge` | live, paused |
-| `EmptyState` | title, why, an action |
-| `ErrorState` | message, detail disclosure, Retry |
-| `Unknown` | "Unknown track", with the reason on tap |
-| `UPlot` (charts) | one wrapper for every chart (#299). Tokens: axes `--text-muted`, grid `--border`, lap A `--lap-a`, lap B `--lap-b` dashed |
+| Component | File | States |
+|---|---|---|
+| `LapTime` | `lap-time.tsx` | normal, best (`--timing-best`, and "best lap" for a screen reader), invalid (`—`, "No lap time"), sizes sm, md and xl, loading |
+| `Gap` | `gap.tsx` | faster (`--timing-improve`), slower (`--timing-slower`), best (`Best`, `--timing-best`), even (`+0.000`), unknown, loading; the sign always shown |
+| `Position` | `position.tsx` | `P3/16`, `P1/1`, xl (the hero), hidden (`position_shown` false), unknown, loading; read as "Position 3 of 16" |
+| `KindBadge` | `kind-badge.tsx` | the API's `kind_label`; muted for an unknown kind |
+| `LapFlag` | `lap-flag.tsx` | Pit, Out, Partial, Restart, each with its explanation in a popover, by tap, click, Enter or Space; Escape closes it |
+| `StatTile` | `stat-tile.tsx` | value, best (`--timing-best`), `—`, with a sub-line, loading |
+| `SessionCard` | `session-card.tsx` | race finished, retired, timed, time trial, unknown track (and unknown car), live, paused, loading; stacked below 28 rem of its own width, a row above |
+| `LiveBadge` | `live-badge.tsx` | live (the red dot, pulsing unless motion is reduced), paused (a still, hollow dot) |
+| `EmptyState` | `empty-state.tsx` | title, why, an optional action |
+| `ErrorState` | `error-state.tsx` | what failed, what to do, the detail behind a disclosure, Retry and Retrying |
+| `Unknown` | `unknown.tsx` | "Unknown track" or "Unknown car", muted, with the reason in a popover on tap; muted text alone when there is no reason |
+| `UPlot` (charts) | (#299) | one wrapper for every chart. Tokens: axes `--text-muted`, grid `--border`, lap A `--lap-a`, lap B `--lap-b` dashed |
 
-shadcn/ui primitives sit in `web/src/components/ui/`, restyled only through
-tokens. Note here any change from upstream:
+How they are built:
+
+- **Numbers** go through `format.ts` inside the component; a page passes the
+  API's values. Every number is `whitespace-nowrap`, so a figure never breaks.
+- **Loading:** each data component has a `…Skeleton` (`LapTimeSkeleton`,
+  `GapSkeleton`, `PositionSkeleton`, `StatTileSkeleton`, `SessionCardSkeleton`)
+  in its own shape: a number's skeleton is a sample figure ("0:00.000") set in
+  the same type, so the value lands on it. `Loading` (`loading.tsx`) keeps the
+  space from the start and shows the skeleton after 150 ms.
+- **Missing:** `Missing` (`missing.tsx`) is the muted `—` with words for a
+  screen reader ("No lap time", "Position unknown").
+- **Explanations** (`LapFlag`, `Unknown`) are `Explain` (`explain.tsx`): a
+  44 × 44 px button that opens a Popover. A tooltip never carries anything a
+  reader needs, because it never opens on tap; the kit uses one only to repeat
+  an icon button's accessible name.
+- **SessionCard** works from `Session`'s values. It writes "Finished P1/16 in
+  9:56.826" and a live "Lap 5 of 12, running P3/16" itself, and takes the
+  ending Python words (retired, paused, stopped, "no full lap") from
+  `Session.result`, in sentence case (ADR 0004 point 6). The whole card is its
+  title's link, through a stretched `::after`; an `Unknown` button sits above
+  it. The title wraps to two lines and then ends in an ellipsis, with the full
+  name in its `title` and accessible name. Hovered, it gains a
+  `--border-strong` edge, not the raised fill, because it may carry the live
+  dot. Keyboard focus rings the whole card.
+- **Targets:** buttons, toggles, select triggers and items, the explanation
+  buttons and the disclosure are at least 44 × 44 px (`min-h-11`). A badge with
+  an explanation keeps its small look inside the bigger button.
+- **Focus:** one ring for everything, set in `styles/index.css`: 2 px
+  `--accent-text`, offset 2 px, on `:focus-visible`.
+
+shadcn/ui primitives sit in `web/src/components/ui/`: Button, Badge, Card,
+Sheet, Popover, Select, Toggle, Tooltip, Table, Skeleton, Separator and Dialog,
+from the `new-york-v4` registry, restyled only through tokens. Note here any
+change from upstream:
 
 - Two of shadcn's colour names mean something else here, and ours win:
   `accent` is Advan red, not shadcn's subtle hover fill, and `muted` is muted
@@ -204,8 +245,51 @@ tokens. Note here any change from upstream:
   (`background`, `primary`, `card`, `popover`, `secondary`,
   `muted-foreground`, `destructive`, `input`, `ring`) map onto ours as they
   are.
-- `Button`: tokens only (`bg-primary`, `hover:bg-accent-hover`, a
-  `border-input` outline, `text-accent-text` links); #295 designs the rest.
+- **Everywhere:** no `tw-animate-css`. Upstream's `animate-in`, `fade-in-0`,
+  `zoom-in-95` and `slide-in-from-*` are replaced by two token animations,
+  `animate-fade-in` (`--motion-fast`) and `animate-sheet-in` (`--motion-base`),
+  and there are no exit animations. No `shadow-*` but `shadow-overlay`, no
+  `ring-[3px]` focus rings (the global focus ring instead), no `dark:`
+  variants, and no arbitrary values (the lint rule): `top-[50%]`,
+  `min-w-[8rem]`, `w-[var(--x)]` and the like become `top-1/2`, `min-w-32` and
+  `w-(--x)`. `text-xs` (12 px) becomes `text-meta` (13 px). Icons are
+  `aria-hidden`.
+- `Button`: `min-h-11 min-w-11`; variants `default` (`bg-primary`,
+  `hover:bg-accent-hover`), `outline` (`border-input`), `ghost` and `link`
+  (`text-accent-text`); sizes `default` and `icon` (`size-11`). Upstream's
+  `destructive`, `secondary`, `sm` and `lg` are left out until a page needs
+  them.
+- `Badge`: `rounded-sm` (2 px), not `rounded-full`; `text-meta`; variants
+  `default`, `outline` (`border-border-strong`) and `muted` (`text-muted`).
+  Upstream's `secondary`, `destructive`, `ghost` and `link` are left out.
+- `Card`: `rounded-md`, no shadow, 16 px padding and gap (upstream 24); only
+  `CardHeader`, `CardTitle`, `CardDescription`, `CardContent` and
+  `CardFooter`.
+- `Sheet`: `side` is `bottom` (the default, a bottom sheet) or `right`;
+  `bg-surface`, `rounded-t-lg`, `shadow-overlay`, over `bg-scrim`; a 44 px close
+  button always.
+- `Dialog`: centred with `inset-x-4` and `max-w-lg` in place of upstream's
+  calc; `bg-surface`, `rounded-lg`, `shadow-overlay`, over `bg-scrim`; a 44 px
+  close button always; `DialogFooter` has no built-in close.
+- `Popover`: `bg-popover` (`--surface-raised`) with a `--border-strong` edge
+  and no shadow; `collisionPadding` 16; no `PopoverAnchor`, header, title or
+  description parts (`Explain` composes its own).
+- `Select`: trigger and items `min-h-11`; the trigger has no `size`; the
+  content is `position="popper"` by default; the focused item is
+  `bg-surface-raised` with a `--border-strong` edge (upstream `bg-accent`).
+- `Toggle`: `min-h-11 min-w-11`; off is `text-muted`, on is
+  `bg-surface-raised`, `text-fg` and a `--border-strong` edge (upstream
+  `bg-accent`); no `size`.
+- `Tooltip`: `bg-popover` with a `--border-strong` edge, `text-meta`, no arrow
+  (upstream's arrow needs an arbitrary translate); each `Tooltip` brings its
+  own provider, with a 300 ms delay.
+- `Table`: tabular figures; header cells `text-meta` and `text-muted`; rows
+  and cells `h-11`; no `TableFooter`; no hover fill; a selected row
+  (`data-state=selected`) is `bg-surface-raised`, or, with `data-marked`, a
+  `--border-strong` outline on the plain surface.
+- `Skeleton`: `bg-surface-raised` (upstream `bg-accent`), `rounded-sm`, and
+  `motion-safe:animate-pulse`.
+- `Separator`: unchanged.
 
 ## States
 

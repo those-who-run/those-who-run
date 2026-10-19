@@ -1,5 +1,6 @@
 // The session list over the real pit wall and a replayed store (#237 AC1 to AC3),
-// at each of the three viewports.
+// at each of the three viewports, each page checked by axe (ADR 0004 point 11).
+import { expectAccessible } from "./a11y";
 import { STORE_FIXTURES } from "./global-setup";
 import { apiSessions, expect, expectNoHorizontalScroll, screenshot, test } from "./pitwall";
 
@@ -20,15 +21,17 @@ test("lists every session, with no sideways scroll", async ({ page }, testInfo) 
   await expect(page.getByText("Suzuka Circuit East Course · 6-lap race")).toBeVisible();
   await expectNoHorizontalScroll(page);
   await screenshot(page, testInfo, "sessions");
+  await expectAccessible(page, testInfo, "sessions");
 });
 
-test("a session's link opens its page", async ({ page }) => {
+test("a session's link opens its page", async ({ page }, testInfo) => {
   const [first] = await apiSessions(page);
   await page.goto("/");
   await page.getByRole("link", { name: first!.title, exact: true }).click();
   await expect(page).toHaveURL(`/sessions/${first!.session_id}`);
   await expect(page.getByRole("heading", { name: first!.title })).toBeVisible();
   await expectNoHorizontalScroll(page);
+  await expectAccessible(page, testInfo, "session");
 });
 
 test("a results card's /?session=<id> lands on /sessions/<id>", async ({ page }) => {
@@ -36,4 +39,11 @@ test("a results card's /?session=<id> lands on /sessions/<id>", async ({ page })
   await page.goto(`/?session=${first!.session_id}`);
   await expect(page).toHaveURL(`/sessions/${first!.session_id}`);
   await expect(page.getByRole("heading", { name: first!.title })).toBeVisible();
+});
+
+test("an unknown path has a page of its own", async ({ page }, testInfo) => {
+  await page.goto("/no/such/page");
+  await expect(page.getByRole("heading", { name: "Nothing here" })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await expectAccessible(page, testInfo, "not-found");
 });

@@ -20,6 +20,8 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, loader: legacySessionLink, lazy: () => import("./routes/sessions") },
       { path: "sessions/:id", lazy: () => import("./routes/session") },
+      // The component kit (#295): in every build, linked from nowhere.
+      { path: "_kit", lazy: () => import("./routes/kit") },
       { path: "*", lazy: () => import("./routes/not-found") },
     ],
   },

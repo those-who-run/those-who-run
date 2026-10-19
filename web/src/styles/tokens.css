@@ -101,6 +101,36 @@
   --default-transition-duration: var(--motion-fast);
   --default-transition-timing-function: var(--ease-out);
 
+  /* State changes only (point 12): an overlay fading in, a sheet rising, the live
+     dot's pulse and a loading skeleton's. Each is still under reduced motion: the
+     durations above go to 0, and the pulses are motion-safe: only. */
+  --animate-*: initial;
+  --animate-fade-in: fade-in var(--motion-fast) var(--ease-out);
+  --animate-sheet-in: sheet-in var(--motion-base) var(--ease-out);
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  /* Stat tile labels: the one use of small caps. */
+  --tracking-*: initial;
+  --tracking-label: 0.04em;
+
   --container-content: 72rem;
   --container-list: 48rem;
 }

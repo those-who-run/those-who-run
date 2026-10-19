@@ -15,7 +15,7 @@
 @import "./brand.css";
 @import "./tokens.css";
 
-/* Always built, though nothing uses them yet: the kit (#295) and the e2e checks do. */
+/* Always built: the e2e checks set spans in them, whatever the components use. */
 @source inline("num num-lg num-xl");
 
 @layer base {
@@ -31,8 +31,11 @@
     border-color: var(--border);
   }
 
+  /* The focus ring: one look for every focusable part, so no component can drop it
+     (ADR 0004 point 11). --accent-text holds 3:1 on every surface. */
   :focus-visible {
-    outline-color: var(--accent-text);
+    outline: 2px solid var(--accent-text);
+    outline-offset: 2px;
   }
 
   ::selection {

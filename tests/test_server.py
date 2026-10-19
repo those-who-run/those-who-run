@@ -214,8 +214,8 @@ class PacedTelemetry(FakeTelemetry):
 async def test_a_websocket_route_streams_while_frames_are_processed(settings, sim, http):
     race = sim(total_laps=3).menu().at_track().race([90000, 89000, 88500])
     frames = race.drive(150).frames  # ~1 s of frames at the paced rate
-    processed: list[float] = []
     made: list[PacedTelemetry] = []
+    backlog: list[int] = []  # frames waiting for the engine, at each push
 
     def telemetry(app: App) -> PacedTelemetry:
         made.append(PacedTelemetry(app, frames))
@@ -234,6 +234,7 @@ async def test_a_websocket_route_streams_while_frames_are_processed(settings, si
 
         async def push() -> None:
             while True:
+                backlog.append(app.states.qsize())
                 await ws.send_json({"packets": app.status()["packets"]})
                 await asyncio.sleep(0.01)
 
@@ -248,13 +249,6 @@ async def test_a_websocket_route_streams_while_frames_are_processed(settings, si
     app.server.api.router.add_get("/dash", dash)
     running = asyncio.create_task(app.run())
     await wait_for(lambda: made and made[0].packets > 0)
-    process = app.engine.process
-
-    def counted(state: Any) -> None:
-        processed.append(time.monotonic())
-        process(state)
-
-    app.engine.process = counted  # type: ignore[method-assign]
     seen: list[int] = []
     async with http.ws_connect(url(app.server, "/api/v1/dash")) as ws:
         async for msg in ws:
@@ -266,9 +260,10 @@ async def test_a_websocket_route_streams_while_frames_are_processed(settings, si
     assert len(seen) > 10 and seen == sorted(seen)  # it streamed as the frames came in
     assert app.status()["packets"] == len(frames)
     # Every frame was handled as it arrived: the stream did not hold up ingest.
+    # Measured as frames queued at each push, not as wall-clock gaps, which a busy
+    # CI runner stretches (#165): a blocked loop would let the feed pile up here.
     assert app.states.qsize() == 0
-    gaps = [b - a for a, b in zip(processed, processed[1:], strict=False)]
-    assert max(gaps) < 0.1
+    assert max(backlog) < 5
 
 
 @pytest.fixture

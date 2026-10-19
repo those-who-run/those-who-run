@@ -9,8 +9,8 @@
 #   track     as the track table names it, or why there is no track
 #   car       as the car table names it, or why there is no car
 #   kind      session kind and start type (sessionkind.py), one per session
-#   outing    the NUC outing it was cut from (GT7_RECORD_DIR file name without
-#             .jsonl.gz, UTC), or null when it was not recorded on the NUC or
+#   outing    the outing it was cut from (GT7_RECORD_DIR file name without
+#             .jsonl.gz, UTC), or null when it was not recorded by the engineer or
 #             the outing was pruned before its id was noted
 #   source    where it came from and which part was kept
 #   pins      the behaviours the tests check against it
@@ -76,7 +76,7 @@ fixtures:
     car: Ferrari F355 Berlinetta '94
     kind: [solo_timed (flying)]
     outing: null
-    source: NUC outing from about 12:03 UTC, since pruned.
+    source: Outing from about 12:03 UTC, since pruned.
     pins:
       - A track the table lacks is reported as none, not as the nearest layout
         (Fuji).
@@ -91,7 +91,7 @@ fixtures:
     car: Ferrari F355 Berlinetta '94
     kind: [solo_laps (flying)]
     outing: null
-    source: NUC outing from about 12:05 UTC, since pruned. One lap, 60 s.
+    source: Outing from about 12:05 UTC, since pruned. One lap, 60 s.
     pins:
       - Suzuka East is confirmed on the lap counter.
       - Solo laps with a flying start.
@@ -103,7 +103,7 @@ fixtures:
     car: Honda Civic Si Group A version '87
     kind: [lap_race (rolling)]
     outing: null
-    source: NUC outing from about 16:56 UTC, since pruned. A six-lap race.
+    source: Outing from about 16:56 UTC, since pruned. A six-lap race.
     pins:
       - A finished race on the last litre, flag to results, called tight to the
         flag and never told to pit.
@@ -120,7 +120,7 @@ fixtures:
     car: Honda Civic Si Group A version '87
     kind: [lap_race (rolling)]
     outing: null
-    source: NUC outing from about 17:04 UTC, since pruned. A six-lap race with a stop.
+    source: Outing from about 17:04 UTC, since pruned. A six-lap race with a stop.
     pins:
       - A pit stop whose finish line is crossed in the entry cut.
       - The pit-in lap posted on a loading frame is still called.
@@ -136,7 +136,7 @@ fixtures:
     car: Honda Civic Si Group A version '87
     kind: [solo_timed (flying)]
     outing: null
-    source: NUC outing from about 17:11 UTC, since pruned.
+    source: Outing from about 17:11 UTC, since pruned.
     pins:
       - A timed session from the pits is confirmed as SUGO.
       - A time trial with a flying start.
@@ -148,7 +148,7 @@ fixtures:
     car: NISMO 400R '95
     kind: [solo_timed (flying)]
     outing: null
-    source: NUC outing from about 18:34 UTC, since pruned. A time trial, two laps.
+    source: Outing from about 18:34 UTC, since pruned. A time trial, two laps.
     pins:
       - Fuji from the pits is never Tokyo East.
       - A time trial has no position and no fuel callouts, and gets a summary
@@ -165,7 +165,7 @@ fixtures:
     kind: [none (GT7's demo race, ignored; the detector reads lap_race (rolling))]
     outing: null
     source: >-
-      NUC outing from about 18:57 UTC, since pruned. Indexed as a race quit after
+      Outing from about 18:57 UTC, since pruned. Indexed as a race quit after
       lap 1; it is GT7's attract-mode demo (#260): from the menu with no loading
       screen, the flag off, the fuel flat at 100.
     pins:
@@ -181,7 +181,7 @@ fixtures:
     kind: [none (GT7's demo race, ignored; the detector reads lap_race (rolling))]
     outing: null
     source: >-
-      NUC outing from about 19:04 UTC, since pruned. The first 40 s of GT7's
+      Outing from about 19:04 UTC, since pruned. The first 40 s of GT7's
       attract-mode demo (#260), frame for frame the demo of outing
       20261018-130241: it opens on the last frames of the demo before it.
     pins:
@@ -197,7 +197,7 @@ fixtures:
     kind: [none (GT7's demo race, ignored; the detector reads lap_race (rolling))]
     outing: null
     source: >-
-      NUC outing from about 19:10 UTC, since pruned. Indexed as a race quit after
+      Outing from about 19:10 UTC, since pruned. Indexed as a race quit after
       lap 1; it is GT7's attract-mode demo (#260), frame for frame the demo of
       outing 20261018-105854 (same positions, speeds and time of day).
     pins:
@@ -213,7 +213,7 @@ fixtures:
     kind: [none (GT7's demo race, ignored; the detector reads solo_laps (flying))]
     outing: null
     source: >-
-      NUC outing from about 19:17 UTC, since pruned. Indexed as two drift laps;
+      Outing from about 19:17 UTC, since pruned. Indexed as two drift laps;
       it starts as GT7's attract-mode demo does (#260): from the menu with no
       loading screen, the flag off, the fuel flat at 100.
     pins:
@@ -229,7 +229,7 @@ fixtures:
     kind: [timed_field (flying)]
     outing: null
     source: >-
-      NUC outing from about 12:10 UTC, since pruned. A 5-minute timed race,
+      Outing from about 12:10 UTC, since pruned. A 5-minute timed race,
       19 AI cars, 5 laps, P1, and the replayed frames after it.
     pins:
       - A timed race finishes at the line after 3 s of hands-off coasting.
@@ -242,7 +242,7 @@ fixtures:
     car: Toyota 86 Gr.B Rally Car
     kind: [lap_race (rolling)]
     outing: 20261017-141530
-    source: NUC outing 20261017-141530, laps 6 to 8.
+    source: Outing 20261017-141530, laps 6 to 8.
     pins:
       - A pit stop whose finish line is crossed in the exit cut.
       - Cut mid-lap, it reads as joined part way and names no track (#265).
@@ -254,7 +254,7 @@ fixtures:
     car: Mazda RX-VISION GT3 EVO '26
     kind: [lap_race (rolling)]
     outing: 20261017-162118
-    source: NUC outing 20261017-162118, the 12-lap daily race, the first 230 s.
+    source: Outing 20261017-162118, the 12-lap daily race, the first 230 s.
     pins:
       - Detection is probable once the car crosses the line and confirmed at
         the end of lap 1.
@@ -268,7 +268,7 @@ fixtures:
     car: Mazda RX-VISION GT3 EVO '26
     kind: [lap_race (rolling)]
     outing: 20261017-162118
-    source: NUC outing 20261017-162118, laps 5 to 8 of the 12-lap race.
+    source: Outing 20261017-162118, laps 5 to 8 of the 12-lap race.
     pins:
       - A pit stop whose finish line is crossed in the pit lane.
       - In and out laps are left out of the fuel average, and stints split at
@@ -283,7 +283,7 @@ fixtures:
     kind: [lap_race (rolling)]
     outing: 20261018-094323
     source: >-
-      NUC outing 20261018-094323, the whole 12-lap race, P9 of 20, thinned at
+      Outing 20261018-094323, the whole 12-lap race, P9 of 20, thinned at
       one frame a second (two stops at 2 Hz is twice the size and calls the same).
     pins:
       - Two pit stops whose finish line is crossed in the pit lane, at the
@@ -303,7 +303,7 @@ fixtures:
     kind: [none (a race replay, ignored)]
     outing: "20261018-100645"
     source: >-
-      NUC outing 20261018-100645: the GT7 replay of the SUGO 12-lap race
+      Outing 20261018-100645: the GT7 replay of the SUGO 12-lap race
       20261018-094323, watched from the start and skipped to the end on lap 4.
       Thinned at 2 Hz, with seconds 10 to 14 (the start, from the track
       screen) at full rate.
@@ -320,7 +320,7 @@ fixtures:
     kind: [none (GT7's demo race, ignored)]
     outing: "20261018-110141"
     source: >-
-      NUC outing 20261018-110141, whole: GT7's attract-mode demo race on the
+      Outing 20261018-110141, whole: GT7's attract-mode demo race on the
       idle PS5, joined on lap 2 of 5 when the engineer restarted on 0.5.1.
       Thinned at 2 Hz, with the first 4 s (the check's window) at full rate.
     pins:
@@ -336,7 +336,7 @@ fixtures:
     kind: [lap_race (rolling), lap_race (rolling), lap_race (rolling)]
     outing: "20261018-130722"
     source: >-
-      NUC outing 20261018-130722, the whole outing at 2 Hz: three two-lap races,
+      Outing 20261018-130722, the whole outing at 2 Hz: three two-lap races,
       restarted from the pause menu on lap 2 and then on lap 1, then finished P2.
     pins:
       - A restart on lap 1 or lap 2 resets the lap counter through a loading
@@ -354,7 +354,7 @@ fixtures:
     kind: [timed_field (start not seen)]
     outing: "20261018-134517"
     source: >-
-      NUC outing 20261018-134517, the first 169 s at 2 Hz: the engineer pod came
+      Outing 20261018-134517, the first 169 s at 2 Hz: the engineer pod came
       back 20 s into lap 7 of a timed race at Suzuka, leading, after a chaos-test
       kill. It stops on lap 8, before the pause the race was quit from.
     pins:
@@ -373,7 +373,7 @@ fixtures:
     kind: [timed_field (flying)]
     outing: "20261018-132115"
     source: >-
-      NUC outing 20261018-132115, the whole outing at 1 Hz: the old engineer
+      Outing 20261018-132115, the whole outing at 1 Hz: the old engineer
       pod's view of a Suzuka timed race, from the menu to the chaos-test kill 20 s
       into lap 7, leading. A 4-minute pause on lap 3 and a stop on lap 4 that sat
       in the box for 3.5 minutes and took no fuel. Its last frame is the last one
@@ -394,7 +394,7 @@ fixtures:
     kind: [timed_field (flying)]
     outing: "20261018-141557"
     source: >-
-      NUC outing 20261018-141557, the whole outing thinned at 2 Hz: a timed race
+      Outing 20261018-141557, the whole outing thinned at 2 Hz: a timed race
       at Spa from the pit box, four laps, into the pits at the end of lap 4 (a
       loading cut-scene that keeps the lap counter) and quit 13 s later from
       the box.
@@ -413,7 +413,7 @@ fixtures:
     kind: [solo_timed (flying)]
     outing: "20261018-142627"
     source: >-
-      NUC outing 20261018-142627, the whole outing thinned at 2 Hz: a time trial
+      Outing 20261018-142627, the whole outing thinned at 2 Hz: a time trial
       at Spa with a flying start, two laps and a quit from the pause menu on
       lap 3.
     pins:
@@ -721,7 +721,7 @@ lost:
     note: >-
       Willow Springs Big Willow race in the Toyota 86 Gr.B, P4 of 12, best
       1:21.559. Pruned before the archive was made (2026-10-17). Its sessions
-      20261016-180258 and 20261016-180407 are still in /data/sessions on the NUC.
+      20261016-180258 and 20261016-180407 are still in /data/sessions of the store.
     cited_by: [1, 16, 19, 34, 36, 62, 65, 66, 86, 87, 92, 95, 96, 98, 103, 104, 105, 118, 119, 134]
   - id: "20261016-165416"
     note: >-

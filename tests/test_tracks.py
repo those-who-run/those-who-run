@@ -467,7 +467,7 @@ def test_real_n24h_race_is_probable_before_the_lights_and_confirmed_after_lap_1(
     assert {GP, NORDSCHLEIFE, TOURIST} <= seen
 
 
-# the real thing, from the NUC (2026-10-15): a lap of a track GT7 added that day, which
+# the real thing, from a drive (2026-10-15): a lap of a track GT7 added that day, which
 # the table does not have, and a one-lap race at Suzuka East.
 
 
@@ -517,7 +517,7 @@ def test_real_suzuka_east_is_confirmed_on_the_lap_counter():
     assert on_lap_1 and all(s.match.confidence in ("ambiguous", "probable") for s in on_lap_1)
 
 
-# the real thing, from the NUC (2026-10-15 evening): layouts named after another
+# the real thing, from a drive (2026-10-15 evening): layouts named after another
 # circuit's line, crossed from a pit lane or in the middle of a lap.
 
 

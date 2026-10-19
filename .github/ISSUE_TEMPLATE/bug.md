@@ -8,7 +8,7 @@ labels: [bug]
 <!-- What the engineer said, stored or posted, and what it should have done. -->
 
 ## When
-<!-- Date and time of the drive (local), track, car, session kind. The NUC keeps the newest 20 outings: note the time so the recording can be pulled before it is pruned. -->
+<!-- Date and time of the drive (local), track, car, session kind. The engineer keeps the newest 20 outings: note the time so the recording can be pulled before it is pruned. -->
 
 ## Version
 <!-- The image tag (`muldoon/those-who-run:x.y.z`) or, from source, the commit (`git rev-parse --short HEAD`). The startup log line shows the version too. -->

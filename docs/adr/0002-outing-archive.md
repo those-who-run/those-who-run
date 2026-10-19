@@ -3,6 +3,9 @@
 **Status:** Accepted, 2026-10-17. Asked for by #197 (its Open question, and the
 roadmap's open decision).
 
+**Note, 2026-10-19:** the archive moved to the `outings` release of its own
+repository, [those-who-run/outings](https://github.com/those-who-run/outings).
+
 ## Context
 
 The NUC keeps the newest 20 outings (`GT7_RECORD_KEEP`), yet the open specs

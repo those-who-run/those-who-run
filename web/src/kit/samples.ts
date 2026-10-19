@@ -1,6 +1,6 @@
 // Sample data for /_kit, typed as the API's generated types: a schema change breaks
 // the kit's build before it breaks a page. Track and car names are real, copied from
-// the NUC's store on 2026-10-18 as plain strings, so the kit shows what long names
+// the engineer's store on 2026-10-18 as plain strings, so the kit shows what long names
 // do at 390 px.
 import type { components } from "@/api/schema";
 

@@ -3,13 +3,10 @@
 Where Those Who Run is going and in what order. GitHub milestones and issues
 are the source of truth for the details. Each milestone is a release, each
 release below links to its milestone, and every open issue carries a `stream:`
-label so a stream can be worked on its own. The
-[project board](https://github.com/users/ciaranRoche/projects/2) shows the same
-releases: a board for the current release and the next one, and a table of
-everything open.
+label so a stream can be worked on its own.
 
 Last reviewed 2026-10-18, when the releases were cut down to the smallest
-that still ship something whole, so changes reach the NUC quickly. Earlier
+that still ship something whole, so changes ship quickly. Earlier
 the same day, after the UI decision (ADR 0003), 0.6 was cut down to the MVP
 and the rest of its foundations moved to the release that first needs each
 one. The review before was on 2026-10-17, at release 0.4.0, after a code
@@ -25,8 +22,8 @@ review and an architecture review of the same day.
 3. **Numbers before words.** Measurements are computed deterministically and
    tested on real recordings. AI only phrases, prioritises and answers, and
    never invents a number.
-4. **Local first.** Everything runs in the home lab; a cloud model is optional
-   and off by default.
+4. **Local first.** Everything runs on your own hardware; a cloud model is
+   optional and off by default.
 5. **Pinned by a recording.** A behaviour ships with a fixture from a real
    drive.
 
@@ -40,9 +37,9 @@ it (checked against every issue's "Blocked by" line on 2026-10-18).
 
 | Release | What it delivers |
 |---|---|
-| [0.5 Solid ground](https://github.com/those-who-run/those-who-run/milestone/19) | The bugs from the code review fixed, including the stored best lap (#185). Guardrails: `make check` with type checking, reproducible builds, release checks, deterministic tests, gzipped fixtures. The pit wall on the NUC (#35), after the data and network decisions (#194). An archive for the outings specs rely on (#197). Now taking 0.5.x patches (#260). |
+| [0.5 Solid ground](https://github.com/those-who-run/those-who-run/milestone/19) | The bugs from the code review fixed, including the stored best lap (#185). Guardrails: `make check` with type checking, reproducible builds, release checks, deterministic tests, gzipped fixtures. The pit wall deployed (#35), after the data and network decisions (#194). An archive for the outings specs rely on (#197). Now taking 0.5.x patches (#260). |
 | [0.6 Runtime and API server](https://github.com/those-who-run/those-who-run/milestone/20) | **The MVP, part one.** CLI commands in their own modules (#171), a runtime object that owns the live engineer (#172), and an API server on the engineer's event loop (#173). Sessions that stay right through a pause (#229) and a restart on lap 1 (#157). |
-| [0.7 React pit wall](https://github.com/those-who-run/those-who-run/milestone/26) | **The MVP, part two**, in five small releases, to [ADR 0003](docs/adr/0003-ui-stack.md) and [ADR 0004](docs/adr/0004-design-language.md) (the design language, #291). **0.7.0:** the read-only data API that proxies the engineer (#236), the engineer's status route (#292), and the web scaffold with a device preview from the laptop (#237). The NUC keeps one pit wall, Streamlit, until 0.7.4 switches it. **[0.7.1 Design system](https://github.com/those-who-run/those-who-run/milestone/44):** tokens, fonts and one formatter shared with Python (#294), the component kit on `/_kit` (#295), the app shell with the live engineer chip (#296). **[0.7.2 Sessions](https://github.com/those-who-run/those-who-run/milestone/45):** the session list (#297) and the session page (#298). **[0.7.3 Lap compare](https://github.com/those-who-run/those-who-run/milestone/46):** compare on uPlot (#299) and the race-story chart (#300). **[0.7.4 Streamlit retired](https://github.com/those-who-run/those-who-run/milestone/47):** the cut-over in place (#238). |
+| [0.7 React pit wall](https://github.com/those-who-run/those-who-run/milestone/26) | **The MVP, part two**, in five small releases, to [ADR 0003](docs/adr/0003-ui-stack.md) and [ADR 0004](docs/adr/0004-design-language.md) (the design language, #291). **0.7.0:** the read-only data API that proxies the engineer (#236), the engineer's status route (#292), and the web scaffold with a device preview from the laptop (#237). A deployment keeps one pit wall, Streamlit, until 0.7.4 switches it. **[0.7.1 Design system](https://github.com/those-who-run/those-who-run/milestone/44):** tokens, fonts and one formatter shared with Python (#294), the component kit on `/_kit` (#295), the app shell with the live engineer chip (#296). **[0.7.2 Sessions](https://github.com/those-who-run/those-who-run/milestone/45):** the session list (#297) and the session page (#298). **[0.7.3 Lap compare](https://github.com/those-who-run/those-who-run/milestone/46):** compare on uPlot (#299) and the race-story chart (#300). **[0.7.4 Streamlit retired](https://github.com/those-who-run/those-who-run/milestone/47):** the cut-over in place (#238). |
 | [0.8 Engine model](https://github.com/those-who-run/those-who-run/milestone/27) | Packages by area (#195), deterministic tests (#165), one frame delta (#175), a per-frame `RaceContext` for rules (#176), one lap model (#177), one fuel model (#186), and a frame budget (#196). |
 | [0.9 GT7 decoder](https://github.com/those-who-run/those-who-run/milestone/28) | Frame sources behind one interface (#182) and our own GT7 decoder in place of gt-telem (#235), the A-packet flags (#130), the extended packet modes (#88), and raw packet recordings (#192). |
 | [0.10 Speech pipeline](https://github.com/those-who-run/those-who-run/milestone/29) | A speech policy layer (#179), the audio pipeline (#180), a Verbaliser with units (#181), structured messages (#187), replay that speaks in real time (#188), phrase tuning (#28) and voice selection (#29). |
@@ -115,7 +112,7 @@ nothing after 0.6; 0.15 and 0.16 (setup) need only the MVP.
 ## Order
 
 - **Now: 0.5 Solid ground.** 0.5.x patches as bugs turn up (#260). The pit
-  wall goes on the NUC (#35).
+  wall gets deployed (#35).
 - **Next: the MVP, in two releases.** 0.6: #171, #172, #173 (the API server on
   the event loop), with the pause fix (#229) and the lap-1 restart (#157, AC1,
   which waits for a recording) in parallel from the start. 0.7: the data API
@@ -137,14 +134,13 @@ nothing after 0.6; 0.15 and 0.16 (setup) need only the MVP.
 
 ## Open decisions
 
-- Pit wall access: LAN only like the other home-lab apps (current
-  assumption), or behind a login.
+- Pit wall access: LAN only (current assumption), or behind a login.
 - AI coach: local model only, or allow an optional hosted model. Planned as
   local by default, with hosted as an opt-in setting, to be decided after the
   evaluation set (#114).
 - Whether to keep the break reminder (#107) and the weekly digest (#106).
-- Settings on the NUC (#135, #191): does the environment always win, and which
-  keys move from the ConfigMap to the pit wall?
+- Settings in a deployment (#135, #191): does the environment always win, and which
+  keys move from the environment to the pit wall?
 - Speech to text in the engineer's process or as a separate server (#22,
   #190).
 - One corner table per track, with stable ids, rather than one per reference
@@ -169,11 +165,9 @@ nothing after 0.6; 0.15 and 0.16 (setup) need only the MVP.
   roles with checked contrast, one number formatter shared with Python, a
   component kit reviewed on `/_kit`, and every page reviewed on the phone and
   iPad through `make web-preview` before the cut-over.
-- HTTPS for the pit wall (#252): cert-manager with a home-lab CA (option B).
-  Traefik serves `https://pitwall.nuc.home.arpa` and redirects HTTP to it;
-  phones and tablets trust the CA once (home-lab
-  `manifests/cert-manager/README.md`, the deployment repo). This
-  gives #240 (0.11 Wheel dashboard) the secure context for install and the screen wake lock.
+- HTTPS for the pit wall (#252): served over HTTPS with a local CA that phones
+  and tablets trust once (option B), and HTTP redirected to it. This gives #240
+  (0.11 Wheel dashboard) the secure context for install and the screen wake lock.
 
 ## Earlier milestones
 

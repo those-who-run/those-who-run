@@ -1,0 +1,5 @@
+# Known test values, not secrets (gitleaks fingerprints: commit:file:rule:line).
+# The fake Discord channel id in the status API test.
+9304aba3389e7127df0a769754ca52d4b2cae9ba:tests/test_status_api.py:discord-client-id:214
+# RFC 6455's sample WebSocket key, base64 of "the sample nonce".
+4c734dab0c1c3fe884129058a4c111ec37c30740:tests/test_pitwall_api.py:generic-api-key:522

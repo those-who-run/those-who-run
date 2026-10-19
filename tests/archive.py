@@ -2,7 +2,7 @@
 
 ``archived_outing("20261017-162118")`` gives the outing's ``.jsonl.gz`` from
 ``GT7_ARCHIVE_DIR`` (default ``~/.cache/those-who-run/outings``), downloading it
-from the repository's ``outings`` release with ``gh`` the first time. When it
+from the ``outings`` release of ``those-who-run/outings`` with ``gh`` the first time. When it
 can't (no ``gh``, not logged in, offline) the test is skipped with the reason,
 and ``make check`` fails on the skip: a test that needs an outing needs ``gh``
 logged in, locally and in CI (``GH_TOKEN``).

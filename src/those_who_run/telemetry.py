@@ -29,7 +29,7 @@ class LiveTelemetry:
     is dropped as well.
 
     The heartbeat is ours, not gt-telem's: gt-telem sends one every 10 s with
-    no error handling, so a single failed send (the NUC losing its route while
+    no error handling, so a single failed send (the host losing its route while
     the network is pulled) ended it for good, silently, and GT7 stops
     streaming without one. Ours sends every ``heartbeat_secs``, so the stream
     comes back quickly after an outage, and logs send errors without stopping.

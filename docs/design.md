@@ -194,7 +194,7 @@ The kit is in `web/src/components/`, shown at `/_kit` (#295,
 through `make web-preview`. Use it before writing anything new. A new pattern goes into the
 kit first, with all its states, and `/_kit` shows it. `/_kit` is in every build
 but linked from nowhere. Its sample data is `web/src/kit/samples.ts`, typed as
-the API's generated types, with real names from the NUC's store. CI screenshots
+the API's generated types, with real names from the engineer's store. CI screenshots
 it at the three widths and runs axe over it (`web/e2e/kit.spec.ts`).
 
 | Component | File | States |

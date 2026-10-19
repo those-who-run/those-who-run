@@ -1,11 +1,12 @@
-"""The outing archive: the recordings specs and tests rely on, kept off the NUC.
+"""The outing archive: the recordings specs and tests rely on, kept off the server.
 
-The NUC keeps only the newest ``GT7_RECORD_KEEP`` outings. ``recordings archive``
+The engineer keeps only the newest ``GT7_RECORD_KEEP`` outings. ``recordings archive``
 copies one into the archive directory (``GT7_ARCHIVE_DIR``) with a sidecar
 ``<id>.json`` that says what it is: track, car, session kinds, the sessions in
 it, a note and the issues that cite it. The directory is mirrored to the
-``outings`` release of this repository (ADR 0002): ``make archive-push`` uploads
-it and ``fetch`` (or ``make archive-pull``) brings outings back.
+``outings`` release of the ``those-who-run/outings`` repository (ADR 0002):
+``make archive-push`` uploads it and ``fetch`` (or ``make archive-pull``) brings
+outings back.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 RELEASE_TAG = "outings"
+ARCHIVE_REPO = "those-who-run/outings"  # the repository whose release holds them
 OUTING_ID = re.compile(r"^\d{8}-\d{6}$")
 
 
@@ -178,9 +180,9 @@ def list_archive(directory: Path, only: str | None = None) -> list[ArchivedOutin
     return [ArchivedOuting.from_dict(json.loads(p.read_text("utf-8"))) for p in names if p.exists()]
 
 
-def fetch(oid: str, directory: Path, repo: str | None = None) -> tuple[Path | None, str]:
+def fetch(oid: str, directory: Path, repo: str = ARCHIVE_REPO) -> tuple[Path | None, str]:
     """The archived outing ``oid`` as a local file, downloading it from the
-    ``outings`` release with ``gh`` if it is not in ``directory`` yet. Returns the
+    ``outings`` release of ``repo`` with ``gh`` if it is not in ``directory`` yet. Returns the
     path, or None and the reason it is not available."""
     if not OUTING_ID.match(oid):
         return None, f"{oid!r} is not an outing id"
@@ -192,7 +194,7 @@ def fetch(oid: str, directory: Path, repo: str | None = None) -> tuple[Path | No
             return None, f"not in {directory}, and no gh to download it from the archive"
         directory.mkdir(parents=True, exist_ok=True)
         cmd = [gh, "release", "download", RELEASE_TAG, "-D", str(directory), "--clobber"]
-        cmd += ["-p", path.name, "-p", f"{oid}.json"] + (["-R", repo] if repo else [])
+        cmd += ["-p", path.name, "-p", f"{oid}.json", "-R", repo]
         try:
             done = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:

@@ -11,7 +11,7 @@ build it without asking around first. The template is
   recording it came from (outing file name or fixture, and date) and the
   numbers seen. Anything not checked against a recording says
   **Unverified:** in front of it.
-- **Recordings are pruned.** The NUC keeps the newest 20 outings. Archive an
+- **Recordings are pruned.** The engineer keeps the newest 20 outings. Archive an
   outing the issue relies on before it goes (`those-who-run recordings archive
   <id> --note "…" --issue N`, then `make archive-push`; see
   [ADR 0002](adr/0002-outing-archive.md)), and cite it by that id, marked

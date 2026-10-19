@@ -67,7 +67,7 @@ class RecordedSession:
 def recording_started_at(path: Path) -> float:
     """Wall-clock time the outing began. ``OutingRecorder`` names each file after it,
     in UTC (``20261017-162118.jsonl.gz``, or ``20261017-162118-2.jsonl.gz`` for a
-    second outing in the same second; the NUC's container clock is UTC, so files
+    second outing in the same second; the container's clock is UTC, so files
     from before the recorder said so are UTC too); any other file falls back to its
     modification time, which is close enough to date a card."""
     stamp = outing_order(path)[0]  # without a -N suffix

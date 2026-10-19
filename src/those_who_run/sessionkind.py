@@ -1,7 +1,7 @@
 """Work out what kind of session is running from telemetry.
 
 GT7 sends no mode field. What it does send is enough to sort sessions into a
-few kinds, checked against every NUC recording of 2026-10-15:
+few kinds, checked against every recording of 2026-10-15:
 
 - **Lap race:** a lap total and at least two cars. A race against one AI car
   reports two (Suzuka East, P1 or P2 of 2).

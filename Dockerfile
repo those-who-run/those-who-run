@@ -35,7 +35,9 @@ RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project
 
-COPY README.md LICENSE rules.example.yaml ./
+# The licence, the third-party notices, the fonts' OFL text and the voice's model card.
+COPY README.md LICENSE THIRD_PARTY_NOTICES.md rules.example.yaml ./
+COPY licenses ./licenses
 COPY src ./src
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
@@ -96,7 +98,9 @@ RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --extra engineer
 
-COPY README.md LICENSE rules.example.yaml ./
+# The licence, the third-party notices, the fonts' OFL text and the voice's model card.
+COPY README.md LICENSE THIRD_PARTY_NOTICES.md rules.example.yaml ./
+COPY licenses ./licenses
 COPY src ./src
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \

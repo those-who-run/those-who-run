@@ -174,7 +174,7 @@ class Settings:
     # The engineer's HTTP server: GT7_METRICS_PORT and, when set, GT7_CONTROL_PORT
     # (ADR 0001 point 3) listen on this address.
     bind_address: str = "0.0.0.0"
-    control_port: int | None = None  # the control API's port (9851 on the NUC); None is off
+    control_port: int | None = None  # the control API's port (9851 in ADR 0001); None is off
     pause_limit_secs: float = 0.0  # end a session paused this long; 0 keeps it (#229)
     # A join this soon after a shutdown continues the session it cut short (#273).
     continue_window_secs: float = 600.0

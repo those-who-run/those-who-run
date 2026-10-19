@@ -137,7 +137,7 @@ export function Component() {
       <header className="space-y-1">
         <h2 className="text-2xl font-semibold">Component kit</h2>
         <p className="text-muted">
-          Every component in every state, with real names from the NUC&apos;s store. The pages are built from these
+          Every component in every state, with real names from the engineer&apos;s store. The pages are built from these
           parts; a new pattern lands here first. See docs/design.md, Components.
         </p>
       </header>

@@ -14,7 +14,9 @@ synthesises speech locally with Piper, and plays it into a Discord voice
 channel. Join that channel from the PS5's Discord integration and the engineer
 speaks inside your PSVR2 headset while the HUD is gone.
 
-No cloud required. No subscription. One small box on your LAN.
+No subscription, and no cloud service of its own: the telemetry, the rules and
+the speech stay on one small box on your LAN. The voice itself reaches you
+through Discord, so it needs a Discord server and a bot.
 
 <!-- x-release-please-start-version -->
 ```
@@ -124,10 +126,10 @@ is unchanged by the rebrand.
 | `GT7_CACHE_DIR` | `$XDG_CACHE_HOME/those-who-run`, else `~/.cache/those-who-run` | Synthesised sentence clips, reused across laps. Must be owned by the user running the engineer, and must not be inside `GT7_DATA_DIR` (the pit wall can write there). |
 | `GT7_CACHE_MAX_MB` | `100` | Size cap for the speech cache; the least recently used clips go first. |
 | `GT7_METRICS_PORT` | `9850` | `/metrics`, `/healthz` and the read-only `/api/v1` (`/api/v1/status`). |
-| `GT7_CONTROL_PORT` | unset | The control API's port (`9851` on the NUC, ADR 0001). Unset, nothing listens there. |
+| `GT7_CONTROL_PORT` | unset | The control API's port (`9851` in ADR 0001). Unset, nothing listens there. |
 | `GT7_BIND_ADDRESS` | `0.0.0.0` | Address both engineer ports listen on. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
-| `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.nuc.home.arpa`. Card titles link to the session there. Unset, no link. |
+| `PITWALL_URL` | unset | Pit wall base URL, e.g. `https://pitwall.home.arpa`. Card titles link to the session there. Unset, no link. |
 | `GT7_IDLE_DISCONNECT_SECS` | `600` | Leave the voice channel after this long in menus or with no telemetry. |
 | `GT7_TELEMETRY_TIMEOUT_SECS` | `3` | Packets older than this count as disconnected. |
 | `GT7_PAUSE_LIMIT_SECS` | `0` (no limit) | End a session that has been paused this long, as ended paused. By default a pause of any length keeps the session, as GT7 keeps the race; losing the feed during a pause (the PS5 switched off or put to rest) ends it. |
@@ -191,7 +193,7 @@ A replay never writes to `GT7_DATA_DIR`: the sessions it finds go to a
 temporary store that is thrown away afterwards, or to `--store DIR`. So the pit
 wall and the results history only ever show real drives.
 
-On the NUC the engineer records on its own: with `GT7_RECORD_DIR` set, every
+Deployed, the engineer records on its own: with `GT7_RECORD_DIR` set, every
 outing (from leaving the menu to returning to it) becomes one
 `<dir>/<YYYYMMDD-HHMMSS>.jsonl.gz` (UTC), about 20 MB an hour, and only the newest
 `GT7_RECORD_KEEP` (20) files are kept. Cut a recording down to a test fixture
@@ -209,9 +211,9 @@ kubectl -n those-who-run cp those-who-run-xxxx:/data/recordings/20261016-193001.
 those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl.gz --start 120 --end 600
 ```
 
-Outings that specs and tests rely on go in the archive before the NUC prunes
-them ([ADR 0002](docs/adr/0002-outing-archive.md)): the `outings` release of
-this repository, mirrored in `GT7_ARCHIVE_DIR` (default
+Outings that specs and tests rely on go in the archive before the engineer
+prunes them ([ADR 0002](docs/adr/0002-outing-archive.md)): the `outings` release
+of [those-who-run/outings](https://github.com/those-who-run/outings), mirrored in `GT7_ARCHIVE_DIR` (default
 `~/.cache/those-who-run/outings`).
 
 ```sh
@@ -516,12 +518,13 @@ health check is `those-who-run healthcheck`: it probes the engineer's `/healthz`
 on `GT7_METRICS_PORT` for `run`, and the pit wall's `/healthz` on
 `GT7_PITWALL_PORT` (or `--port`) for `pitwall`.
 
-**On the phone and iPad from a laptop**: `make web-preview` builds `web/dist`,
-copies the NUC's store into `.preview/` (git-ignored) by `tar` out of the pit
-wall pod's `/data` with `kubectl exec` (it only reads there, never writes), and
-runs `those-who-run pitwall --address 0.0.0.0 --static web/dist` over the copy.
-Open `http://<laptop>:9852` on the home Wi-Fi. `PREVIEW_CONTEXT` (default
-`my-cluster`) names the kube context. `/api/engine/*` goes to the live
+**On the phone and iPad from a laptop**: `make web-preview
+PREVIEW_CONTEXT=<kube context>` builds `web/dist`, copies a deployed store into
+`.preview/` (git-ignored) by `tar` out of the pit wall pod's `/data` with
+`kubectl exec` (it only reads there, never writes), and runs `those-who-run
+pitwall --address 0.0.0.0 --static web/dist` over the copy. Open
+`http://<laptop>:9852` on the same network. `PREVIEW_CONTEXT` names the kube
+context the pit wall runs in and has no default. `/api/engine/*` goes to the live
 engineer, on port 9850 of the node its pod runs on (asked of the cluster), so
 the engineer's status is live while the sessions are the copy;
 `PREVIEW_ENGINEER` overrides it.
@@ -649,77 +652,34 @@ release pushes it as `muldoon/those-who-run:<version>-pitwall`, next to the
 engineer's tag. The default target is the engineer's image (about 940 MB), which
 has no pit wall in it.
 
-### Pit wall on the NUC
+## Deploying
 
-On the NUC the pit wall is at **https://pitwall.nuc.home.arpa** (LAN only, no
-login). The certificate is from the home lab's own CA, which each phone or
-tablet trusts once (home-lab `manifests/cert-manager/README.md`); plain
-HTTP redirects to HTTPS. It's the Deployment `those-who-run-pitwall` in namespace
-`those-who-run`, next to the engineer. It runs the pitwall image of the same
-release, `muldoon/those-who-run:<version>-pitwall`, with `args: ["pitwall"]`. The manifests are in
-the deployment repo under
-`manifests/those-who-run/` (a kustomize base and `overlays/local`), and
-their layout follows [ADR 0001](docs/adr/0001-data-and-network.md):
+Where and how it runs is up to you: nothing here assumes a host, an
+orchestrator or a network layout. Each release is two images with one version,
+and the two run from the same release:
 
-- The data volume is mounted read-write at `/data`, so SQLite can create the
-  index's `-shm` and `-wal` files while the engineer is stopped. It's mounted
-  again with `subPath: sessions` at `/data/sessions`, read-only.
-- It uses only the `those-who-run-env` ConfigMap (with `GT7_ENGINEER_URL` and
-  `GT7_ENGINEER_CONTROL_URL`): no Secret, no admin token.
-- It has no hostPort. The only way in is a ClusterIP Service on 9852 and the
-  Traefik Ingress `those-who-run-pitwall-ingress`.
-- Probes are on `/healthz` on 9852. Its limits (1 CPU, 768Mi) stay well under
-  the engineer's request, so it can't starve the engineer during a race.
-- It uses `RollingUpdate`. It takes no lock, so restarting it never touches the
-  engineer, and the reverse holds too.
+| Image | Runs | Ports | Health |
+|---|---|---|---|
+| `muldoon/those-who-run:<version>` | the engineer, `run` | 33740/UDP in, 9850/TCP | `/healthz` on 9850 |
+| `muldoon/those-who-run:<version>-pitwall` | the pit wall, `pitwall` | 9852/TCP | `/healthz` on 9852 |
 
-Deploys are GitOps. Argo CD (https://argocd.nuc.home.arpa) keeps the NUC matching
-home-lab's `main`, so a merged `newTag` bump is a deploy. A release opens that PR
-by itself (see [Releasing](#releasing)). Each sync of the app runs gates
-([#285](https://github.com/those-who-run/those-who-run/issues/285)):
-
-1. **The pit wall first.** It takes no lock, so it never waits.
-2. **The idle gate.** If the sync changes the engineer, a hook Job holds it until
-   `/healthz` has said `idle` for 300 s. A drive is never interrupted. After 4 h it
-   fails the sync, rolls nothing, and Argo CD retries later. An engineer that is
-   down and not answering doesn't hold the gate, so a fix can reach it.
-3. **The engineer** (`Recreate`, one writer).
-4. **The smoke check.** It confirms that `those-who-run --version` matches the tag
-   and that the pods run that release's images (the pit wall's with `-pitwall`). It also checks that `/healthz` is ok with
-   every task alive, that `/metrics` is served, and that the pit wall answers 200
-   over HTTPS. A failure marks the sync Failed.
-
-Argo CD Notifications post the result to Discord. To roll back, revert the bump
-in home-lab. Home-lab's `manifests/argocd/README.md` covers all of this, and
-it is also a guide to Argo CD.
-
-The manual path, from a home-lab checkout, waits for idle the same way. First
-pause the Application's auto-sync, or self-heal would put git's tag back; the
-script refuses while it is on:
-
-```sh
-make roll-those-who-run TAG=0.6.2                     # waits until nobody is driving
-make roll-those-who-run TAG=0.6.2 ARGS=--dry-run      # idle check, then show what it would apply
-make roll-those-who-run TAG=0.6.2 ARGS=--now          # emergencies: roll now, mid-race or not
-make roll-those-who-run TAG=0.6.2 ARGS=--pitwall-only # just the pit wall, any time
-```
-
-It bumps the `newTag` lines in `base/kustomization.yaml`,
-waits until the engineer's `/healthz` has said `idle` for `IDLE_SECS` (300),
-then applies the overlay and waits for both rollouts. A restart mid-race costs
-the voice and splits the session, so it never forces: after `TIMEOUT_SECS`
-(4 h) of driving it gives up and exits non-zero. Home-lab's
-`docs/services/those-who-run.md` has the details.
-
-```sh
-# check it
-curl -s --cacert local-ca.crt https://pitwall.nuc.home.arpa/healthz    # "ok":true
-# (add --resolve pitwall.nuc.home.arpa:443:192.0.2.216 if the name doesn't resolve)
-kubectl --context=my-cluster -n those-who-run exec deploy/those-who-run-pitwall -- \
-  touch /data/sessions/x                               # fails: Read-only file system
-```
-
-The dashboard link lives in the deployment repo.
+- **One data volume** at `/data` (`GT7_DATA_DIR`), shared by both
+  ([ADR 0001](docs/adr/0001-data-and-network.md)). The engineer is its only
+  writer and holds `/data/engineer.lock` while `run` is up, so run one engineer
+  and stop the old one before starting the new. The speech cache stays outside
+  the volume (`XDG_CACHE_HOME`).
+- **The pit wall is read-only.** It never writes and never takes the lock. Mount
+  `/data/sessions` read-only; `/data` itself stays writable only so SQLite can
+  create the index's `-shm` and `-wal` files while the engineer is stopped. It
+  needs no secret, only `GT7_ENGINEER_URL` and `GT7_ENGINEER_CONTROL_URL` to
+  reach the engineer, and it has no login: keep it on your LAN.
+- **The engineer needs the LAN.** It sends its heartbeat to the PS5 at a fixed
+  `GT7_PS5_IP` and receives the telemetry on 33740/UDP, so publish that port on
+  the host. Its Discord token and channel ids come from the environment.
+- **Restart the engineer between drives.** `/healthz` reports `idle` and
+  `idle_secs`; wait until it has been idle for a few minutes before replacing
+  it, so a new image never cuts the voice mid-race. The pit wall can restart at
+  any time.
 
 ## Metrics
 
@@ -748,8 +708,8 @@ one, with the last frame under `GT7_TELEMETRY_TIMEOUT_SECS` old. `idle_secs`
 is 0 then, and otherwise the seconds since the last driving frame (since the
 engineer's start if there has been none). A session left open because the
 frames stopped, say the PS5 was switched off mid-lap, counts as idle: a
-restart interrupts no one, and shutdown closes the session. The home-lab
-deploy waits on these, so a new image never restarts the engineer mid-race.
+restart interrupts no one, and shutdown closes the session. A deployment can
+wait on these, so a new image never restarts the engineer mid-race.
 
 `GET /api/v1/status` says what the engineer is doing right now, for the pit
 wall's header (which reaches it as `/api/engine/status`): `version`,
@@ -821,22 +781,8 @@ merge.
    neither has the old pit wall's packages and smoke-tests the pit wall
    (`scripts/smoke-pitwall.sh`), and pushes `muldoon/those-who-run:x.y.z`, `latest`
    and `x.y.z-pitwall`.
-3. **The home-lab bump.** A final release then opens a PR in home-lab (with
-   `HOME_LAB_TOKEN`) that changes only `newTag` in
-   `manifests/those-who-run/base/kustomization.yaml`. home-lab's checks build the
-   overlay, run kubeconform and check that the diff is only `newTag`, then
-   squash-merge it.
-4. **Argo CD rolls it** (within about 3 minutes of the merge), through the gates in
-   [Pit wall on the NUC](#pit-wall-on-the-nuc):
-   1. The pit wall rolls at once.
-   2. The idle gate holds the engineer until nobody is driving.
-   3. The engineer rolls.
-   4. A smoke check confirms the new version.
-5. **Discord** says how it went: success, or a failed sync with the reason. To roll
-   back, revert the bump in home-lab; the old tag goes back through the same gates.
-
-The manual path is still there: `make roll-those-who-run TAG=x.y.z` from a home-lab
-checkout, with Argo CD's auto-sync paused first (the script refuses otherwise).
+3. **Deploy it.** Rolling the new tags out is up to whoever runs it (see
+   [Deploying](#deploying)).
 
 **Versions follow the milestones.** Before 1.0, `feat:` and `fix:` both bump the
 patch (0.6.2 to 0.6.3), and a breaking change bumps the minor
@@ -854,8 +800,7 @@ Open that as a PR and keep the footer in the squash commit message when you merg
 the hyphen, so release-please can replace the whole string later) and merge it.
 Then tag and push the tag yourself: `git tag v0.7.0-rc1 && git push origin
 v0.7.0-rc1`. The tag push runs `release.yml` directly, and the tag matches as a PEP
-440 version (`v0.7.0-rc1` and `0.7.0rc1` are equal). An rc never moves `latest` and
-never bumps home-lab. The next release PR sets `__version__` to the release.
+440 version (`v0.7.0-rc1` and `0.7.0rc1` are equal). An rc never moves `latest`. The next release PR sets `__version__` to the release.
 
 **Tokens and secrets.** release-please runs with the Actions token. A tag that
 token creates starts no workflow, so `release-please.yml` calls `release.yml`
@@ -865,9 +810,6 @@ gets no CI run of its own; `release.yml` runs `make check` on the tagged commit
 before anything is published. Repository secrets:
 
 - `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`: the push to Docker Hub.
-- `HOME_LAB_TOKEN` (optional): a fine-grained token for the deployment repo only,
-  with Contents and Pull requests set to read and write. Without it the home-lab
-  step says so and skips, and the release still publishes.
 
 The repository setting *Actions → General → Allow GitHub Actions to create and
 approve pull requests* must be on for release-please to open its PR.
@@ -987,3 +929,14 @@ GPL-3.0-only. gt-telem and Piper are GPL-3.0, which this project inherits.
 The car table comes from ddm999/gt7info under MIT-0, and the track table from
 gt-telem and Bornhall/gt7telemetry.
 走り屋 is used here in its plain sense, people who run, and claims nothing else.
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists the third-party data,
+voice and fonts, with their licences and attribution.
+
+## Disclaimer
+
+Those Who Run is an independent project. It is not affiliated with, endorsed
+by or sponsored by Sony Interactive Entertainment, Polyphony Digital or Discord.
+Gran Turismo is a trademark of Sony Interactive Entertainment; PlayStation and
+PS5 are trademarks of Sony Interactive Entertainment; Discord is a trademark of
+Discord Inc. "Advan" is a Yokohama Rubber brand name, used descriptively. Other
+names belong to their owners.

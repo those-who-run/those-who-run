@@ -49,7 +49,7 @@ jobs:
           npx playwright install --with-deps chromium
       # The same command as locally: lint, mypy, tests with the coverage floor, and
       # web-check. Tests that replay an archived outing fetch it from the `outings`
-      # release with gh (ADR 0002), which needs a token; without one they skip, and
+      # release of those-who-run/outings with gh (ADR 0002), which needs a token; without one they skip, and
       # a skip fails make check.
       - run: make check
         env:

@@ -26,9 +26,9 @@ help:
 	@echo "web-build - build the React pit wall into web/dist (needs Node, web/.node-version)"
 	@echo "web-dev  - Vite's dev server on http://localhost:5173, /api proxied to a local pitwall"
 	@echo "web-check - ESLint, tsc, Vitest, the client and brand.css freshness checks, the bundle budget, Playwright"
-	@echo "web-preview - web/dist over a read-only copy of the NUC's store, on http://<laptop>:9852"
-	@echo "archive-push - upload GT7_ARCHIVE_DIR to the outings release (ADR 0002)"
-	@echo "archive-pull - download the outings release into GT7_ARCHIVE_DIR"
+	@echo "web-preview - web/dist over a read-only copy of a deployed store, on http://<laptop>:9852 (PREVIEW_CONTEXT=<kube context>)"
+	@echo "archive-push - upload GT7_ARCHIVE_DIR to the outings release of $(ARCHIVE_REPO) (ADR 0002)"
+	@echo "archive-pull - download the outings release of $(ARCHIVE_REPO) into GT7_ARCHIVE_DIR"
 	@echo "clean    - remove .venv, caches, coverage and build output"
 
 # Python version from .python-version, packages from uv.lock: the same set CI and
@@ -137,17 +137,19 @@ web-check: $(WEB_DEPS)
 	cd web && npm run budget
 	cd web && TWR=$(TWR) npx playwright test
 
-# The pit wall on the phone and iPad from a laptop: web/dist over a
-# copy of the NUC's store, taken read-only from the pit wall pod (tar out of /data;
-# nothing is written there). Open http://<this laptop>:9852 on the home Wi-Fi.
-# /api/engine/* goes to the engineer's read-only port on the node it runs on (its
-# hostPort, ADR 0001 point 3), so the live status is live; set PREVIEW_ENGINEER to
-# point it elsewhere.
-PREVIEW_CONTEXT ?= my-cluster
+# The pit wall on the phone and iPad from a laptop: web/dist over a copy of a
+# deployed store, taken read-only from the pit wall pod in a Kubernetes cluster
+# (tar out of /data; nothing is written there). Open http://<this laptop>:9852 on
+# the same network. PREVIEW_CONTEXT, the kube context, has no default:
+# `make web-preview PREVIEW_CONTEXT=<context>`. /api/engine/* goes to the
+# engineer's read-only port on the node it runs on (its hostPort, ADR 0001
+# point 3), so the live status is live; set PREVIEW_ENGINEER to point it elsewhere.
+PREVIEW_CONTEXT ?=
 PREVIEW_POD     ?= deploy/those-who-run-pitwall
 PREVIEW_ENGINEER_SELECTOR ?= app.kubernetes.io/name=those-who-run
 
 web-preview: web-build
+	@test -n "$(PREVIEW_CONTEXT)" || { echo "web-preview: set PREVIEW_CONTEXT to the kube context the pit wall runs in, e.g. make web-preview PREVIEW_CONTEXT=my-cluster" >&2; exit 2; }
 	rm -rf .preview && mkdir -p .preview/data
 	kubectl --context=$(PREVIEW_CONTEXT) -n those-who-run exec $(PREVIEW_POD) -- \
 		tar -C /data -cf - --exclude=./engineer.lock . | tar -C .preview/data -xf -
@@ -159,18 +161,20 @@ web-preview: web-build
 		$(PY) -m those_who_run pitwall --address 0.0.0.0 --static web/dist
 
 # The outing archive (docs/adr/0002-outing-archive.md): `recordings archive` fills
-# the directory, these mirror it to and from the repository's `outings` release.
+# the directory, these mirror it to and from the `outings` release of
+# those-who-run/outings.
 ARCHIVE ?= $(or $(GT7_ARCHIVE_DIR),$(HOME)/.cache/those-who-run/outings)
+ARCHIVE_REPO ?= those-who-run/outings
 
 archive-push:
-	gh release view outings >/dev/null 2>&1 || gh release create outings --prerelease \
+	gh release view outings -R $(ARCHIVE_REPO) >/dev/null 2>&1 || gh release create outings -R $(ARCHIVE_REPO) --prerelease \
 		--title "Outing archive" \
-		--notes "Outings specs and tests rely on: <id>.jsonl.gz and its <id>.json sidecar. See docs/adr/0002-outing-archive.md."
-	gh release upload outings $(ARCHIVE)/*.jsonl.gz $(ARCHIVE)/*.json --clobber
+		--notes "Outings specs and tests rely on: <id>.jsonl.gz and its <id>.json sidecar. See docs/adr/0002-outing-archive.md in those-who-run/those-who-run."
+	gh release upload outings -R $(ARCHIVE_REPO) $(ARCHIVE)/*.jsonl.gz $(ARCHIVE)/*.json --clobber
 
 archive-pull:
 	mkdir -p $(ARCHIVE)
-	gh release download outings -D $(ARCHIVE) --skip-existing
+	gh release download outings -R $(ARCHIVE_REPO) -D $(ARCHIVE) --skip-existing
 
 clean:
 	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist build \

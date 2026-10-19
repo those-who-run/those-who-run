@@ -203,7 +203,7 @@ class App:
         0 then, and otherwise the time since the last one. A session left open
         by a feed that stopped (the PS5 switched off mid-lap) is idle: a
         restart interrupts no one, and shutdown closes the session. The
-        home-lab deploy waits on these before it rolls the engineer."""
+        deployment waits on these before it rolls the engineer."""
         since = time.monotonic() - (self._driving_at or self._started)
         busy = self._driving_at is not None and since < self.settings.telemetry_timeout_secs
         return {"idle": not busy, "idle_secs": 0.0 if busy else round(since, 1)}

@@ -4,6 +4,8 @@
 !uv.lock
 !README.md
 !LICENSE
+!THIRD_PARTY_NOTICES.md
+!licenses/
 !rules.example.yaml
 !src/
 !voices/SHA256SUMS

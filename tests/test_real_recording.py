@@ -76,7 +76,7 @@ def test_real_pit_lane_is_quiet_from_entry_to_exit(path):
 
 
 def test_real_sugo_two_stops_lane_across_the_line():
-    """Sportsland SUGO, twelve laps, NUC 2026-10-18 (outing 20261018-094323). The
+    """Sportsland SUGO, twelve laps, 2026-10-18 (outing 20261018-094323). The
     lane crosses the line, so the in-laps (4 and 8) end at the entry cut and the
     box falls on the out-laps (5 and 9). Live, "Dropped back to eighth" came 0.6 s
     before the first entry (the car stopped at the lane mouth), lap 4 was called in
@@ -265,7 +265,7 @@ async def _replay_with_store(path, tmp_path, end=False):
 
 
 async def test_real_pit_stop_race(tmp_path):
-    """Suzuka East, six laps against one car, recorded on the NUC 2026-10-15. Heavy
+    """Suzuka East, six laps against one car, recorded 2026-10-15. Heavy
     fuel wear, the pit call after lap 2, and a stop on lap 3: GT7 posts the pit-in
     lap on a loading frame as the car crosses into the pit cut-scene, then refuels
     behind two more loading screens (22.9 to 100)."""
@@ -314,7 +314,7 @@ def _summary(tmp_path):
 
 
 async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp_path):
-    """Circuit Gilles Villeneuve, laps 5 to 8 of twelve, NUC 2026-10-17. The pit call
+    """Circuit Gilles Villeneuve, laps 5 to 8 of twelve, 2026-10-17. The pit call
     comes after lap 5; lap 6 is the in-lap, crossed in the pit lane after a full
     tank, and lap 7 the out-lap, which starts in the pit lane at the limiter and
     used 15.0 against 16.4 for lap 8. Neither is a fuel lap. The fixture starts
@@ -351,7 +351,7 @@ async def test_real_pit_stop_in_the_pit_lane_is_left_out_of_the_fuel_average(tmp
 
 
 async def test_real_pit_stop_crossed_in_the_exit_cut(tmp_path):
-    """Willow Springs Big Willow, laps 6 to 8 of ten, NUC 2026-10-17. Lap 6 is posted
+    """Willow Springs Big Willow, laps 6 to 8 of ten, 2026-10-17. Lap 6 is posted
     on the loading frame that takes the car out of the pits: the crossing out of the
     pits, not into them. The out-lap (13.3) is left out; lap 8 (12.6) is the first
     fuel lap of the new stint."""
@@ -370,7 +370,7 @@ async def test_real_pit_stop_crossed_in_the_exit_cut(tmp_path):
 
 
 async def test_real_fuel_calls_through_two_stops(tmp_path):
-    """SUGO, twelve laps, two stops (in at the end of laps 4 and 8), NUC 2026-10-18.
+    """SUGO, twelve laps, two stops (in at the end of laps 4 and 8), 2026-10-18.
     After the first stop the old floor said "two laps" on 2.99, "Box this lap" a
     lap early on 1.83, then nothing on the real box lap, and nothing in a last
     stint that made the flag by 0.13 of a lap (#247)."""
@@ -407,7 +407,7 @@ async def test_real_fuel_calls_through_two_stops(tmp_path):
 
 
 async def test_real_race_finished_on_the_last_litre(tmp_path):
-    """Suzuka East, six laps from P10 of twenty, NUC 2026-10-15. The driver did not
+    """Suzuka East, six laps from P10 of twenty, 2026-10-15. The driver did not
     stop and finished on the last litre: 3.26 laps of fuel for the last three is
     tight, not a pit call (the old floor said "Pit this lap." after lap 4, #247)."""
     _, texts, laps = await _replay_with_store(NO_STOP, tmp_path)
@@ -530,7 +530,7 @@ async def test_real_2026_10_15_unflagged_group_are_demos(name, tmp_path, caplog)
 
 
 async def test_real_restart_during_lap_1_ends_the_session_and_starts_a_clean_one(tmp_path):
-    """Three two-lap races at SUGO, NUC 2026-10-18 (outing 20261018-130722): the
+    """Three two-lap races at SUGO, 2026-10-18 (outing 20261018-130722): the
     driver restarts from the pause menu on lap 2, then on lap 1, then finishes P2.
     Both restarts reset the lap counter through a loading screen at lap 0, with the
     car back on the rolling-start line and the tank refilled, so each ends its

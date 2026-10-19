@@ -7,8 +7,8 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "pull-request-title-pattern": "chore(release): ${version}",
-  "pull-request-header": "Merging this ships it: release-please tags the merge commit and creates the GitHub release, then release.yml runs make check, publishes the image and opens the home-lab bump PR.",
-  "bootstrap-sha": "b9a2d327a5acda1f8d149d5e1075eb1f5e54ff84",
+  "pull-request-header": "Merging this ships it: release-please tags the merge commit and creates the GitHub release, then release.yml runs make check and publishes the two images.",
+  "bootstrap-sha": "9685a3f107435d95920f2b7a93f0819ca15a0858",
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },

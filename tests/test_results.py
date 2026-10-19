@@ -101,8 +101,8 @@ def test_real_race_links_to_the_pit_wall_only_when_set(tmp_path):
          "Fuel used": "34%"},
     )  # fmt: skip
     assert plain.url is None
-    linked = build_card(s, "http://pitwall.nuc.home.arpa/")
-    assert linked.url == f"http://pitwall.nuc.home.arpa/?session={s['session_id']}"
+    linked = build_card(s, "http://pitwall.home.arpa/")
+    assert linked.url == f"http://pitwall.home.arpa/?session={s['session_id']}"
     assert linked == dataclasses.replace(plain, url=linked.url), "only the link changes"
 
 
@@ -321,7 +321,7 @@ def test_results_channel_setting():
 def test_pitwall_url_setting():
     assert Settings.from_env({}).pitwall_url is None
     assert Settings.from_env({"PITWALL_URL": ""}).pitwall_url is None
-    url = "http://pitwall.nuc.home.arpa"
+    url = "http://pitwall.home.arpa"
     assert Settings.from_env({"PITWALL_URL": url}).pitwall_url == url
 
 
@@ -338,7 +338,7 @@ def test_post_dry_run_prints_the_card(tmp_path, monkeypatch, capsys):
 def test_post_dry_run_prints_the_link(tmp_path, monkeypatch, capsys):
     (s,) = summaries("real-nuc-fuji-timed-2026-10-15", tmp_path)
     monkeypatch.setenv("GT7_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("PITWALL_URL", "http://pitwall.nuc.home.arpa/")
+    monkeypatch.setenv("PITWALL_URL", "http://pitwall.home.arpa/")
     assert main(["post", s["session_id"], "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert f"http://pitwall.nuc.home.arpa/?session={s['session_id']}\n" in out
+    assert f"http://pitwall.home.arpa/?session={s['session_id']}\n" in out

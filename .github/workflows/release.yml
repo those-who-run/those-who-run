@@ -32,11 +32,9 @@ on:
         required: true
       DOCKERHUB_TOKEN:
         required: true
-      HOME_LAB_TOKEN:
-        required: false
 
-# Least privilege: the image goes to Docker Hub with its own secrets and home-lab is
-# reached with its own token, so the GITHUB_TOKEN only reads the repository.
+# Least privilege: the image goes to Docker Hub with its own secrets, so the
+# GITHUB_TOKEN only reads the repository.
 permissions:
   contents: read
 
@@ -92,7 +90,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-      # As in CI: archived-outing tests fetch from the outings release with gh
+      # As in CI: archived-outing tests fetch from those-who-run/outings' outings release with gh
       # (ADR 0002), which needs a token (contents: read); a skip fails make check.
       - run: make check
         env:
@@ -155,7 +153,7 @@ jobs:
             ${{ needs.check.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}
           cache-from: type=gha
       # The pit wall next to it, <version>-pitwall (ADR 0001 point 5, amended by ADR
-      # 0003). No `latest`: the NUC pins versions, and #238 bumps its tag there.
+      # 0003). No `latest`: a deployment pins the version it runs.
       - name: Push the pit wall
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -165,85 +163,3 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}:${{ env.VERSION }}-pitwall
           cache-from: type=gha
-
-  # A final release (never an -rc, alpha, beta or dev tag) opens a PR in home-lab
-  # that changes only newTag; home-lab's workflow validates it and merges it, and
-  # Argo CD rolls it out. HOME_LAB_TOKEN is a fine-grained token for home-lab alone
-  # (contents and pull requests: write); without it this says so and skips.
-  # home-lab's file is read and written through the API. scripts/home_lab_bump.py
-  # (#238 R3) takes either shape: one newTag x.y.z (one image for both pods), or two,
-  # x.y.z and x.y.z-pitwall (the engineer's image and the pit wall's), bumped together.
-  home-lab:
-    runs-on: ubuntu-latest
-    needs: [check, publish]
-    if: needs.check.outputs.latest == 'true'
-    permissions:
-      contents: read # the checkout of the bump script, nothing else
-    steps:
-      # The script at the workflow's own commit (github.sha), so a workflow_dispatch
-      # re-run gets the script that matches this file. Only scripts/ is fetched.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: scripts
-      - name: Open the home-lab PR that bumps newTag
-        env:
-          GH_TOKEN: ${{ secrets.HOME_LAB_TOKEN }}
-          VERSION: ${{ needs.check.outputs.version }}
-          IMAGE: muldoon/those-who-run
-          REPO: owner/deployment-repo
-          FILE: manifests/those-who-run/base/kustomization.yaml
-        run: |
-          say() { echo "$1" >> "$GITHUB_STEP_SUMMARY"; echo "$1"; }
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::notice::HOME_LAB_TOKEN is not set, so home-lab is not bumped to $VERSION: run make roll-those-who-run TAG=$VERSION there."
-            say "HOME_LAB_TOKEN is not set: no home-lab PR for $VERSION."
-            exit 0
-          fi
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::$VERSION is not x.y.z"; exit 1
-          fi
-          branch="those-who-run/release-$VERSION"
-          # A re-run finds the PR it opened.
-          pr=$(gh pr list --repo "$REPO" --head "$branch" --state open --json url --jq '.[0].url // empty')
-          if [ -n "$pr" ]; then say "Already open: $pr"; exit 0; fi
-
-          work=$(mktemp -d)
-          base=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
-          gh api "repos/$REPO/contents/$FILE?ref=$base" > "$work/current.json"
-          jq -r .content "$work/current.json" | base64 -d > "$work/kustomization.yaml"
-          # Fails with an ::error:: unless the file is one of the two shapes; rewrites
-          # it only when home-lab is older than $VERSION.
-          python3 scripts/home_lab_bump.py "$VERSION" "$work/kustomization.yaml" "$REPO/$FILE" > "$work/plan" \
-            || { cat "$work/plan"; exit 1; }
-          field() { sed -n "s/^$1=//p" "$work/plan"; }
-          old=$(field old)
-          if [ "$(field bump)" != true ]; then
-            say "home-lab is at $old already, not older than $VERSION: nothing to bump."
-            exit 0
-          fi
-          # The pit wall's tag only once its image is there: home-lab's checks look
-          # for it too, but a missing one is this release's fault, so say so here.
-          if [ "$(field pitwall)" = true ] \
-            && ! docker manifest inspect "$IMAGE:$VERSION-pitwall" > /dev/null; then
-            echo "::error::$IMAGE:$VERSION-pitwall is not on Docker Hub, so home-lab is not bumped to $VERSION"
-            exit 1
-          fi
-          changed=$(field changed)
-
-          # The bot's own branch, from main as it is now (reset if a closed PR left it).
-          if gh api "repos/$REPO/git/ref/heads/$branch" > /dev/null 2>&1; then
-            gh api --method PATCH "repos/$REPO/git/refs/heads/$branch" -f sha="$base" -F force=true > /dev/null
-          else
-            gh api --method POST "repos/$REPO/git/refs" -f ref="refs/heads/$branch" -f sha="$base" > /dev/null
-          fi
-          gh api --method PUT "repos/$REPO/contents/$FILE" \
-            -f branch="$branch" -f sha="$(jq -r .sha "$work/current.json")" \
-            -f message="feat(those-who-run): $VERSION" \
-            -f content="$(base64 -w0 "$work/kustomization.yaml")" > /dev/null
-          url=$(gh pr create --repo "$REPO" --base main --head "$branch" \
-            --title "feat(those-who-run): $VERSION" \
-            --body "Changes $changed in \`$FILE\`, for [those-who-run $VERSION]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION).
-
-          Opened by those-who-run's release workflow ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). It merges itself once the those-who-run bump checks pass: the overlay builds, kubeconform passes, the diff changes only \`newTag\` and the image is on Docker Hub.")
-          say "Opened $url: $changed."

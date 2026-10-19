@@ -8,7 +8,7 @@
 // Authorization is one of the few headers the pit wall's proxy forwards to the
 // engineer (REQUEST_HEADERS in pitwall/server.py), and the pit wall itself reads
 // no token. With no scenario the engineer is down: the stub drops the connection,
-// the proxy answers its 502, and the pages carry on as they do on the NUC with the
+// the proxy answers its 502, and the pages carry on as they do in a deployment with the
 // engineer stopped.
 import { createServer, type Server } from "node:http";
 

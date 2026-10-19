@@ -25,7 +25,7 @@ def env(tmp_path, monkeypatch):
 
 
 def outing(directory: Path, oid: str, sim, plain: bool = False) -> Path:
-    """A two-lap race recorded as the NUC names outings."""
+    """A two-lap race recorded as the engineer names outings."""
     frames = sim(total_laps=2).menu().at_track().race([90000, 89000]).frames
     path = directory / f"{oid}.jsonl{'' if plain else '.gz'}"
     directory.mkdir(parents=True, exist_ok=True)
@@ -120,6 +120,8 @@ def test_fetch_downloads_from_the_release(env, sim, monkeypatch):
     assert path is not None and path.read_bytes() == src.read_bytes()
     assert calls[0][:4] == ["/usr/bin/gh", "release", "download", "outings"]
     assert calls[0][-2:] == ["-R", "o/r"]
+    archive.fetch("20261018-101501", env / "fetched")
+    assert calls[1][-2:] == ["-R", "those-who-run/outings"]
 
 
 def test_fetch_says_why_an_outing_is_not_there(env, monkeypatch):

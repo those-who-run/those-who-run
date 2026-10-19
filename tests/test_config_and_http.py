@@ -36,7 +36,7 @@ def test_settings_bind_address_and_control_port():
 
 def test_settings_speech_cache_dir_and_cap():
     s = Settings.from_env({"GT7_DATA_DIR": "/data", "HOME": "/tmp"})
-    assert s.speech_cache_dir == Path("/tmp/.cache/those-who-run"), "the NUC: HOME=/tmp"
+    assert s.speech_cache_dir == Path("/tmp/.cache/those-who-run"), "the image: HOME=/tmp"
     assert s.cache_max_bytes == 100 * 1024 * 1024
     s = Settings.from_env({"XDG_CACHE_HOME": "/xdg", "HOME": "/tmp"})
     assert s.speech_cache_dir == Path("/xdg/those-who-run")

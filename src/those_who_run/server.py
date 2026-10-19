@@ -4,7 +4,7 @@
 ``/metrics``, ``/healthz``, and under ``/api/v1`` (:attr:`Server.api`) the
 read-only API: ``GET /api/v1/status`` (#292), and the dash WebSocket,
 ``GET /api/v1/dash`` (#239). The
-control port, ``GT7_CONTROL_PORT`` (9851 on the NUC), is a second listener with
+control port, ``GT7_CONTROL_PORT`` (9851 in ADR 0001), is a second listener with
 its own application and middleware (:attr:`Server.control`, routes under
 ``/api/v1`` in :attr:`Server.control_api`), where the control routes and the
 admin-token check go (#136, #140; ADR 0001 point 3). Add routes and middleware

@@ -29,7 +29,9 @@ notices and the licence text are in [`licenses/OFL-1.1.txt`](licenses/OFL-1.1.tx
 - **Barlow** and **Barlow Semi Condensed**, Copyright 2017 The Barlow Project
   Authors (https://github.com/jpt/barlow). The web app self-hosts them from
   `@fontsource/barlow` and `@fontsource/barlow-semi-condensed`, and the pit
-  wall's image serves them.
+  wall's image serves them. The docs' banners and social preview in
+  `docs/assets/` carry the outlines of the tagline drawn from Barlow by
+  `scripts/brand_assets.py`, beside the wordmark's.
 - **Noto Sans CJK JP**, Copyright 2014-2021 Adobe (http://www.adobe.com/), with
   Reserved Font Name 'Source' (https://github.com/notofonts/noto-cjk). The
   wordmark and icons carry the outlines of 走り屋 drawn from it (and of "Those

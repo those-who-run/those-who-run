@@ -116,7 +116,7 @@ anyone, and some text is written to steer an agent.
   tags `vx.y.z`, writes the GitHub release and calls
   `.github/workflows/release.yml`, which runs `make check` and publishes
   `muldoon/those-who-run:x.y.z` and `x.y.z-pitwall` with the Docker Hub
-  secrets of the `release` environment, which the caller has to pass to the
+  secrets of the `release` environment, which release-please passes to the
   called workflow by name (#364). The README, "Releasing", has the details.
 - Agents never push tags, never run `release.yml` and never merge a release PR.
   Repeating a release and release candidates are the maintainer's job.

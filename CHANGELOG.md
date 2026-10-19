@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.2](https://github.com/those-who-run/those-who-run/compare/v0.7.1...v0.7.2) (2026-10-19)
+
+
+### Features
+
+* **web:** lap compare on uPlot, with a synced cursor and touch scrubbing ([#299](https://github.com/those-who-run/those-who-run/issues/299)) ([#327](https://github.com/those-who-run/those-who-run/issues/327)) ([2fd38ca](https://github.com/those-who-run/those-who-run/commit/2fd38cae780212f6c9147e24d8c1c84b06436990))
+* **web:** the session list, grouped by day with the live session pinned ([#297](https://github.com/those-who-run/those-who-run/issues/297)) ([#324](https://github.com/those-who-run/those-who-run/issues/324)) ([4426160](https://github.com/those-who-run/those-who-run/commit/4426160e66eb48c89423a2a18ee724bd189837ce))
+* **web:** the session page: the result first, stat tiles and laps that pick a compare ([#298](https://github.com/those-who-run/those-who-run/issues/298)) ([#325](https://github.com/those-who-run/those-who-run/issues/325)) ([7b28186](https://github.com/those-who-run/those-who-run/commit/7b28186ec1f380cdb4b9a0fd7ccb9f34bfd1b842))
+
 ## [0.7.1](https://github.com/those-who-run/those-who-run/compare/v0.7.0...v0.7.1) (2026-10-19)
 
 

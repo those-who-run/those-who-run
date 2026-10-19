@@ -1,16 +1,26 @@
 name: Release
 
 # The one way an image is published. It must pass make check, match the package
-# version and run, before anything is pushed. Two ways in, the same jobs:
-#   workflow_call  from release-please.yml, right after merging the release PR
-#                  created the v* tag and the GitHub release. A tag created with the
-#                  Actions token starts no workflow, so the push trigger never fires
-#                  for it and nothing runs twice.
-#   push v* tag    a tag pushed by hand: release candidates (v0.7.0-rc1), or a
-#                  release-please tag whose run needs repeating.
+# version and run, before anything is pushed. Three ways in, the same jobs:
+#   workflow_call      from release-please.yml, right after merging the release PR
+#                      created the v* tag and the GitHub release. A tag created with
+#                      the Actions token starts no workflow, so the push trigger never
+#                      fires for it and nothing runs twice.
+#   push v* tag        a tag pushed by hand: release candidates (v0.7.0-rc1).
+#   workflow_dispatch  repeats the release of a tag that has a GitHub release, with
+#                      this file as it is on the branch dispatched from, not as it was
+#                      at the tag. A re-run, or a re-pushed tag, runs the workflow
+#                      the tag's commit holds, so it can't get past a fault in this
+#                      file; this can (#315): `gh workflow run release.yml -f tag=v0.7.0`.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The v* tag to release again (it must have a GitHub release).
+        required: true
+        type: string
   workflow_call:
     inputs:
       tag:
@@ -49,6 +59,15 @@ jobs:
       latest: ${{ steps.v.outputs.latest }}
       package: ${{ steps.v.outputs.package }}
     steps:
+      # By hand, only a v* tag that release-please (or a person) already released.
+      - name: The tag has a release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          case "$TAG" in v*) ;; *) echo "::error::$TAG is not a v* tag"; exit 1;; esac
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName > /dev/null \
+            || { echo "::error::$TAG has no GitHub release"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ env.TAG }}
@@ -62,6 +81,17 @@ jobs:
       - name: Tag matches the package version
         id: v
         run: .venv/bin/python scripts/release_version.py "$TAG"
+      # make check runs web-check (#237): the Node in web/.node-version and the
+      # Playwright browser, as in CI but with no cache (#315).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: web/.node-version
+          package-manager-cache: false
+      - name: Install the Playwright browser
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
       # As in CI: archived-outing tests fetch from the outings release with gh
       # (ADR 0002), which needs a token (contents: read); a skip fails make check.
       - run: make check

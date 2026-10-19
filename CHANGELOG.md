@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/those-who-run/those-who-run/compare/v0.7.2...v0.7.3) (2026-10-19)
+
+
+### Features
+
+* **web:** the race-story chart on the session page ([#300](https://github.com/those-who-run/those-who-run/issues/300)) ([#329](https://github.com/those-who-run/those-who-run/issues/329)) ([c00ed88](https://github.com/those-who-run/those-who-run/commit/c00ed88dc30524ae7e424cbac0cb7fdb7b547d41))
+
 ## [0.7.2](https://github.com/those-who-run/those-who-run/compare/v0.7.1...v0.7.2) (2026-10-19)
 
 

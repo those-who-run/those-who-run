@@ -19,7 +19,7 @@ No cloud required. No subscription. One small box on your LAN.
 <!-- x-release-please-start-version -->
 ```
  ┌───────────────────────────────────────────────┐
- │  THOSE WHO RUN        走り屋        v0.7.2     │
+ │  THOSE WHO RUN        走り屋        v0.7.3     │
  │  PS5 ──UDP 33740──▶ engineer ──Piper──▶ Discord │
  │  ⏱️  lap times   ⛽ fuel   🚩 final lap   P1▲   │
  └───────────────────────────────────────────────┘
@@ -152,7 +152,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.7.2  # x-release-please-version
+  muldoon/those-who-run:0.7.3  # x-release-please-version
 ```
 
 From source:
@@ -494,7 +494,7 @@ data volume with the engineer:
 
 <!-- x-release-please-start-version -->
 ```sh
-podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.7.2 web
+podman run --rm -p 8501:8501 -v ./data:/data muldoon/those-who-run:0.7.3 web
 ```
 <!-- x-release-please-end -->
 

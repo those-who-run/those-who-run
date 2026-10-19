@@ -4,7 +4,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expectAccessible } from "./a11y";
 import { OTHER_VERSION, setEngineer, type Scenario, TRACK } from "./engineer";
-import { apiSessions, expect, expectNoHorizontalScroll, screenshot, test } from "./pitwall";
+import { apiSessions, expect, expectNoHorizontalScroll, screenshot, sessionLink, test } from "./pitwall";
 
 async function pitwallVersion(page: Page): Promise<string> {
   return (await (await page.request.get("/healthz")).json()).version;
@@ -173,31 +173,38 @@ test("the header: wordmark home, the page's title on wider screens, at most 56 p
   }
 
   const [first] = await apiSessions(page);
-  await page.getByRole("link", { name: first!.title, exact: true }).click();
+  await sessionLink(page, first!.session_id).click();
   await expect(page).toHaveTitle(`${first!.title} · Pit wall`);
   await header.getByRole("link", { name: "Those Who Run" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expectNoHorizontalScroll(page);
 });
 
-/** A list long enough to scroll on any of the three screens. */
-async function longList(page: Page): Promise<void> {
+/** A list long enough to scroll on any of the three screens, a session a minute.
+ * The 61st is a real one, so its page opens. */
+async function longList(page: Page): Promise<string> {
   const [real] = await apiSessions(page);
   const sessions = Array.from({ length: 80 }, (_, i) => ({
     ...real,
     session_id: i === 60 ? real!.session_id : `20261001-${String(100000 + i)}`,
     title: `Session ${i + 1} · ${real!.title}`,
+    started_at: real!.started_at - 60 * i,
   }));
-  await page.route("**/api/v1/sessions", (route) =>
-    route.fulfill({ json: { sessions, filters: { track: [], car: [], kind: [] } } }),
+  const options = { track: [], car: [], kind: [] };
+  await page.route(/\/api\/v1\/sessions(\?.*)?$/, (route) =>
+    route.fulfill({ json: { sessions, options, total: sessions.length, matched: sessions.length } }),
   );
+  return real!.session_id;
 }
 
 for (const how of ["the browser's Back", "the page's back link"]) {
   test(`returns to the list's scroll and filters with ${how} (AC5)`, async ({ page }) => {
-    await longList(page);
+    const id = await longList(page);
     await page.goto("/?track=Suzuka");
-    const link = page.getByRole("link", { name: /^Session 61 · / });
+    // 25 cards a page (#297 R6): the 61st is on the third, which Back keeps.
+    await page.getByRole("button", { name: "Show more" }).click();
+    await page.getByRole("button", { name: "Show more" }).click();
+    const link = sessionLink(page, id);
     await link.scrollIntoViewIfNeeded();
     const scrolled = await page.evaluate(() => window.scrollY);
     expect(scrolled).toBeGreaterThan(200);
@@ -246,7 +253,7 @@ test("a page whose chunk is gone after a deploy offers a reload (AC6)", async ({
   await page.goto("/");
   await page.route(/\/assets\/session-[^/]*\.js$/, (route) => route.abort());
   const [first] = await apiSessions(page);
-  await page.getByRole("link", { name: first!.title, exact: true }).click();
+  await sessionLink(page, first!.session_id).click();
   const alert = page.getByRole("main").getByRole("alert");
   await expect(alert).toContainText("The pit wall has been updated since this tab opened.");
   await page.unroute(/\/assets\/session-[^/]*\.js$/);

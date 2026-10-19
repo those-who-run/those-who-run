@@ -163,16 +163,49 @@ export function sessionDate(epoch: Num, now: number = Date.now() / 1000, tz?: st
     return MISSING;
   }
   const at = civil(epoch, tz);
-  const today = civil(now, tz);
-  const time = `${pad(at.hh)}:${pad(at.mm)}`;
+  return `${dayName(at, civil(now, tz))} ${pad(at.hh)}:${pad(at.mm)}`;
+}
+
+/** "Today", "Yesterday", "Sat 17 Oct", "Fri 17 Oct 2025": the day `at` is, seen from `today`. */
+function dayName(at: Civil, today: Civil): string {
   const days = dayNumber(today) - dayNumber(at);
   if (days === 0) {
-    return `Today ${time}`;
+    return "Today";
   }
   if (days === 1) {
-    return `Yesterday ${time}`;
+    return "Yesterday";
   }
   const weekday = DAYS[new Date(Date.UTC(at.y, at.m - 1, at.d)).getUTCDay()];
   const year = at.y === today.y ? "" : ` ${at.y}`;
-  return `${weekday} ${at.d} ${MONTHS[at.m - 1]}${year} ${time}`;
+  return `${weekday} ${at.d} ${MONTHS[at.m - 1]}${year}`;
+}
+
+/** The day a session started, as the session list heads it, in the viewer's time
+ * zone: `Today`, `Yesterday`, `Sat 17 Oct`, `Fri 17 Oct 2025` (#297 R1). */
+export function sessionDay(epoch: Num, now: number = Date.now() / 1000, tz?: string): string {
+  if (!known(epoch) || epoch <= 0) {
+    return MISSING;
+  }
+  return dayName(civil(epoch, tz), civil(now, tz));
+}
+
+/** The calendar date of a Unix time in a time zone, as the API's `from` and `to`
+ * take it: `2026-10-17`. Unknown is missing. */
+export function isoDay(epoch: Num, tz?: string): string {
+  if (!known(epoch) || epoch <= 0) {
+    return MISSING;
+  }
+  const at = civil(epoch, tz);
+  return `${at.y}-${pad(at.m)}-${pad(at.d)}`;
+}
+
+/** A `YYYY-MM-DD` day as a filter chip says it: `17 Oct`, or `17 Oct 2025` when it
+ * isn't in `thisYear`. Anything else is missing. */
+export function shortDay(iso: string, thisYear?: number): string {
+  const m = typeof iso === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
+  if (!m) {
+    return MISSING;
+  }
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return `${d} ${MONTHS[mo - 1]}${thisYear === undefined || thisYear === y ? "" : ` ${y}`}`;
 }

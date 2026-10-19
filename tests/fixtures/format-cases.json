@@ -68,6 +68,20 @@
     { "fn": "sessionDate", "args": [1792274400, 1792279800, "UTC"], "out": "Today 22:00" },
     { "fn": "sessionDate", "args": [null, 1792332000, "Europe/London"], "out": "—" },
 
+    { "fn": "sessionDay", "args": [1792328640, 1792332000, "Europe/London"], "out": "Today" },
+    { "fn": "sessionDay", "args": [1792267800, 1792332000, "Europe/London"], "out": "Yesterday" },
+    { "fn": "sessionDay", "args": [1792087200, 1792332000, "Europe/London"], "out": "Thu 15 Oct" },
+    { "fn": "sessionDay", "args": [1760706240, 1792332000, "Europe/London"], "out": "Fri 17 Oct 2025" },
+    { "fn": "sessionDay", "args": [null, 1792332000, "Europe/London"], "out": "—" },
+
+    { "fn": "isoDay", "args": [1792274400, "Europe/London"], "out": "2026-10-17" },
+    { "fn": "isoDay", "args": [1792274400, "UTC"], "out": "2026-10-17" },
+    { "fn": "isoDay", "args": [null, "UTC"], "out": "—" },
+
+    { "fn": "shortDay", "args": ["2026-10-17", 2026], "out": "17 Oct" },
+    { "fn": "shortDay", "args": ["2025-10-17", 2026], "out": "17 Oct 2025" },
+    { "fn": "shortDay", "args": ["17/10/2026", 2026], "out": "—" },
+
     { "fn": "missing", "args": [], "out": "—" }
   ]
 }

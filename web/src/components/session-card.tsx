@@ -8,6 +8,7 @@
 // and a desktop column. The whole card is the link to the session; an Unknown's
 // reason button sits above it. The track name wraps to two lines, then ends in an
 // ellipsis, with the full name in its title and its accessible name.
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { components } from "@/api/schema";
@@ -78,21 +79,28 @@ function Result({ s, live }: { s: Session; live?: LiveState }) {
 export function SessionCard({
   session: s,
   to,
+  state,
   live,
   now,
   tz,
   headingLevel = 3,
+  note,
   className,
 }: {
   session: Session;
   /** Where the card goes: `/sessions/<id>`. */
   to: string;
+  /** The link's history state: `{ back: true }` from the list, so the session's
+   * "All sessions" is the browser's Back (#296 R7). */
+  state?: unknown;
   /** The engineer's state when this is the open session (#292). */
   live?: LiveState;
   /** For the date, "Today 14:04": Unix seconds, and the zone; the viewer's by default. */
   now?: number;
   tz?: string;
   headingLevel?: 2 | 3 | 4;
+  /** A short muted note at the end of the facts line: "Restarted on lap 3". */
+  note?: ReactNode;
   className?: string;
 }) {
   const Heading = `h${headingLevel}` as const;
@@ -113,12 +121,12 @@ export function SessionCard({
           <div className="flex items-start justify-between gap-3">
             <Heading className="min-w-0 text-lg font-semibold break-words">
               {s.track.sure ? (
-                <Link to={to} data-card-link="" title={name} className={cn("line-clamp-2", linkClass)}>
+                <Link to={to} state={state} data-card-link="" title={name} className={cn("line-clamp-2", linkClass)}>
                   {name}
                 </Link>
               ) : (
                 <>
-                  <Link to={to} data-card-link="" aria-label={name} className={linkClass} />
+                  <Link to={to} state={state} data-card-link="" aria-label={name} className={linkClass} />
                   <Unknown label={name} reason={trackReason(s.track.evidence)} className="relative z-10 -my-2.5" />
                 </>
               )}
@@ -144,6 +152,12 @@ export function SessionCard({
             <time className="whitespace-nowrap" dateTime={new Date(s.started_at * 1000).toISOString()}>
               {sessionDate(s.started_at, now, tz)}
             </time>
+            {note && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="min-w-0 break-words">{note}</span>
+              </>
+            )}
           </div>
         </div>
         <div className={ASIDE}>

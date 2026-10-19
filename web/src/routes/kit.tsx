@@ -4,7 +4,7 @@
 // axe (web/e2e/kit.spec.ts). A new visual pattern lands here before a page uses it.
 // The sample data is web/src/kit/samples.ts.
 import { GaugeIcon, LinkIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
 import type { EngineStatus, EngineView } from "@/api/hooks";
@@ -54,6 +54,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Unknown } from "@/components/unknown";
 import { engine, KIT_NOW, KIT_TZ, KIT_VERSION, LAPS, liveSession, NAMES, SESSIONS } from "@/kit/samples";
 import { duration, fuelPerLap, lapTime, missing, raceTime, speedKph } from "@/lib/format";
+
+// The filter pattern (#297) is a chunk of its own: the kit's stays under the route ceiling.
+const FilterSamples = lazy(() => import("@/kit/filter-samples").then((m) => ({ default: m.FilterSamples })));
 
 function Section({ id, title, note, children }: { id: string; title: string; note?: ReactNode; children: ReactNode }) {
   return (
@@ -408,6 +411,16 @@ export function Component() {
             ))}
           </TableBody>
         </Table>
+      </Section>
+
+      <Section
+        id="kit-filters"
+        title="Filters"
+        note="A list's filters: a sheet below 640 px, a popover from 640 px; the URL holds what is set."
+      >
+        <Suspense fallback={null}>
+          <FilterSamples />
+        </Suspense>
       </Section>
 
       <Section id="kit-primitives" title="Primitives" note="shadcn/ui, restyled only through the tokens.">

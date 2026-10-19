@@ -326,6 +326,29 @@ The frame every page sits in (#296), in `web/src/app/`:
   the browser's Back when the page was opened from the list
   (`state={{ back: true }}`).
 
+## The session list
+
+`/` (#297), in `web/src/routes/sessions.tsx`, its logic in
+`web/src/lib/session-list.ts`:
+
+- **Days:** sessions grouped under "Today", "Yesterday", "Sat 17 Oct" in the
+  viewer's zone (`sessionDay`), newest first, each heading with its count.
+  `SessionCard`s, one column on a phone, two from 768 px, and one row-shaped
+  column at most 48 rem (`max-w-list`) from 1280 px.
+- **Live:** the engineer's open session is pinned above the days under "On
+  track", with the engineer's lap and position. The list asks again every 5 s
+  while it is live, and on focus otherwise.
+- **Short sessions:** no full lap, hidden by default; each day ends with "3
+  sessions with no full lap · Show". `?all=1` and the "No full lap" toggle show
+  them.
+- **Filters:** Track, Car, Kind and Date chips open a bottom sheet below 640 px
+  and a popover from it, each option with its count; active filters are
+  removable chips with "Clear all", and "12 of 70 sessions" sums up. All of it
+  is in the URL (`track`, `car`, `kind`, `from`, `to`, `all`); the API filters
+  (#318), with the browser's zone sent as `tz` and kept out of the URL.
+- **Paging:** 25 cards, "Show more" adds 25; how many are shown is kept in the
+  history entry, so Back returns to the same cards and scroll.
+
 ## States
 
 Every data view designs these five (ADR 0004 point 9):

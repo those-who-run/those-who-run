@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { test as base, expect, type Page, type TestInfo } from "@playwright/test";
+import { test as base, expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 /** Where screenshots go, one directory per viewport: CI uploads it. */
 export const SCREENSHOTS = fileURLToPath(new URL("../test-results/screenshots", import.meta.url));
@@ -22,11 +22,29 @@ export const test = base.extend({
 
 export { expect };
 
+/** The address of the pit wall over one of the global setup's other stores
+ * (#297): "short", "empty" or "broken". */
+export function storeUrl(name: "short" | "empty" | "broken"): string {
+  const url = (JSON.parse(process.env.PITWALL_STORES ?? "{}") as Record<string, string>)[name];
+  if (!url) {
+    throw new Error(`no pit wall for the ${name} store: run through playwright.config.ts's global setup`);
+  }
+  return url;
+}
+
 /** Every API session, as the page should list them. */
-export async function apiSessions(page: Page): Promise<{ session_id: string; title: string }[]> {
+export async function apiSessions(
+  page: Page,
+): Promise<{ session_id: string; title: string; track: { name: string }; started_at: number }[]> {
   const resp = await page.request.get("/api/v1/sessions");
   expect(resp.ok()).toBe(true);
   return (await resp.json()).sessions;
+}
+
+/** A session's card link in the list (#297): the whole card is the link, named by
+ * its track, so a spec finds it by where it goes. */
+export function sessionLink(page: Page, id: string): Locator {
+  return page.getByRole("main").locator(`a[href="/sessions/${id}"]`);
 }
 
 /** The page is no wider than the viewport: nothing scrolls sideways. */

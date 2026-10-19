@@ -1,6 +1,6 @@
 // TanStack Query hooks over the generated client: how every component reads data.
 // A page that needs a new route adds a hook here, not a fetch of its own.
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { client, unwrap, type EngineStatus } from "./client";
 
@@ -13,11 +13,56 @@ export const queryKeys = {
   health: ["health"] as const,
 };
 
-/** Every session, newest first (`GET /api/v1/sessions`). */
-export function useSessions() {
+/** How often the list and the live session are asked again while a session is
+ * live (ADR 0004 point 10). Each ask is answered 304 until the index changes. */
+export const LIVE_POLL_MS = 5_000;
+
+/** What the session list is filtered by (#297 R5): the page's URL holds these. */
+export interface SessionFilters {
+  track?: string;
+  car?: string;
+  kind?: string;
+  /** Days, `YYYY-MM-DD`, in the viewer's time zone. */
+  from?: string;
+  to?: string;
+}
+
+/** The browser's time zone, which the list's days are in: the pit wall runs in
+ * UTC. Sent by the hook, never put in the page's URL. */
+function viewerZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The sessions that match `filters`, newest first, with the filters' options and
+ * counts (`GET /api/v1/sessions`, #318). Asked again every 5 s while `live`, and
+ * otherwise only when the tab regains focus; a new filter keeps the old list on
+ * screen until its answer is in. */
+export function useSessionList(filters: SessionFilters, { live = false }: { live?: boolean } = {}) {
+  const query = { ...filters, tz: viewerZone() };
   return useQuery({
-    queryKey: queryKeys.sessions,
-    queryFn: async ({ signal }) => unwrap(await client.GET("/api/v1/sessions", { signal })),
+    queryKey: [...queryKeys.sessions, "list", query] as const,
+    queryFn: async ({ signal }) => unwrap(await client.GET("/api/v1/sessions", { params: { query }, signal })),
+    placeholderData: keepPreviousData,
+    refetchInterval: live ? LIVE_POLL_MS : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
+/** One session while it is live, for the list's pinned card when the list itself
+ * doesn't have it (filtered out). Nothing is asked while `id` is null. */
+export function useLiveSession(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.session(id ?? ""),
+    queryFn: async ({ signal }) =>
+      unwrap(await client.GET("/api/v1/sessions/{id}", { params: { path: { id: id ?? "" } }, signal })),
+    enabled: id !== null,
+    refetchInterval: LIVE_POLL_MS,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
 }
 

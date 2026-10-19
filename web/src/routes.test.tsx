@@ -4,6 +4,7 @@ import { createMemoryRouter, isRouteErrorResponse, type LoaderFunctionArgs } fro
 import { RouterProvider } from "react-router/dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { SESSIONS as KIT } from "./kit/samples";
 import { legacySessionLink, routes } from "./routes";
 
 function args(url: string): LoaderFunctionArgs {
@@ -31,10 +32,12 @@ describe("the results card's old link (#116)", () => {
 
 const SESSIONS = {
   sessions: [
-    { session_id: "20261017-162118", title: "Circuit Gilles Villeneuve · 12-lap race" },
-    { session_id: "20261015-180019", title: "Suzuka Circuit East Course · 6-lap race" },
+    { ...KIT.raceFinished, session_id: "20261017-162118", title: "Circuit Gilles Villeneuve · 12-lap race" },
+    { ...KIT.timed, session_id: "20261015-180019", title: "Suzuka Circuit East Course · 6-lap race" },
   ],
-  filters: { track: [], car: [], kind: [] },
+  options: { track: [], car: [], kind: [] },
+  total: 2,
+  matched: 2,
 };
 
 function renderAt(url: string) {
@@ -83,19 +86,19 @@ describe("the session list, through the generated client", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lists every title, each linking to its session", async () => {
+  it("lists every session, each card linking to it", async () => {
     const fetch = answer(200, SESSIONS);
     renderAt("/");
-    const link = await screen.findByRole("link", { name: SESSIONS.sessions[0]!.title });
+    const link = await screen.findByRole("link", { name: SESSIONS.sessions[0]!.track.name });
     expect(link.getAttribute("href")).toBe("/sessions/20261017-162118");
-    expect(screen.getByRole("link", { name: SESSIONS.sessions[1]!.title })).toBeTruthy();
+    expect(screen.getByRole("link", { name: SESSIONS.sessions[1]!.track.name })).toBeTruthy();
     expect(dataCalls(fetch)).toEqual(["/api/v1/sessions"]);
   });
 
   it("says when there are none", async () => {
-    answer(200, { ...SESSIONS, sessions: [] });
+    answer(200, { ...SESSIONS, sessions: [], total: 0, matched: 0 });
     renderAt("/");
-    expect(await screen.findByText("No sessions yet.")).toBeTruthy();
+    expect(await screen.findByText("No sessions yet")).toBeTruthy();
   });
 
   it("shows the API's error", async () => {

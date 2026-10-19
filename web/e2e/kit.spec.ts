@@ -20,6 +20,7 @@ const SECTIONS = [
   "ErrorState",
   "Unknown",
   "Lap table",
+  "Filters",
   "Primitives",
 ];
 
@@ -166,6 +167,42 @@ test("focus is visible: the focus ring on a keyboard-focused button", async ({ p
     return { style: s.outlineStyle, width: s.outlineWidth, colour: s.outlineColor };
   });
   expect(outline).toEqual({ style: "solid", width: "2px", colour: "rgb(255, 107, 99)" });
+});
+
+test("the filter chip opens a sheet or a popover, with counts; active filters clear (#297)", async ({
+  page,
+}, testInfo) => {
+  await openKit(page);
+  const filters = page.getByRole("region", { name: "Filters", exact: true });
+  const state = (name: string) => filters.locator(`[data-state-name="${name}"]`);
+  await expect(state("chip, set").getByRole("button", { name: "Track (set)" })).toHaveAttribute("data-active", "true");
+  const options = state("options, with counts; 0 can't be picked");
+  await expect(options.getByRole("button", { name: /^Willow Springs/ })).toBeDisabled();
+  await expect(options.getByRole("button", { name: "Suzuka Circuit East Course 3" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  for (const [name, shot] of [
+    ["picker: bottom sheet (below 640 px)", "kit-filter-sheet"],
+    ["picker: popover (from 640 px)", "kit-filter-popover"],
+  ] as const) {
+    await state(name).getByRole("button", { name: "Track" }).click();
+    const picker = page.getByRole("dialog", { name: "Track" });
+    await expect(picker).toBeVisible();
+    await picker.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
+    await expectAccessible(page, testInfo, shot);
+    await screenshot(page, testInfo, shot);
+    await picker.getByRole("button", { name: "Circuit Gilles Villeneuve 12" }).click();
+    await expect(picker).toBeHidden();
+    await expect(state(name).getByRole("button", { name: "Track (set)" })).toBeVisible();
+  }
+
+  const active = state("active filters, Clear all");
+  await active.getByRole("button", { name: "Remove filter: lap race" }).click();
+  await expect(active.getByRole("button", { name: /^Remove filter/ })).toHaveCount(2);
+  await active.getByRole("button", { name: "Clear all" }).click();
+  await expect(active.getByRole("list", { name: "Active filters" })).toHaveCount(0);
 });
 
 test.describe("under reduced motion", () => {

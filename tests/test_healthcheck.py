@@ -17,6 +17,7 @@ def settings(**env: str) -> Settings:
 def test_mode_from_pid1_arguments():
     assert mode_of(["/app/.venv/bin/python", "/app/.venv/bin/those-who-run", "web"]) == "web"
     assert mode_of(["those-who-run", "run", "--record", "x.jsonl"]) == "run"
+    assert mode_of(["those-who-run", "pitwall", "--port", "9900"]) == "pitwall"
     assert mode_of(["sleep", "infinity"]) is None
     assert mode_of([]) is None
 
@@ -34,6 +35,12 @@ def test_urls_follow_mode_and_ports():
     assert health_urls(s, None) == [
         "http://127.0.0.1:9999/healthz",
         "http://127.0.0.1:8600/_stcore/health",
+    ]
+    # The pitwall image (#237): the data API's /healthz on GT7_PITWALL_PORT or --port.
+    p = settings(GT7_PITWALL_PORT="9900")
+    assert health_urls(p, "pitwall") == ["http://127.0.0.1:9900/healthz"]
+    assert health_urls(p, "pitwall", ["those-who-run", "pitwall", "--port", "9901"]) == [
+        "http://127.0.0.1:9901/healthz"
     ]
 
 

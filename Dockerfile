@@ -1,8 +1,70 @@
 # syntax=docker/dockerfile:1
 # Base images are pinned by digest for reproducible rebuilds; Dependabot bumps them.
+#
+# Two images from one file (ADR 0001 point 5, amended by ADR 0003 point 7):
+#   (default)         the engineer, `run`, with the Streamlit pit wall until #238
+#   --target pitwall  the pit wall: the data API and the built web app, nothing else
+# BuildKit builds only the stages the target needs, so the engineer's build never
+# runs Node or reads web/.
 FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+# The web app (web/), built to static files. Node lives only in this stage.
+FROM node:22-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+# The pit wall: `those-who-run pitwall` serving /api/v1 over GT7_DATA_DIR and the
+# web app from /app/web. The core install only (aiohttp, DuckDB, PyYAML): no
+# engineer extra (Discord, Piper, gt-telem, prometheus-client), no Streamlit, no
+# audio libraries, no voice and no Node.
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS pitwall
+
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON=/usr/local/bin/python3 \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+COPY pyproject.toml uv.lock ./
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
+
+COPY README.md LICENSE rules.example.yaml ./
+COPY src ./src
+RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
+    --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-editable \
+    && useradd --uid 1000 --user-group --home-dir /app --no-create-home engineer \
+    && mkdir -p /data \
+    && chown -R engineer:engineer /data
+
+COPY --from=web /web/dist /app/web
+
+ENV PATH=/app/.venv/bin:$PATH \
+    GT7_DATA_DIR=/data \
+    GT7_PITWALL_STATIC=/app/web \
+    GT7_PITWALL_PORT=9852 \
+    PYTHONUNBUFFERED=1
+
+USER 1000:1000
+EXPOSE 9852/tcp
+VOLUME ["/data"]
+
+# /healthz on GT7_PITWALL_PORT: up while /data is readable, engineer or not.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD ["those-who-run", "healthcheck", "--mode", "pitwall"]
+
+ENTRYPOINT ["those-who-run"]
+CMD ["pitwall"]
+
+# The engineer, the default target: it stays the last stage.
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS engineer
 
 ARG VOICE=en_GB-alba-medium
 ARG VOICE_URL=https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
@@ -27,18 +89,19 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 
 # Dependencies from the lockfile first, in their own layer: a change under src/
-# does not reinstall them. The web extra is the pit wall (`those-who-run web`), so
-# one image runs both; it adds Streamlit, pandas and pyarrow, roughly 300 MB (#26).
+# does not reinstall them. The engineer extra is Discord, Piper, gt-telem and
+# metrics. The web extra is the Streamlit pit wall (`those-who-run web`), so one
+# image runs both until #238; it adds Streamlit, pandas and pyarrow, roughly 300 MB (#26).
 COPY pyproject.toml uv.lock ./
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --extra web
+    uv sync --frozen --no-install-project --extra engineer --extra web
 
 COPY README.md LICENSE rules.example.yaml ./
 COPY src ./src
 RUN --mount=from=uv,source=/uv,target=/usr/local/bin/uv \
     --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-editable --extra web \
+    uv sync --frozen --no-editable --extra engineer --extra web \
     && useradd --uid 1000 --user-group --home-dir /app --no-create-home engineer \
     && mkdir -p /data \
     && chown -R engineer:engineer /data

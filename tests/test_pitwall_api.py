@@ -754,6 +754,61 @@ def test_pitwall_command(monkeypatch, tmp_path):
     assert main(["pitwall"]) == 2
 
 
+def test_static_from_the_environment(monkeypatch, tmp_path):
+    """The pitwall image sets GT7_PITWALL_STATIC=/app/web (#237 R9); --static wins."""
+    seen = {}
+    monkeypatch.setattr(server.web, "run_app", lambda app, **kw: seen.update(app=app))
+    monkeypatch.setenv("GT7_DATA_DIR", str(tmp_path))
+    for name in ("image", "flag"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "index.html").write_text(name)
+    monkeypatch.setenv("GT7_PITWALL_STATIC", str(tmp_path / "image"))
+    assert main(["pitwall"]) == 0
+    assert seen["app"][server.STATIC] == (tmp_path / "image").resolve()
+    assert main(["pitwall", "--static", str(tmp_path / "flag")]) == 0
+    assert seen["app"][server.STATIC] == (tmp_path / "flag").resolve()
+    monkeypatch.setenv("GT7_PITWALL_STATIC", str(tmp_path / "nothing"))
+    assert main(["pitwall"]) == 2
+
+
+# The engineer extra's packages, and Streamlit: the pitwall image has none of them.
+NOT_IN_THE_PITWALL_IMAGE = (
+    "discord",
+    "piper",
+    "onnxruntime",
+    "gt_telem",
+    "prometheus_client",
+    "streamlit",
+    "pandas",
+    "pyarrow",
+    "numpy",
+)
+
+
+def test_pitwall_needs_only_the_core_install(tmp_path):
+    """The slim image (#237 R9) installs aiohttp, DuckDB and PyYAML only: the CLI
+    loads every command module, so none may import an engineer package at the top,
+    and the pit wall serves its data with them all gone."""
+    code = f"""
+import sys
+for name in {NOT_IN_THE_PITWALL_IMAGE!r}:
+    sys.modules[name] = None  # import fails, as when the package is not installed
+from those_who_run.cli import build_parser
+from those_who_run.pitwall import data, server
+build_parser().parse_args(["pitwall"])
+server.make_app(sys.argv[1])
+print(len(data.list_sessions(__import__("pathlib").Path(sys.argv[1]))))
+"""
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True, check=False
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "0"
+
+
 def test_access_log_has_the_path_only(caplog):
     class Req:
         remote, method, path = "127.0.0.1", "GET", "/api/engine/control/config"

@@ -169,6 +169,7 @@ class Settings:
     engineer_url: str = "http://those-who-run:9850"
     engineer_control_url: str = "http://those-who-run:9851"
     pitwall_url: str | None = None  # where the pit wall is served; results cards link there
+    pitwall_static: Path | None = None  # the built web app ``pitwall`` serves (#237)
     cache_dir: Path | None = None  # the speech cache; None is the XDG cache dir
     cache_max_mb: int = 100
     # The engineer's HTTP server: GT7_METRICS_PORT and, when set, GT7_CONTROL_PORT
@@ -247,6 +248,7 @@ class Settings:
             engineer_url=e.get("GT7_ENGINEER_URL") or "http://those-who-run:9850",
             engineer_control_url=e.get("GT7_ENGINEER_CONTROL_URL") or "http://those-who-run:9851",
             pitwall_url=e.get("PITWALL_URL") or None,
+            pitwall_static=Path(e["GT7_PITWALL_STATIC"]) if e.get("GT7_PITWALL_STATIC") else None,
             cache_dir=Path(e["GT7_CACHE_DIR"]) if e.get("GT7_CACHE_DIR") else default_cache_dir(e),
             cache_max_mb=parsed("GT7_CACHE_MAX_MB", _int_env(100, minimum=0), 100),
             bind_address=e.get("GT7_BIND_ADDRESS") or "0.0.0.0",

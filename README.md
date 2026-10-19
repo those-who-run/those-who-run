@@ -105,6 +105,8 @@ PS5 (GT7) --UDP 33740--> engineer --Piper WAV--> Discord voice channel --> PS5 D
   **Connect** and **Speak** permissions in that channel. No privileged intents.
 - The PS5 signed in to Discord and joined to the same voice channel.
 - Linux host with `ffmpeg` and `libopus`, or the container image.
+- To build or work on the web app (`web/`): Node, the version in `web/.node-version`.
+  Node is never needed to run anything: the image carries the built app.
 
 ## Configuration
 
@@ -134,6 +136,7 @@ is unchanged by the rebrand.
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
 | `GT7_WEB_PORT` | `8501` | The pit wall (`those-who-run web`). |
 | `GT7_PITWALL_PORT` | `9852` | The pit wall's data API and web app (`those-who-run pitwall`). |
+| `GT7_PITWALL_STATIC` | unset | The built web app `pitwall` serves, as `--static` (which wins). The pitwall image sets `/app/web`. |
 | `GT7_ENGINEER_URL` | `http://those-who-run:9850` | Where `pitwall` reaches the engineer's read-only port, for `/api/engine/status` and `/api/engine/dash`. |
 | `GT7_ENGINEER_CONTROL_URL` | `http://those-who-run:9851` | Where `pitwall` reaches the engineer's control port, for `/api/engine/control/*`. |
 | `LOG_LEVEL` | `INFO` | |
@@ -155,7 +158,7 @@ podman run --rm \
 From source:
 
 ```sh
-make venv            # needs uv: .venv from uv.lock, with the dev and web extras
+make venv            # needs uv: .venv from uv.lock, with the dev, engineer and web extras
 make voice           # downloads the Piper voice into ./voices, sha256-checked
 GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/those-who-run run
 ```
@@ -476,10 +479,12 @@ wall can only open the index while the engineer is running. Mount the data
 directory read-write for the pit wall; it still opens the index `mode=ro`
 (see #35).
 
-Streamlit is an optional extra, so the engineer's own install stays lean:
+Streamlit is an optional extra, so the engineer's own install stays lean. The
+engineer itself is the `engineer` extra (Discord, Piper, gt-telem, metrics); the
+core install is only what the data API needs (aiohttp, DuckDB, PyYAML):
 
 ```sh
-pip install -e ".[web]"          # make venv installs it too
+pip install -e ".[engineer,web]" # make venv installs both
 GT7_DATA_DIR=./data those-who-run web        # http://localhost:8501
 ```
 
@@ -546,6 +551,59 @@ DuckDB and PyYAML.
 GT7_DATA_DIR=./data those-who-run pitwall                 # http://localhost:9852
 curl -s localhost:9852/api/v1/sessions | jq '.sessions[0]'
 ```
+
+### The web app
+
+`web/` is the React pit wall that replaces Streamlit in #238 (ADR 0003): Vite,
+React and TypeScript (strict), Tailwind, Radix through shadcn/ui components in
+`web/src/components/ui/`, TanStack Query, and React Router in data mode. It
+builds to static files in `web/dist`, which `those-who-run pitwall --static
+web/dist` serves (or `GT7_PITWALL_STATIC`). Today it is one page, the session
+list, each title linking to `/sessions/<id>`; a results card's old
+`/?session=<id>` link lands there too.
+
+- **Data** comes only through the client generated from `web/openapi.json` into
+  `web/src/api/schema.d.ts` (`npm run api` in `web/` after `make openapi`), and
+  the TanStack Query hooks in `web/src/api/hooks.ts`. ESLint fails `fetch` or
+  the client anywhere outside `web/src/api/`.
+- **No browser-only code at module top level**: a Vitest test imports every
+  route module under Node with no DOM.
+- **Each route is a lazy chunk**, under a gzipped budget in
+  `web/bundle-budget.json` (the entry, and each route at most 60 KB). `node
+  scripts/bundle-budget.ts --set` in `web/` resets it to the build plus 10%.
+- **Playwright** runs the built app against the real `pitwall` over a store
+  replayed from fixtures, in Chromium at 390×844, 820×1180 and 1440×900. It
+  checks nothing scrolls sideways and saves screenshots to
+  `web/test-results/screenshots/`, which CI uploads. The helpers in `web/e2e/`
+  (the server, the viewports, the screenshot) are shared by every page's spec.
+
+Node is pinned in `web/.node-version` and `engines`, every package exactly in
+`web/package-lock.json`, installed with `npm ci`. Adding a package needs npm 11
+(`npx npm@11 install`): npm 10 fails to resolve Vitest's optional peers, though
+`npm ci` from the lockfile works with either.
+
+```sh
+make web-build       # web/dist
+make web-dev         # Vite on http://localhost:5173, /api proxied to a local pitwall on 9852
+make web-check       # ESLint, tsc, Vitest, client freshness, bundle budget, Playwright
+cd web && npx playwright install chromium   # once, for web-check
+```
+
+**On the phone and iPad**, before #238 deploys it: `make web-preview` builds
+`web/dist`, copies the NUC's store into `.preview/` (git-ignored) by `tar` out of
+the pit wall pod's `/data` with `kubectl exec` (it only reads there, never
+writes), and runs `those-who-run pitwall --address 0.0.0.0 --static web/dist`
+over the copy. Open `http://<laptop>:9852` on the home Wi-Fi. `PREVIEW_CONTEXT`
+(default `my-cluster`) names the kube context.
+
+### The pitwall image
+
+`docker build --target pitwall` (`make build-pitwall`) is the pit wall alone:
+the core install and `web/dist` at `/app/web`, with `GT7_PITWALL_STATIC=/app/web`
+and `CMD ["pitwall"]` on port 9852. It has no Discord, Piper, gt-telem,
+prometheus-client, Streamlit, audio libraries, voice or Node (about 210 MB). Each
+release pushes it as `muldoon/those-who-run:<version>-pitwall`, next to the
+engineer's tag. The default target is still the engineer's image, unchanged.
 
 ### Pit wall on the NUC
 
@@ -686,8 +744,9 @@ https://github.com/those-who-run/those-who-run/milestones
 ## Development
 
 ```sh
-make check           # what CI runs: ruff, mypy, pytest with the coverage floor
+make check           # what CI runs: ruff, mypy, pytest with the coverage floor, web-check
 make lint test       # ruff + pytest only, quicker while iterating
+make web-check       # the web app only (needs Node and the Playwright browser)
 make lock            # after changing dependencies in pyproject.toml: re-resolve uv.lock
 make build           # podman build for linux/amd64, local only
 ```
@@ -767,8 +826,9 @@ because it already exists.
 
 ### Dependabot
 
-Dependabot (`.github/dependabot.yml`) bumps the SHA-pinned actions, `uv.lock` and the
-digest-pinned base images weekly. `.github/workflows/dependabot-automerge.yml`
+Dependabot (`.github/dependabot.yml`) bumps the SHA-pinned actions, `uv.lock`,
+`web/package-lock.json` (releases at least 14 days old) and the digest-pinned base
+images weekly. `.github/workflows/dependabot-automerge.yml`
 squash-merges the safe ones once CI has passed on the PR's head commit:
 
 - **Merged after CI:** patch updates; minor updates of packages at 1.0 or later;

@@ -94,6 +94,21 @@ jobs:
         run: |
           docker run --rm those-who-run:smoke --version | tee /dev/stderr | grep -F " $PACKAGE"
           docker run --rm those-who-run:smoke web --help > /dev/null
+      # The pit wall's image (ADR 0003 point 7): the data API and the web app.
+      - name: Build the pit wall
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: pitwall
+          platforms: linux/amd64
+          load: true
+          tags: those-who-run:smoke-pitwall
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the pit wall
+        run: |
+          docker run --rm those-who-run:smoke-pitwall --version | grep -F " $PACKAGE"
+          scripts/smoke-pitwall.sh those-who-run:smoke-pitwall
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -108,6 +123,17 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ needs.check.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}
+          cache-from: type=gha
+      # The pit wall next to it, <version>-pitwall (ADR 0001 point 5, amended by ADR
+      # 0003). No `latest`: the NUC pins versions, and #238 bumps its tag there.
+      - name: Push the pit wall
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: pitwall
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.VERSION }}-pitwall
           cache-from: type=gha
 
   # A final release (never an -rc, alpha, beta or dev tag) opens a PR in home-lab

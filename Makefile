@@ -5,11 +5,11 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test openapi check build replay web archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck test openapi check build build-pitwall replay web web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
-	@echo "venv     - create .venv from uv.lock with the dev and web extras (needs uv)"
+	@echo "venv     - create .venv from uv.lock with the dev, engineer and web extras (needs uv)"
 	@echo "lock     - re-resolve uv.lock after changing dependencies in pyproject.toml"
 	@echo "voice    - download the Piper voice into ./voices"
 	@echo "lint     - ruff check + format check"
@@ -17,10 +17,15 @@ help:
 	@echo "typecheck - mypy on src/"
 	@echo "test     - pytest"
 	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
-	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor (CI runs this)"
+	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor, web-check (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
+	@echo "build-pitwall - podman build the slim pit wall image, $(IMAGE_NAME):$(VERSION)-pitwall"
 	@echo "replay   - replay FILE=recording.jsonl"
-	@echo "web      - the pit wall on http://localhost:8501"
+	@echo "web      - the Streamlit pit wall on http://localhost:8501 (until #238)"
+	@echo "web-build - build the React pit wall into web/dist (needs Node, web/.node-version)"
+	@echo "web-dev  - Vite's dev server on http://localhost:5173, /api proxied to a local pitwall"
+	@echo "web-check - ESLint, tsc, Vitest, the client freshness check, the bundle budget, Playwright"
+	@echo "web-preview - web/dist over a read-only copy of the NUC's store, on http://<laptop>:9852"
 	@echo "archive-push - upload GT7_ARCHIVE_DIR to the outings release (ADR 0002)"
 	@echo "archive-pull - download the outings release into GT7_ARCHIVE_DIR"
 	@echo "clean    - remove .venv, caches, coverage and build output"
@@ -28,7 +33,7 @@ help:
 # Python version from .python-version, packages from uv.lock: the same set CI and
 # the image install.
 venv:
-	uv sync --frozen --extra dev --extra web
+	uv sync --frozen --extra dev --extra engineer --extra web
 
 lock:
 	uv lock
@@ -61,14 +66,20 @@ openapi:
 
 # The definition of green: CI runs exactly this. The coverage floor lives in
 # pyproject.toml ([tool.coverage.report] fail_under); a skipped test fails the run;
-# uv.lock must match pyproject.toml; web/openapi.json must match the API's models.
+# uv.lock must match pyproject.toml; web/openapi.json must match the API's models;
+# and the web app passes web-check, which fails when Node or the browser is missing.
 check: lint typecheck
 	uv lock --check
 	$(PY) scripts/openapi.py --check
 	TWR_FAIL_ON_SKIP=1 $(PY) -m pytest -q -rs --cov --cov-report=term
+	$(MAKE) web-check
 
 build:
 	podman build --format docker --platform $(PLATFORM) -t $(IMAGE_NAME):$(VERSION) .
+
+build-pitwall:
+	podman build --format docker --platform $(PLATFORM) --target pitwall -t $(IMAGE_NAME):$(VERSION)-pitwall .
+	podman image inspect $(IMAGE_NAME):$(VERSION)-pitwall --format 'pitwall image: {{.Size}} bytes'
 
 # No release target: images are published only by .github/workflows/release.yml,
 # from a v* tag, after make check passes (see README, Releasing).
@@ -78,6 +89,47 @@ replay:
 
 web:
 	$(PY) -m those_who_run web
+
+# The React pit wall (web/, ADR 0003). Node is a development requirement only: the
+# version in web/.node-version, packages from web/package-lock.json with npm ci.
+# A missing Node or Playwright browser fails, as a skipped test does (#161).
+WEB_DEPS := web/node_modules/.package-lock.json
+TWR      := $(abspath .venv/bin/those-who-run)
+
+$(WEB_DEPS): web/package.json web/package-lock.json
+	@command -v node >/dev/null 2>&1 || { echo "Node is missing: install Node $$(cat web/.node-version) (web/.node-version) to build and check web/" >&2; exit 1; }
+	cd web && npm ci --no-audit --no-fund
+	@touch $@
+
+web-build: $(WEB_DEPS)
+	cd web && npm run build
+
+web-dev: $(WEB_DEPS)
+	$(PY) -m those_who_run pitwall --address 127.0.0.1 & pid=$$!; \
+		trap 'kill $$pid' EXIT INT TERM; cd web && npm run dev
+
+web-check: $(WEB_DEPS)
+	@cd web && node scripts/browser-check.ts
+	cd web && npm run lint
+	cd web && npm run typecheck
+	cd web && npm run api:check
+	cd web && npm test
+	cd web && npx vite build
+	cd web && npm run budget
+	cd web && TWR=$(TWR) npx playwright test
+
+# The new pit wall on the phone and iPad before #238 deploys it: web/dist over a
+# copy of the NUC's store, taken read-only from the pit wall pod (tar out of /data;
+# nothing is written there). Open http://<this laptop>:9852 on the home Wi-Fi.
+PREVIEW_CONTEXT ?= my-cluster
+PREVIEW_POD     ?= deploy/those-who-run-pitwall
+
+web-preview: web-build
+	rm -rf .preview && mkdir -p .preview/data
+	kubectl --context=$(PREVIEW_CONTEXT) -n those-who-run exec $(PREVIEW_POD) -- \
+		tar -C /data -cf - --exclude=./engineer.lock . | tar -C .preview/data -xf -
+	@echo "pit wall preview: http://$$(hostname -I 2>/dev/null | cut -d' ' -f1):9852"
+	GT7_DATA_DIR=.preview/data $(PY) -m those_who_run pitwall --address 0.0.0.0 --static web/dist
 
 # The outing archive (docs/adr/0002-outing-archive.md): `recordings archive` fills
 # the directory, these mirror it to and from the repository's `outings` release.
@@ -94,5 +146,6 @@ archive-pull:
 	gh release download outings -D $(ARCHIVE) --skip-existing
 
 clean:
-	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist build
+	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache .coverage htmlcov dist build \
+		web/node_modules web/dist web/test-results .preview
 	find . -name __pycache__ -type d -not -path './.git/*' -prune -exec rm -rf {} +

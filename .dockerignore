@@ -7,5 +7,12 @@
 !rules.example.yaml
 !src/
 !voices/SHA256SUMS
+# The web app, for the Node stage only (the pitwall target); the engineer's
+# stages never copy it. Installed and built output stays out.
+!web/
+web/node_modules
+web/dist
+web/test-results
+web/playwright-report
 **/__pycache__
 **/*.pyc

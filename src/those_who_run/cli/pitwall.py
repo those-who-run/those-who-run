@@ -23,20 +23,22 @@ def configure(parser: argparse.ArgumentParser) -> None:
         type=Path,
         default=None,
         metavar="DIR",
-        help="serve the built web app from DIR (web/dist), index.html for client routes",
+        help="serve the built web app from DIR (web/dist), index.html for client routes"
+        " (GT7_PITWALL_STATIC; the pitwall image sets /app/web)",
     )
 
 
 def run(args: argparse.Namespace, settings: Settings) -> int:
     from those_who_run.pitwall import server
 
-    if args.static is not None and not (args.static / "index.html").is_file():
-        raise ConfigError(f"--static {args.static} has no index.html: build the web app first")
+    static = args.static if args.static is not None else settings.pitwall_static
+    if static is not None and not (static / "index.html").is_file():
+        raise ConfigError(f"--static {static} has no index.html: build the web app first")
     return server.run(
         settings.data_dir,
         host=args.address,
         port=args.port or settings.pitwall_port,
         engineer_url=settings.engineer_url,
         control_url=settings.engineer_control_url,
-        static_dir=args.static,
+        static_dir=static,
     )

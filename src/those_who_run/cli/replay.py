@@ -7,11 +7,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from those_who_run.callouts import CalloutQueue
-from those_who_run.config import Settings, load_rules_config
-from those_who_run.engine import Engine
-from those_who_run.rules import build_rules
-from those_who_run.store import SessionStore
+from those_who_run.config import Settings
 
 log = logging.getLogger("those_who_run")
 
@@ -54,8 +50,15 @@ async def run_replay(
     then only while the engineer is stopped (the store's writer lock)."""
     import tempfile
 
+    # Here, not at the top: the engine reaches prometheus_client, which the slim
+    # pit wall image (#237) does not install, and it loads every command module.
     from those_who_run.audio.player import ConsolePlayer, WavDirPlayer
+    from those_who_run.callouts import CalloutQueue
+    from those_who_run.config import load_rules_config
+    from those_who_run.engine import Engine
     from those_who_run.replay import read_recording, replay, summarise
+    from those_who_run.rules import build_rules
+    from those_who_run.store import SessionStore
 
     rules_cfg = load_rules_config(settings.rules_file)
     queue = CalloutQueue(max_age=None)

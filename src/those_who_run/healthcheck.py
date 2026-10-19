@@ -1,9 +1,11 @@
-"""``those-who-run healthcheck``: the container's HEALTHCHECK, for ``run`` and ``web``.
+"""``those-who-run healthcheck``: the container's HEALTHCHECK, for ``run``, ``web``
+and ``pitwall``.
 
-The engineer (``run``) answers ``/healthz`` on GT7_METRICS_PORT; the pit wall
-(``web``) answers Streamlit's ``/_stcore/health`` on GT7_WEB_PORT or its
-``--port``. The mode comes from the container's main process (PID 1), so one
-image and one HEALTHCHECK serve both. Standard library only: no curl in the image.
+The engineer (``run``) answers ``/healthz`` on GT7_METRICS_PORT; the Streamlit
+pit wall (``web``) answers ``/_stcore/health`` on GT7_WEB_PORT or its
+``--port``; the data API (``pitwall``, the pitwall image) answers ``/healthz``
+on GT7_PITWALL_PORT or its ``--port``. The mode comes from the container's main
+process (PID 1), so one HEALTHCHECK serves every mode. Standard library only: no curl in the image.
 """
 
 from __future__ import annotations
@@ -15,11 +17,11 @@ from pathlib import Path
 
 from those_who_run.config import Settings
 
-MODES = ("run", "web")
+MODES = ("run", "web", "pitwall")
 
 
 def mode_of(argv: Sequence[str]) -> str | None:
-    """``run`` or ``web`` from a process's arguments, None when it is neither."""
+    """``run``, ``web`` or ``pitwall`` from a process's arguments, None when it is none."""
     for arg in argv:
         if arg in MODES:
             return arg
@@ -57,6 +59,8 @@ def health_urls(settings: Settings, mode: str | None, argv: Sequence[str] = ()) 
         return [run_url]
     if mode == "web":
         return [web_url]
+    if mode == "pitwall":
+        return [f"http://127.0.0.1:{_port_flag(argv) or settings.pitwall_port}/healthz"]
     return [run_url, web_url]
 
 

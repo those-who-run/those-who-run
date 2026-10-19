@@ -8,13 +8,13 @@ import argparse
 from those_who_run.config import Settings
 
 HELP = "exit 0 when the engineer or pit wall in this container answers"
-SETTINGS: tuple[str, ...] = ("GT7_METRICS_PORT", "GT7_WEB_PORT")
+SETTINGS: tuple[str, ...] = ("GT7_METRICS_PORT", "GT7_WEB_PORT", "GT7_PITWALL_PORT")
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mode",
-        choices=["run", "web"],
+        choices=["run", "web", "pitwall"],
         default=None,
         help="which to probe (default: the mode of PID 1, or either)",
     )

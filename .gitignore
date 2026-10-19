@@ -18,3 +18,7 @@ voices/*.onnx.json
 *.jsonl.gz
 .env
 !tests/fixtures/*.jsonl.gz
+.preview/
+web/node_modules/
+web/test-results/
+web/playwright-report/

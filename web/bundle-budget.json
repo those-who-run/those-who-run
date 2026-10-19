@@ -1,0 +1,9 @@
+{
+  "entry": 118955,
+  "route": 61440,
+  "routes": {
+    "src/routes/not-found.tsx": 244,
+    "src/routes/session.tsx": 17653,
+    "src/routes/sessions.tsx": 6489
+  }
+}

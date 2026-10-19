@@ -38,3 +38,18 @@ updates:
       interval: weekly
     commit-message:
       prefix: deps
+  # The web app's npm packages (web/package-lock.json), pinned exactly. A release
+  # must be two weeks old before it is offered. Minors and patches come grouped, as
+  # the Actions do, and merge after CI under the same rules (a 0.x minor waits for
+  # review); each major gets its own PR.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: deps
+    groups:
+      web:
+        update-types: [minor, patch]

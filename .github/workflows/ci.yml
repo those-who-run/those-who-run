@@ -28,13 +28,39 @@ jobs:
           version: "0.11.23"
           enable-cache: true
       - run: make venv
-      # The same command as locally: lint, mypy, and tests with the coverage floor.
-      # Tests that replay an archived outing fetch it from the `outings` release
-      # with gh (ADR 0002), which needs a token; without one they skip, and a skip
-      # fails make check.
+      # Node and the Playwright browser for make web-check (ADR 0003 point 5): the
+      # Node in web/.node-version, the browser cached by Playwright's version.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: web/.node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Playwright's version
+        id: playwright
+        run: echo "version=$(node -p "require('./web/package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install the Playwright browser
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      # The same command as locally: lint, mypy, tests with the coverage floor, and
+      # web-check. Tests that replay an archived outing fetch it from the `outings`
+      # release with gh (ADR 0002), which needs a token; without one they skip, and
+      # a skip fails make check.
       - run: make check
         env:
           GH_TOKEN: ${{ github.token }}
+      # The pit wall at 390, 820 and 1440 px wide, for the PR to link.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pitwall-screenshots
+          path: web/test-results/screenshots/
+          if-no-files-found: ignore
 
   image:
     runs-on: ubuntu-latest
@@ -59,3 +85,17 @@ jobs:
         run: |
           docker run --rm muldoon/those-who-run:ci --version
           docker run --rm muldoon/those-who-run:ci web --help > /dev/null
+      - name: Build the pit wall (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: pitwall
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: muldoon/those-who-run:ci-pitwall
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # No engineer packages and no Node; /healthz and the web app answer.
+      - name: Smoke test the pit wall image
+        run: scripts/smoke-pitwall.sh muldoon/those-who-run:ci-pitwall

@@ -44,7 +44,7 @@ build it without asking around first. The template is
 | Interfaces | Events, tables, config keys, CLI commands and health or metric fields it adds or changes, so overlaps between parallel specs show before they are built. |
 | Approach | Suggested design: modules, signals, thresholds, data flow. |
 | Acceptance criteria | Checkboxes, each testable and tied to a fixture or a check. |
-| Definition of done | The checklist every PR closes: tests in a named file, fixtures indexed, README tables, `make check`, `stream:` label. |
+| Definition of done | The checklist every PR closes: tests in a named file, fixtures indexed, the docs tables (rules in `docs/engineer.md`, config and commands in `docs/setup.md`, metrics and `/healthz` in `docs/operations.md`), `make check`, `stream:` label. |
 | Fixtures | Recordings the work has, and drives it still needs. |
 | Dependencies | Blocked by and Blocks, as issue links. |
 | Open questions | Decisions still to make, and who makes them. |

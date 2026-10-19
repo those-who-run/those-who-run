@@ -58,7 +58,7 @@ directory read-write for the pit wall; it still opens the index `mode=ro`
 
 It needs only the core install (aiohttp, DuckDB, PyYAML), not the `engineer`
 extra (Discord, Piper, gt-telem, metrics), and the built web app (`make
-web-build`, which needs Node; see [The web app](#the-web-app)):
+web-build`, which needs Node; see [the web app's guide](../web/README.md)):
 
 ```sh
 make web-build

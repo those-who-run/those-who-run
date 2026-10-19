@@ -7,7 +7,7 @@ React and TypeScript (strict), Tailwind, Radix through shadcn/ui components in
 `web/src/components/ui/`, TanStack Query, and React Router in data mode. It
 builds to static files in `web/dist`, which `those-who-run pitwall --static
 web/dist` serves (or `GT7_PITWALL_STATIC`): the session list, the session page
-and lap compare ([Pit wall](#pit-wall)); a results card's old `/?session=<id>`
+and lap compare ([the pit wall guide](../docs/pitwall.md)); a results card's old `/?session=<id>`
 link lands on `/sessions/<id>`.
 
 - **Data** comes only through the client generated from `web/openapi.json` into
@@ -15,7 +15,7 @@ link lands on `/sessions/<id>`.
   the TanStack Query hooks in `web/src/api/hooks.ts`. ESLint fails `fetch` or
   the client anywhere outside `web/src/api/`.
 - **Style comes only from the design tokens** (ADR 0004,
-  [`docs/design.md`](docs/design.md)) in `web/src/styles/`: ESLint fails a
+  [`docs/design.md`](../docs/design.md)) in `web/src/styles/`: ESLint fails a
   colour literal or an arbitrary Tailwind value anywhere else in `web/src/`, a
   Vitest test checks every allowed colour pair's contrast, and the brand
   colours are generated from `brand.py` into `web/src/styles/brand.css` (`make
@@ -49,4 +49,4 @@ make web-check       # ESLint, tsc, Vitest, client freshness, bundle budget, Pla
 cd web && npx playwright install chromium   # once, for web-check
 ```
 
-**On the phone and iPad** from a laptop: `make web-preview` ([Pit wall](#pit-wall)).
+**On the phone and iPad** from a laptop: `make web-preview` ([the preview](../docs/pitwall.md#the-preview-on-the-phone-and-ipad)).

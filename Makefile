@@ -103,7 +103,7 @@ build-pitwall:
 	podman image inspect $(IMAGE_NAME):$(VERSION)-pitwall --format 'pitwall image: {{.Size}} bytes'
 
 # No release target: images are published only by .github/workflows/release.yml,
-# from a v* tag, after make check passes (see README, Releasing).
+# from a v* tag, after make check passes (docs/operations.md, Releasing).
 
 replay:
 	$(PY) -m those_who_run replay $(FILE)

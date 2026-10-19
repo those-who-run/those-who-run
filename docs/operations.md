@@ -14,7 +14,7 @@ and the two run from the same release:
 | `muldoon/those-who-run:<version>-pitwall` | the pit wall, `pitwall` | 9852/TCP | `/healthz` on 9852 |
 
 - **One data volume** at `/data` (`GT7_DATA_DIR`), shared by both
-  ([ADR 0001](docs/adr/0001-data-and-network.md)). The engineer is its only
+  ([ADR 0001](adr/0001-data-and-network.md)). The engineer is its only
   writer and holds `/data/engineer.lock` while `run` is up, so run one engineer
   and stop the old one before starting the new. The speech cache stays outside
   the volume (`XDG_CACHE_HOME`).
@@ -83,8 +83,9 @@ merge.
    `chore(release): x.y.z`. It lists the merged `feat:`, `fix:`, `perf:` and
    `deps:` commits (Dependabot's, under "Dependencies"), writes `CHANGELOG.md`, and
    bumps `__version__` in `src/those_who_run/__init__.py` (the version's one home,
-   which `pyproject.toml` reads) and the README's version strings (the lines marked
-   `x-release-please`). `docs:`, `test:`, `refactor:`, `build:`, `ci:` and `chore:`
+   which `pyproject.toml` reads) and the version strings in the README and the guides (each line carries a release-please version
+   marker, and each file with one is listed under `extra-files` in
+   `release-please-config.json`). `docs:`, `test:`, `refactor:`, `build:`, `ci:` and `chore:`
    commits ship in it but are not listed, and on their own they open no release PR.
 2. **Ship it.** Merge the release PR. release-please tags the merge commit
    `vx.y.z`, creates the GitHub release from the changelog, then calls

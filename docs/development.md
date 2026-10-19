@@ -16,15 +16,37 @@ make lock            # after changing dependencies in pyproject.toml: re-resolve
 make build           # podman build for linux/amd64, local only
 ```
 
+Every target, as `make help` lists it:
+
+| Target | What it does |
+|---|---|
+| `help` | Lists the targets. |
+| `venv` | Creates `.venv` from `uv.lock` with the dev and engineer extras (needs uv). |
+| `lock` | Re-resolves `uv.lock` after changing dependencies in `pyproject.toml`. |
+| `voice` | Downloads the Piper voice into `./voices`, sha256-checked. |
+| `lint` | `ruff check` and the format check. |
+| `fmt` | `ruff format`. |
+| `typecheck` | mypy on `src/`. |
+| `test` | pytest. |
+| `openapi` | Writes `web/openapi.json`, the pit wall API's schema, from its models. |
+| `brand-css` | Writes `web/src/styles/brand.css`, the web app's brand colours, from `brand.py`. |
+| `wordmark` | Redraws the wordmark and icons as outlines: `make wordmark NOTO=<NotoSansCJK-VF.ttc>`. |
+| `check` | Everything a PR must pass: lint, typecheck, tests with the coverage floor, `web-check`. CI runs this. |
+| `build` | Builds the engineer's image for linux/amd64 with podman, local only. |
+| `build-pitwall` | Builds the slim pit wall image, `<version>-pitwall`. |
+| `replay` | Replays `FILE=recording.jsonl`. |
+| `web-build` | Builds the React pit wall into `web/dist` (needs Node). |
+| `web-dev` | Vite's dev server on http://localhost:5173, `/api` proxied to a local pitwall. |
+| `web-check` | ESLint, tsc, Vitest, the client and `brand.css` freshness checks, the bundle budget, Playwright. |
+| `web-preview` | `web/dist` over a copy of a deployed store, on `http://<laptop>:9852`; see [the preview](pitwall.md#the-preview-on-the-phone-and-ipad). |
+| `archive-push` | Uploads `GT7_ARCHIVE_DIR` to the `outings` release of those-who-run/outings ([ADR 0002](adr/0002-outing-archive.md)). |
+| `archive-pull` | Downloads the `outings` release into `GT7_ARCHIVE_DIR`. |
+| `clean` | Removes `.venv`, caches, coverage and build output. |
+
 ## Fixtures
 
-Deployed, the engineer records on its own: with `GT7_RECORD_DIR` set, every
-outing (from leaving the menu to returning to it) becomes one
-`<dir>/<YYYYMMDD-HHMMSS>.jsonl.gz` (UTC), about 20 MB an hour, and only the newest
-`GT7_RECORD_KEEP` (20) files are kept. Cut a recording down to a test fixture
-with `thin`: it keeps every frame where a phase, lap, lap time, position or car
-count changed, the frames either side, and one frame per half second. It
-writes gzip unless given `--plain`, and adds `.gz` to the name if it is missing.
+A test fixture is a recording cut down with `thin` (see
+[Recordings](telemetry.md#recordings)).
 Every fixture gets an entry in `tests/fixtures/FIXTURES.yaml`: track, car,
 session kind, date, outing and the behaviours it pins (a test fails on a fixture
 that isn't listed). `--window 120:180` (seconds) or `--window lap3:lap5` keeps
@@ -33,7 +55,10 @@ keeps every Nth frame in place of one per half second.
 
 ## Web development
 
-
+The React pit wall in `web/` has its own guide, [web/README.md](../web/README.md):
+the stack, the rules its build enforces (the generated client, the design
+tokens, the formatter, the bundle budget, Playwright) and Node. It sits in
+`web/` so it moves with the app.
 
 ## Brand and wordmark
 

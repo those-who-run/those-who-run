@@ -29,6 +29,8 @@ outing (from leaving the menu to returning to it) becomes one
 with `thin`: it keeps every frame where a phase, lap, lap time, position or car
 count changed, the frames either side, and one frame per half second. It
 writes gzip unless given `--plain`, and adds `.gz` to the name if it is missing.
+A fixture also needs its entry in `tests/fixtures/FIXTURES.yaml`; see
+[Fixtures](development.md#fixtures) for that and for `--window`.
 
 ```sh
 kubectl -n those-who-run cp those-who-run-xxxx:/data/recordings/20261016-193001.jsonl.gz ./outing.jsonl.gz
@@ -38,7 +40,7 @@ those-who-run thin outing.jsonl.gz tests/fixtures/real-pit-stop-2026-10-16.jsonl
 ### The archive
 
 Outings that specs and tests rely on go in the archive before the engineer
-prunes them ([ADR 0002](docs/adr/0002-outing-archive.md)): the `outings` release
+prunes them ([ADR 0002](adr/0002-outing-archive.md)): the `outings` release
 of [those-who-run/outings](https://github.com/those-who-run/outings), mirrored in `GT7_ARCHIVE_DIR` (default
 `~/.cache/those-who-run/outings`).
 
@@ -123,7 +125,7 @@ Learned from recordings, and encoded in `state.py`:
   briefed as a timed race.
 - Timed races never report a flag (no lap total to exceed), so they get no
   summary yet. That needs a timed-race recording.
-- GT7 sends no track id; see Track detection above.
+- GT7 sends no track id; see [Track detection](engineer.md#track-detection).
 - A race replay starts like a race (track screen, then lap 1) but never sets
   the cars-on-track flag, while the fuel drains as it did in the race. A
   session that starts unflagged is held for up to 3 s: a fuel drop makes it a

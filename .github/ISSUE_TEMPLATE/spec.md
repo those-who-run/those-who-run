@@ -33,7 +33,7 @@ labels: ["needs triage"]
 ## Definition of done
 - [ ] Tests for every acceptance criterion, in a named file: `tests/test_….py`
 - [ ] Any new fixture is in `tests/fixtures/` and in the fixture index
-- [ ] README tables updated (rules, config, metrics, `/healthz`) where they changed
+- [ ] Docs tables updated where they changed: rules in `docs/engineer.md`, config and commands in `docs/setup.md`, metrics and `/healthz` in `docs/operations.md`
 - [ ] `make check` is green
 - [ ] The issue has a `stream:` label and a milestone
 

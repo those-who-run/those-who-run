@@ -70,5 +70,11 @@ jobs:
     uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository]
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
-    # No secrets passed: release.yml's publish job reads them from the `release`
-    # environment.
+    # A called workflow sees a secret only if the caller passes it, even when the
+    # called job names the environment that holds it (GitHub's reusing-workflows
+    # docs). Passing them by name is enough: publish's `environment: release`
+    # supplies the values, which exist only there (main and v* tags). Without this
+    # they were empty and 0.7.4 published nothing.
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

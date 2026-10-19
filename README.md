@@ -593,7 +593,10 @@ cd web && npx playwright install chromium   # once, for web-check
 the pit wall pod's `/data` with `kubectl exec` (it only reads there, never
 writes), and runs `those-who-run pitwall --address 0.0.0.0 --static web/dist`
 over the copy. Open `http://<laptop>:9852` on the home Wi-Fi. `PREVIEW_CONTEXT`
-(default `my-cluster`) names the kube context.
+(default `my-cluster`) names the kube context. `/api/engine/*` goes to the live
+engineer, on port 9850 of the node its pod runs on (asked of the cluster), so the
+engineer's status is live while the sessions are the copy; `PREVIEW_ENGINEER`
+overrides it.
 
 ### The pitwall image
 

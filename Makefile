@@ -121,15 +121,23 @@ web-check: $(WEB_DEPS)
 # The new pit wall on the phone and iPad before #238 deploys it: web/dist over a
 # copy of the NUC's store, taken read-only from the pit wall pod (tar out of /data;
 # nothing is written there). Open http://<this laptop>:9852 on the home Wi-Fi.
+# /api/engine/* goes to the engineer's read-only port on the node it runs on (its
+# hostPort, ADR 0001 point 3), so the live status is live; set PREVIEW_ENGINEER to
+# point it elsewhere.
 PREVIEW_CONTEXT ?= my-cluster
 PREVIEW_POD     ?= deploy/those-who-run-pitwall
+PREVIEW_ENGINEER_SELECTOR ?= app.kubernetes.io/name=those-who-run
 
 web-preview: web-build
 	rm -rf .preview && mkdir -p .preview/data
 	kubectl --context=$(PREVIEW_CONTEXT) -n those-who-run exec $(PREVIEW_POD) -- \
 		tar -C /data -cf - --exclude=./engineer.lock . | tar -C .preview/data -xf -
 	@echo "pit wall preview: http://$$(hostname -I 2>/dev/null | cut -d' ' -f1):9852"
-	GT7_DATA_DIR=.preview/data $(PY) -m those_who_run pitwall --address 0.0.0.0 --static web/dist
+	engineer=$${PREVIEW_ENGINEER:-http://$$(kubectl --context=$(PREVIEW_CONTEXT) -n those-who-run get pod \
+		-l $(PREVIEW_ENGINEER_SELECTOR) -o jsonpath='{.items[0].status.hostIP}'):9850}; \
+	echo "engineer: $$engineer"; \
+	GT7_DATA_DIR=.preview/data GT7_ENGINEER_URL=$$engineer \
+		$(PY) -m those_who_run pitwall --address 0.0.0.0 --static web/dist
 
 # The outing archive (docs/adr/0002-outing-archive.md): `recordings archive` fills
 # the directory, these mirror it to and from the repository's `outings` release.

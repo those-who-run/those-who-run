@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test check build replay web archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck test openapi check build replay web archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
@@ -16,6 +16,7 @@ help:
 	@echo "fmt      - ruff format"
 	@echo "typecheck - mypy on src/"
 	@echo "test     - pytest"
+	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
 	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "replay   - replay FILE=recording.jsonl"
@@ -55,11 +56,15 @@ typecheck:
 test:
 	$(PY) -m pytest -q
 
+openapi:
+	$(PY) scripts/openapi.py
+
 # The definition of green: CI runs exactly this. The coverage floor lives in
 # pyproject.toml ([tool.coverage.report] fail_under); a skipped test fails the run;
-# uv.lock must match pyproject.toml.
+# uv.lock must match pyproject.toml; web/openapi.json must match the API's models.
 check: lint typecheck
 	uv lock --check
+	$(PY) scripts/openapi.py --check
 	TWR_FAIL_ON_SKIP=1 $(PY) -m pytest -q -rs --cov --cov-report=term
 
 build:

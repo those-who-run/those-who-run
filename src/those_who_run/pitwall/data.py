@@ -7,7 +7,9 @@ while the pit wall reads it, so a session without ``summary.json`` is still
 listed, with its card facts rebuilt from the index.
 
 The session list carries the results card's facts (``results.build_card``), so
-the pit wall and the Discord post never disagree about a session.
+the pit wall and the Discord post never disagree about a session. Each row also
+carries the same facts as values (``SessionRow.values``, an ``api_models.Session``)
+for the data API (#236); ``LapRow`` and ``Trace`` are its models too.
 
 ``lap_summaries`` is a stand-in for the lap summary table (#115): it works out
 the lap flags from the index and the Parquet frames each time it is called.
@@ -22,19 +24,19 @@ import json
 import math
 import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, tzinfo
 from pathlib import Path
 from typing import Any
 
 from those_who_run.cars import car_name
+from those_who_run.pitwall.api_models import LapRow, Session, Trace, Track
 from those_who_run.results import (
     best_lap,
     build_card,
     kind_label,
     paused_result,
     position_shown,
-    race_time,
     track_label,
 )
 from those_who_run.sessionkind import LABELS
@@ -75,6 +77,9 @@ class SessionRow:
     driving_ms: int | None = None  # time not paused (#229); None for older sessions
     # engineer restarts the session was continued across (#273): from, to, lap, reason
     gaps: tuple[dict[str, Any], ...] = ()
+    # the session as values, for the data API (ADR 0004 point 6); None in tests'
+    # hand-made rows
+    values: Session | None = field(default=None, compare=False)
 
     @property
     def kind_name(self) -> str:
@@ -102,63 +107,6 @@ class SessionFilter:
     until: date | None = None  # inclusive
 
 
-@dataclass(frozen=True, slots=True)
-class LapRow:
-    lap: int
-    time_ms: int | None
-    complete: bool
-    fuel_start: float | None
-    fuel_end: float | None
-    fuel_used: float | None
-    position: int | None  # None where a position means nothing (results.position_shown)
-    frames: int
-    file: str
-    top_speed_kph: float | None  # None when the lap file is missing
-    pit: bool  # refuelled during the lap
-    out_lap: bool  # the lap after a pit stop
-    invalid: bool  # no lap time to compare: a partial lap or an untimed crossing
-    best: bool  # the session's best lap, as the card picks it
-    fuel_use: bool = True  # False when the session's fuel use is off: fuel means nothing
-    restart: bool = False  # an engineer restart fell in this lap (#273): partly seen
-
-    @property
-    def time(self) -> str:
-        return race_time(self.time_ms) if self.time_ms else ""
-
-    @property
-    def flags(self) -> str:
-        """Short text for the table: "best", "pit", "out", "partial", "no time"."""
-        out = []
-        if self.best:
-            out.append("best")
-        if self.pit:
-            out.append("pit")
-        if self.out_lap:
-            out.append("out")
-        if self.restart:
-            out.append("restart")
-        if self.invalid:
-            out.append("partial" if not self.complete else "no time")
-        return ", ".join(out)
-
-
-@dataclass(frozen=True, slots=True)
-class Trace:
-    """One lap's traces against time from the lap start, for lap compare."""
-
-    session_id: str
-    lap: int
-    t: tuple[float, ...]  # seconds from the lap's first frame, gaps capped
-    speed_kph: tuple[float, ...]
-    throttle_pct: tuple[float, ...]
-    brake_pct: tuple[float, ...]
-    gear: tuple[int, ...]
-    rpm: tuple[float, ...]
-
-    def __len__(self) -> int:
-        return len(self.t)
-
-
 # the index
 
 
@@ -171,14 +119,18 @@ def index_stamp(data_dir: Path) -> float:
 
     The index is in WAL mode, so a commit lands in ``index.sqlite-wal`` and the
     main file only changes at a checkpoint: the stamp is the later of the two.
+    An empty ``-wal`` is left out: a reader creates one when it opens the index
+    after the engineer has closed it, and that is not a write (#236).
     """
     path = index_path(data_dir)
     stamps = []
     for p in (path, path.with_name(path.name + "-wal")):
         try:
-            stamps.append(p.stat().st_mtime)
+            st = p.stat()
         except FileNotFoundError:
             continue
+        if st.st_size or p == path:
+            stamps.append(st.st_mtime)
     return max(stamps, default=0.0)
 
 
@@ -250,6 +202,11 @@ def _query(
         return [dict(r) for r in db.execute(sql, args)]
     finally:
         db.close()
+
+
+def safe_name(name: str) -> bool:
+    """A session id or lap file name that stays in its directory."""
+    return bool(_SAFE_NAME.match(name))
 
 
 def _session_dir(data_dir: Path, session_id: str) -> Path:
@@ -353,6 +310,60 @@ def _row(summary: dict[str, Any], closed: bool) -> SessionRow:
         track_id=sure_track_id(summary.get("track")),
         driving_ms=summary.get("driving_ms"),
         gaps=tuple(summary.get("gaps") or ()),
+        values=session_values(summary, closed, title, result),
+    )
+
+
+def session_values(summary: dict[str, Any], closed: bool, title: str, result: str) -> Session:
+    """The session as values, from the same summary its card is built from."""
+    kind_rec = summary.get("session_kind") or {}
+    kind = kind_rec.get("kind") or "unknown"
+    total_laps = int(summary.get("total_laps") or 0)
+    laps = summary.get("laps") or []
+    quickest = best_lap(laps, kind == "lap_race", summary.get("gt7_best_lap_ms"))
+    track = summary.get("track") or {}
+    track_id = track.get("id", summary.get("track_id"))
+    stops = summary.get("pit_stops")
+    if stops is None:  # an open session, or one stored before the detector: count in-laps
+        stops = [x for x in laps if x.get("pit") in ("in", "in_out")]
+    used = summary.get("fuel_burned", summary.get("fuel_used"))
+    restarts = [g["lap"] for g in summary.get("gaps") or [] if g.get("lap") is not None]
+    return Session(
+        session_id=str(summary["session_id"]),
+        title=title,
+        result=result,
+        started_at=float(summary.get("started_at") or 0.0),
+        ended_at=summary.get("ended_at"),
+        closed=closed,
+        kind=kind,
+        kind_label=kind_label(kind, total_laps, summary),
+        track=Track(
+            id=None if track_id is None else int(track_id),
+            name=track_label(summary.get("track")),
+            sure=sure_track_id(summary.get("track")) is not None,
+            evidence=track.get("evidence"),
+        ),
+        car=summary.get("car_name"),
+        car_code=summary.get("car_code"),
+        finished=bool(summary.get("finished")),
+        final_position=summary.get("final_position"),
+        total_cars=summary.get("total_cars"),
+        position_shown=position_shown(kind_rec),
+        total_time_ms=summary.get("total_time_ms"),
+        best_lap_ms=quickest[1] if quickest else None,
+        best_lap_no=quickest[0] if quickest else None,
+        laps_completed=int(summary.get("laps_completed") or 0),
+        total_laps=total_laps,
+        fuel_use=kind_rec.get("fuel_use"),
+        fuel_used=used,
+        fuel_capacity=summary.get("fuel_capacity"),
+        fuel_by_stint=list(summary.get("fuel_burned_by_stint") or ([used] if used else [])),
+        pit_stops=len(stops),
+        driving_ms=summary.get("driving_ms"),
+        paused_ms=summary.get("paused_ms"),
+        joined_on_lap=summary.get("joined_on_lap"),
+        continued=bool(summary.get("gaps")),
+        restart_laps=restarts,
     )
 
 
@@ -508,30 +519,53 @@ def lap_summaries(data_dir: Path, session_id: str) -> list[LapRow]:
     return out
 
 
+def lap_file(data_dir: Path, session_id: str, lap: int) -> tuple[str, int] | None:
+    """The lap's file name and frame count from the index, or None for no such lap.
+    A lap file never changes once its row is in the index (#148), so these key a
+    trace's cache."""
+    rows = [r for r in _laps(data_dir, session_id) if r["lap"] == lap]
+    return (rows[0]["file"], int(rows[0]["frames"] or 0)) if rows else None
+
+
 def lap_trace(data_dir: Path, session_id: str, lap: int, max_points: int = 1500) -> Trace | None:
     """Speed, throttle, brake, gear and RPM for one lap against time, thinned to
     at most ``max_points`` frames (a phone does not need 60 Hz). None when the
-    lap or its file is missing."""
+    lap or its file is missing.
+
+    Thinning keeps peaks (#183 R2): the frames are cut into stretches, and each
+    stretch keeps its slowest and its fastest frame, so a braking point's
+    minimum and a straight's top speed survive. The first and last frames are
+    always kept. Under four points, it takes every n-th frame instead."""
     import duckdb
 
-    rows = [r for r in _laps(data_dir, session_id) if r["lap"] == lap]
-    if not rows:
+    found = lap_file(data_dir, session_id, lap)
+    if found is None:
         return None
-    path = _lap_file(data_dir, session_id, rows[0]["file"])
+    path = _lap_file(data_dir, session_id, found[0])
     if not path.exists():
         return None
     con = duckdb.connect()
     try:
         row = con.execute("SELECT count(*) FROM read_parquet(?)", [str(path)]).fetchone()
         n = row[0] if row else 0
-        step = max(1, math.ceil(n / max(1, max_points)))
+        points = max(1, max_points)
+        if n <= points:
+            size, keep = 1, "true"
+        elif points < 4:
+            size = math.ceil(n / points)
+            keep = f"rn % {size} = 0"
+        else:
+            size = math.ceil(n / ((points - 2) // 2))  # two frames a stretch, plus the ends
+            keep = "lo = 1 OR hi = 1 OR rn = 0 OR rn = n - 1"
         data = con.execute(
-            "WITH f AS (SELECT *, row_number() OVER (ORDER BY t) - 1 AS rn,"
+            "WITH f AS (SELECT *, row_number() OVER (ORDER BY t) - 1 AS rn, count(*) OVER () AS n,"
             " least(coalesce(t - lag(t) OVER (ORDER BY t), 0), ?) AS dt FROM read_parquet(?)),"
-            " g AS (SELECT *, sum(dt) OVER (ORDER BY t ROWS UNBOUNDED PRECEDING) AS el FROM f)"
-            " SELECT el, speed_kph, throttle * 100.0 / 255, brake * 100.0 / 255, gear, engine_rpm"
-            " FROM g WHERE rn % ? = 0 ORDER BY t",
-            [MAX_STEP_SECS, str(path), step],
+            " g AS (SELECT *, sum(dt) OVER (ORDER BY t ROWS UNBOUNDED PRECEDING) AS el,"
+            f" row_number() OVER (PARTITION BY rn // {size} ORDER BY speed_kph, rn) AS lo,"
+            f" row_number() OVER (PARTITION BY rn // {size} ORDER BY speed_kph DESC, rn) AS hi"
+            " FROM f) SELECT el, speed_kph, throttle * 100.0 / 255, brake * 100.0 / 255, gear,"
+            f" engine_rpm FROM g WHERE {keep} ORDER BY t",
+            [MAX_STEP_SECS, str(path)],
         ).fetchall()
     finally:
         con.close()

@@ -133,6 +133,9 @@ is unchanged by the rebrand.
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see below). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
 | `GT7_WEB_PORT` | `8501` | The pit wall (`those-who-run web`). |
+| `GT7_PITWALL_PORT` | `9852` | The pit wall's data API and web app (`those-who-run pitwall`). |
+| `GT7_ENGINEER_URL` | `http://those-who-run:9850` | Where `pitwall` reaches the engineer's read-only port, for `/api/engine/status` and `/api/engine/dash`. |
+| `GT7_ENGINEER_CONTROL_URL` | `http://those-who-run:9851` | Where `pitwall` reaches the engineer's control port, for `/api/engine/control/*`. |
 | `LOG_LEVEL` | `INFO` | |
 
 ## 🚩 Running
@@ -494,6 +497,55 @@ It listens on all addresses and has no login: keep it on the LAN. The image's
 health check is `those-who-run healthcheck`: it probes the engineer's `/healthz`
 on `GT7_METRICS_PORT` for `run`, and the pit wall's `/_stcore/health` on
 `GT7_WEB_PORT` (or `--port`) for `web`.
+
+### The data API
+
+`those-who-run pitwall` serves the pit wall's read-only data API on port 9852
+(`--port` or `GT7_PITWALL_PORT`, `--address` to bind), for the React pit wall
+(ADR 0003) and the dashboards. It needs only the core install: aiohttp,
+DuckDB and PyYAML.
+
+| Route | What it returns |
+|---|---|
+| `GET /api/v1/sessions?track=&car=&kind=` | Sessions, newest first, and the values each filter can take |
+| `GET /api/v1/sessions/{id}` | One session |
+| `GET /api/v1/sessions/{id}/laps` | Its lap table, flags included (`pit`, `out_lap`, `invalid`, `restart`, `best`, `clean`) |
+| `GET /api/v1/sessions/{id}/laps/{lap}/trace?points=1500` | Speed, throttle, brake, gear and RPM against time, thinned keeping peaks |
+| `GET /api/v1/sessions/{id}/same-track` | The other sessions at the same track, for lap compare |
+| `GET /api/v1/openapi.json` | The OpenAPI 3.1 schema of all of these |
+| `GET /healthz` | `ok`, `version`, `index` and `engineer` |
+| `/api/engine/status`, `/api/engine/dash`, `/api/engine/control/{path}` | Forwarded to the engineer |
+
+- **Values, not card strings** (ADR 0004 point 6). A session carries
+  `final_position`, `total_cars`, `best_lap_ms` and the rest as numbers, with
+  the names Python owns (`kind_label`, `track.name`, `position_shown`) beside
+  them, and the card's `title` and `result`.
+- **The schema** is generated from the response models in
+  `src/those_who_run/pitwall/api_models.py` and committed as
+  `web/openapi.json`. Change a model, run `make openapi` and commit the file:
+  `make check` fails while it is stale.
+- **Read-only**, as `web` is: the index is opened `mode=ro` per request and
+  nothing is written under `GT7_DATA_DIR`. Responses carry an `ETag` that
+  changes only when the engineer writes (a trace's, only when its lap file
+  does), so polling gets 304; JSON over 1 KB is gzipped.
+- **The engineer, on the same origin.** `/api/engine/status` and the dash
+  WebSocket `/api/engine/dash` go to `GT7_ENGINEER_URL`'s `/api/v1/status` and
+  `/api/v1/dash`, and `/api/engine/control/{path}` to
+  `GT7_ENGINEER_CONTROL_URL`'s `/api/v1/{path}`. The `Authorization` header
+  passes through unchanged and is never logged. With the engineer down these
+  answer 502 within 2 s, and the data routes carry on.
+- **`/healthz`** is 200 while the data directory is readable, with no index yet
+  on a new volume too, and 503 when it is not. `engineer` says whether the
+  engineer answered; an engineer that is down never fails it.
+- **`--static DIR`** serves the built web app (`web/dist`) on every other path,
+  with `index.html` for client routes such as `/sessions/<id>` and
+  `/?session=<id>`. Hashed files under `assets/` are cached for a year;
+  `index.html` is never cached.
+
+```sh
+GT7_DATA_DIR=./data those-who-run pitwall                 # http://localhost:9852
+curl -s localhost:9852/api/v1/sessions | jq '.sessions[0]'
+```
 
 ### Pit wall on the NUC
 

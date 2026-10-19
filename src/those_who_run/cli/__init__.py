@@ -19,6 +19,7 @@ from those_who_run import __version__, brand
 from those_who_run.cli import (
     cars,
     healthcheck,
+    pitwall,
     post,
     rebuild_best,
     record,
@@ -58,6 +59,7 @@ COMMANDS: dict[str, Command] = {
     "post": post,
     "rebuild-best": rebuild_best,
     "web": web,
+    "pitwall": pitwall,
     "healthcheck": healthcheck,
 }
 

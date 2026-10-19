@@ -1,0 +1,964 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Those Who Run: pit wall",
+    "version": "1",
+    "description": "The pit wall's read-only data API, and the engineer's routes it forwards."
+  },
+  "paths": {
+    "/api/v1/sessions": {
+      "get": {
+        "operationId": "listSessions",
+        "summary": "Sessions, newest first, with the card's facts as values",
+        "tags": [
+          "pitwall"
+        ],
+        "parameters": [
+          {
+            "name": "track",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions with this track name; empty matches all",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "car",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions with this car name; empty matches all",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions with this session kind key; empty matches all",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionList"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: nothing has changed since the ETag sent in If-None-Match"
+          },
+          "503": {
+            "description": "Unhealthy, or the index is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "One session",
+        "tags": [
+          "pitwall"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The session id, \"20261017-162118\"",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: nothing has changed since the ETag sent in If-None-Match"
+          },
+          "404": {
+            "description": "No such session, lap or path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unhealthy, or the index is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}/laps": {
+      "get": {
+        "operationId": "listLaps",
+        "summary": "A session's lap table",
+        "tags": [
+          "pitwall"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The session id, \"20261017-162118\"",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LapList"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: nothing has changed since the ETag sent in If-None-Match"
+          },
+          "404": {
+            "description": "No such session, lap or path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unhealthy, or the index is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}/laps/{lap}/trace": {
+      "get": {
+        "operationId": "getTrace",
+        "summary": "A lap's speed, throttle, brake, gear and RPM against time",
+        "tags": [
+          "pitwall"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The session id, \"20261017-162118\"",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lap",
+            "in": "path",
+            "required": true,
+            "description": "The lap number",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "points",
+            "in": "query",
+            "required": false,
+            "description": "The most points to send",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trace"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: nothing has changed since the ETag sent in If-None-Match"
+          },
+          "400": {
+            "description": "A bad parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such session, lap or path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unhealthy, or the index is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{id}/same-track": {
+      "get": {
+        "operationId": "listSameTrack",
+        "summary": "The other sessions at this session's track, for lap compare",
+        "tags": [
+          "pitwall"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The session id, \"20261017-162118\"",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SameTrack"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: nothing has changed since the ETag sent in If-None-Match"
+          },
+          "404": {
+            "description": "No such session, lap or path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unhealthy, or the index is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "This schema",
+        "tags": [
+          "pitwall"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "The pit wall's health",
+        "tags": [
+          "pitwall"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unhealthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "description": "The body of every error response.",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong, in a sentence"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "FilterOptions": {
+        "type": "object",
+        "description": "The values each filter can take, from the sessions there are.",
+        "properties": {
+          "track": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Track names, as Session.track.name has them"
+          },
+          "car": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Car names"
+          },
+          "kind": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindOption"
+            },
+            "description": "Session kinds"
+          }
+        },
+        "required": [
+          "track",
+          "car",
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "Health": {
+        "type": "object",
+        "description": "The pit wall's health: unhealthy only when the data directory can't be read.",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "The data directory is readable"
+          },
+          "version": {
+            "type": "string",
+            "description": "The pit wall's version"
+          },
+          "index": {
+            "type": "boolean",
+            "description": "The index exists: false on a new volume until the engineer writes"
+          },
+          "engineer": {
+            "type": "boolean",
+            "description": "The engineer answered; down never makes the pit wall unhealthy"
+          }
+        },
+        "required": [
+          "ok",
+          "version",
+          "index",
+          "engineer"
+        ],
+        "additionalProperties": false
+      },
+      "KindOption": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "The kind key, as ?kind= takes it"
+          },
+          "label": {
+            "type": "string",
+            "description": "The kind's name"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "LapList": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The session"
+          },
+          "laps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LapRow"
+            },
+            "description": "Its laps in order"
+          }
+        },
+        "required": [
+          "session_id",
+          "laps"
+        ],
+        "additionalProperties": false
+      },
+      "LapRow": {
+        "type": "object",
+        "description": "One lap in the lap table.",
+        "properties": {
+          "lap": {
+            "type": "integer",
+            "description": "Lap number"
+          },
+          "time_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Lap time; null for a partial lap or an untimed crossing"
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "The lap was driven to the line"
+          },
+          "fuel_start": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fuel at the lap's start, GT7's units"
+          },
+          "fuel_end": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fuel at its end"
+          },
+          "fuel_used": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fuel used over the lap (negative when refuelled)"
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Position at the line; null where a position means nothing"
+          },
+          "frames": {
+            "type": "integer",
+            "description": "Telemetry frames stored for the lap"
+          },
+          "file": {
+            "type": "string",
+            "description": "The lap's Parquet file in the session directory"
+          },
+          "top_speed_kph": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Top speed; null when the lap file is missing"
+          },
+          "pit": {
+            "type": "boolean",
+            "description": "The in-lap of a pit stop"
+          },
+          "out_lap": {
+            "type": "boolean",
+            "description": "The lap after a pit stop"
+          },
+          "invalid": {
+            "type": "boolean",
+            "description": "No lap time to compare: a partial lap or an untimed crossing"
+          },
+          "best": {
+            "type": "boolean",
+            "description": "The session's best lap, as the card picks it"
+          },
+          "fuel_use": {
+            "type": "boolean",
+            "description": "False when the session's fuel use is off: its fuel means nothing"
+          },
+          "restart": {
+            "type": "boolean",
+            "description": "An engineer restart fell in this lap (#273): partly seen"
+          },
+          "clean": {
+            "type": "boolean",
+            "description": "Counts towards an average: not pit, out, partial or restart (#298)"
+          }
+        },
+        "required": [
+          "lap",
+          "time_ms",
+          "complete",
+          "fuel_start",
+          "fuel_end",
+          "fuel_used",
+          "position",
+          "frames",
+          "file",
+          "top_speed_kph",
+          "pit",
+          "out_lap",
+          "invalid",
+          "best",
+          "fuel_use",
+          "restart",
+          "clean"
+        ],
+        "additionalProperties": false
+      },
+      "SameTrack": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            },
+            "description": "Other sessions at the same track, newest first"
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "additionalProperties": false
+      },
+      "Session": {
+        "type": "object",
+        "description": "One session: what its results card is built from, as values.",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The session id, \"20261017-162118\""
+          },
+          "title": {
+            "type": "string",
+            "description": "The results card title, \"Circuit Gilles Villeneuve · 12-lap race\""
+          },
+          "result": {
+            "type": "string",
+            "description": "The results card line, \"🚩 Finished P3 of 20 in 21:06.182\""
+          },
+          "started_at": {
+            "type": "number",
+            "description": "Unix time the session started"
+          },
+          "ended_at": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Unix time it ended; null while it is still open"
+          },
+          "closed": {
+            "type": "boolean",
+            "description": "summary.json is written: the session has ended"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Session kind key (sessionkind.Kind), \"unknown\" when not recorded"
+          },
+          "kind_label": {
+            "type": "string",
+            "description": "The kind as the card names it: \"12-lap race\", \"time trial\""
+          },
+          "track": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Track"
+              }
+            ],
+            "description": "Where it was driven"
+          },
+          "car": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The car's name, null when GT7 sent an unknown code"
+          },
+          "car_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "GT7's car code"
+          },
+          "finished": {
+            "type": "boolean",
+            "description": "The race was finished: GT7 showed the result"
+          },
+          "final_position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Position at the end; show it only if position_shown"
+          },
+          "total_cars": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Cars in the field"
+          },
+          "position_shown": {
+            "type": "boolean",
+            "description": "A position means something here: a field GT7 flags"
+          },
+          "total_time_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Race time of a finished race"
+          },
+          "best_lap_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The best lap as the card picks it (GT7's own best first)"
+          },
+          "best_lap_no": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Which lap that was"
+          },
+          "laps_completed": {
+            "type": "integer",
+            "description": "Laps completed"
+          },
+          "total_laps": {
+            "type": "integer",
+            "description": "Laps in the race; 0 for a timed or open session"
+          },
+          "fuel_use": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Fuel use is on; false means the fuel figures mean nothing"
+          },
+          "fuel_used": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Fuel burned over the session, in GT7's units (refuels left out)"
+          },
+          "fuel_capacity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "The tank, in GT7's units: fuel as a share of it"
+          },
+          "fuel_by_stint": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Fuel burned in each stint, as the card's fuel line has it"
+          },
+          "pit_stops": {
+            "type": "integer",
+            "description": "Pit stops made"
+          },
+          "driving_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Time not paused (#229); null for older and open sessions"
+          },
+          "paused_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Time paused (#229)"
+          },
+          "joined_on_lap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The engineer joined part way, on this lap (#265)"
+          },
+          "continued": {
+            "type": "boolean",
+            "description": "Continued across an engineer restart (#273)"
+          },
+          "restart_laps": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "The laps an engineer restart fell in (#273)"
+          }
+        },
+        "required": [
+          "session_id",
+          "title",
+          "result",
+          "started_at",
+          "ended_at",
+          "closed",
+          "kind",
+          "kind_label",
+          "track",
+          "car",
+          "car_code",
+          "finished",
+          "final_position",
+          "total_cars",
+          "position_shown",
+          "total_time_ms",
+          "best_lap_ms",
+          "best_lap_no",
+          "laps_completed",
+          "total_laps",
+          "fuel_use",
+          "fuel_used",
+          "fuel_capacity",
+          "fuel_by_stint",
+          "pit_stops",
+          "driving_ms",
+          "paused_ms",
+          "joined_on_lap",
+          "continued",
+          "restart_laps"
+        ],
+        "additionalProperties": false
+      },
+      "SessionList": {
+        "type": "object",
+        "description": "Sessions newest first, filtered, and what the filters can take.",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            },
+            "description": "The sessions that match, newest first"
+          },
+          "options": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FilterOptions"
+              }
+            ],
+            "description": "Filter values from every session, not just these"
+          }
+        },
+        "required": [
+          "sessions",
+          "options"
+        ],
+        "additionalProperties": false
+      },
+      "Trace": {
+        "type": "object",
+        "description": "One lap's channels against time from the lap start, for lap compare. Thinned to the points asked for, keeping each stretch's slowest and fastest frame, so braking points and top speeds survive.",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The session"
+          },
+          "lap": {
+            "type": "integer",
+            "description": "The lap"
+          },
+          "t": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Seconds from the lap's first frame, gaps capped at 0.1 s"
+          },
+          "speed_kph": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Speed"
+          },
+          "throttle_pct": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Throttle, 0 to 100"
+          },
+          "brake_pct": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Brake, 0 to 100"
+          },
+          "gear": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Gear; 0 is neutral or reverse"
+          },
+          "rpm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Engine speed"
+          }
+        },
+        "required": [
+          "session_id",
+          "lap",
+          "t",
+          "speed_kph",
+          "throttle_pct",
+          "brake_pct",
+          "gear",
+          "rpm"
+        ],
+        "additionalProperties": false
+      },
+      "Track": {
+        "type": "object",
+        "description": "The track as the detector placed it.",
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "GT7's track id, when the detector named one, sure or not"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name to show: \"Unknown track\" when the detector is not sure"
+          },
+          "sure": {
+            "type": "boolean",
+            "description": "The detector is sure (probable or confirmed): same-track compare uses it"
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the detector placed it there, in a sentence"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sure",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

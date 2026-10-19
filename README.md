@@ -753,6 +753,10 @@ https://github.com/those-who-run/those-who-run/milestones
 
 ## Development
 
+The rules for working on the repository, for people and coding agents alike,
+are in [AGENTS.md](AGENTS.md) (and [web/AGENTS.md](web/AGENTS.md) for the web
+app): issues, the definition of done, pull requests, merging and releases.
+
 ```sh
 make check           # what CI runs: ruff, mypy, pytest with the coverage floor, web-check
 make lint test       # ruff + pytest only, quicker while iterating

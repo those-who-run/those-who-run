@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check docs-screenshots web-preview archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
@@ -141,6 +141,7 @@ web-check: $(WEB_DEPS)
 # The docs' screenshots (#336): web/playwright.docs.config.ts, the e2e suite's
 # global setup with the store dated from a fixed time, so two runs give the same
 # PNGs. Not part of web-check, which never writes docs/.
+.PHONY: docs-screenshots
 docs-screenshots: $(WEB_DEPS) web-build
 	@cd web && node scripts/browser-check.ts
 	cd web && TWR=$(TWR) npx playwright test --config playwright.docs.config.ts

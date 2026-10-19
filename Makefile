@@ -16,6 +16,7 @@ help:
 	@echo "fmt      - ruff format"
 	@echo "typecheck - mypy on src/"
 	@echo "test     - pytest"
+	@echo "docs-check - every internal link and anchor in the Markdown resolves (offline)"
 	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
 	@echo "brand-css - write web/src/styles/brand.css, the web app's brand colours, from brand.py"
 	@echo "wordmark - redraw the wordmark and icons as outlines: make wordmark NOTO=<NotoSansCJK-VF.ttc>"
@@ -64,6 +65,14 @@ typecheck:
 test:
 	$(PY) -m pytest -q
 
+# Every internal link and anchor in the repository's Markdown resolves
+# (scripts/docs_links.py, offline, no network or binary to fetch). The tables the
+# docs keep in step with the code (config, commands, make targets, metrics) are
+# checked by tests/test_docs.py, in pytest.
+.PHONY: docs-check
+docs-check:
+	$(PY) scripts/docs_links.py
+
 openapi:
 	$(PY) scripts/openapi.py
 
@@ -107,7 +116,7 @@ brand-assets: $(WEB_DEPS)
 # uv.lock must match pyproject.toml; web/openapi.json must match the API's models;
 # and the web app passes web-check (brand.css matching brand.py among it), which
 # fails when Node or the browser is missing.
-check: lint typecheck
+check: lint typecheck docs-check
 	uv lock --check
 	$(PY) scripts/openapi.py --check
 	$(PY) scripts/brand_assets.py --check

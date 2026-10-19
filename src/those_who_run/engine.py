@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Any
+from typing import Any, Literal
 
 from those_who_run.callouts import Callout, CalloutQueue
 from those_who_run.metrics import Metrics
@@ -105,6 +105,7 @@ class Engine:
         self.last_driving: RaceState | None = None  # last IN_RACE frame of this race
         self.driver = DriverCheck()
         self.replay = False  # a GT7 replay or demo race: ignored until the next start
+        self.ignoring: Literal["replay", "demo"] = "replay"  # which, while ``replay`` is set
         self._held: list[RaceState] = []  # an unflagged start, until DriverCheck decides
         self._held_prev: RaceState | None = None
         self.in_pit_lane = False  # as the rules were last told, see _apply_pits
@@ -139,7 +140,7 @@ class Engine:
                 "replay" if verdict == "replay" else "demo race",
                 self.driver.why,
             )
-            self.replay = True
+            self.replay, self.ignoring = True, verdict
             recorder, last = self.recorder, self._held_prev
             if recorder is not None and recorder.session is not None and last is not None:
                 log.info("closing open session on %s start", verdict)

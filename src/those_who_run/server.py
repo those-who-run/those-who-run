@@ -2,7 +2,8 @@
 
 ``GT7_METRICS_PORT`` (9850) serves what anyone on the LAN may read:
 ``/metrics``, ``/healthz``, and under ``/api/v1`` (:attr:`Server.api`) the
-read-only API (#136) and the dash WebSocket, ``GET /api/v1/dash`` (#239). The
+read-only API: ``GET /api/v1/status`` (#292), and the dash WebSocket,
+``GET /api/v1/dash`` (#239). The
 control port, ``GT7_CONTROL_PORT`` (9851 on the NUC), is a second listener with
 its own application and middleware (:attr:`Server.control`, routes under
 ``/api/v1`` in :attr:`Server.control_api`), where the control routes and the
@@ -47,6 +48,16 @@ async def errors(request: web.Request, handler: Handler) -> web.StreamResponse:
     except Exception:
         log.exception("error serving %s %s", request.method, request.path)
         return web.Response(status=500, text="internal server error")
+
+
+def json_route(body: Callable[[], Any]) -> Handler:
+    """A GET handler serving ``body()`` as JSON, never cached: it changes with
+    every frame."""
+
+    async def serve(request: web.Request) -> web.Response:
+        return web.json_response(body(), headers={"Cache-Control": "no-store"})
+
+    return serve
 
 
 class DebugAccessLog(AbstractAccessLogger):

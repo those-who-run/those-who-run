@@ -373,6 +373,37 @@
           }
         }
       }
+    },
+    "/api/engine/status": {
+      "get": {
+        "operationId": "getEngineStatus",
+        "summary": "What the engineer is doing right now, from its /api/v1/status",
+        "tags": [
+          "engineer"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineStatus"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The engineer did not answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -388,6 +419,67 @@
         },
         "required": [
           "error"
+        ],
+        "additionalProperties": false
+      },
+      "EngineStatus": {
+        "type": "object",
+        "description": "What the engineer is doing right now (#292).",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "The engineer's version"
+          },
+          "started_at": {
+            "type": "number",
+            "description": "Unix time the engineer started"
+          },
+          "activity": {
+            "enum": [
+              "idle",
+              "driving",
+              "paused",
+              "replay",
+              "demo"
+            ],
+            "description": "What it is doing; idle exactly when its /healthz says idle"
+          },
+          "idle_secs": {
+            "type": "number",
+            "description": "Seconds since the last driving frame; 0 while driving"
+          },
+          "telemetry": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TelemetryLink"
+              }
+            ],
+            "description": "The telemetry feed"
+          },
+          "voice_connected": {
+            "type": "boolean",
+            "description": "Joined to the Discord voice channel"
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiveSession"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The open session; null when none is open"
+          }
+        },
+        "required": [
+          "version",
+          "started_at",
+          "activity",
+          "idle_secs",
+          "telemetry",
+          "voice_connected",
+          "session"
         ],
         "additionalProperties": false
       },
@@ -601,6 +693,83 @@
           "fuel_use",
           "restart",
           "clean"
+        ],
+        "additionalProperties": false
+      },
+      "LiveSession": {
+        "type": "object",
+        "description": "The session the engineer has open, as of the last frame.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The session id, as the pit wall lists it: \"20261017-162118\""
+          },
+          "kind": {
+            "enum": [
+              "unknown",
+              "lap_race",
+              "solo_laps",
+              "timed_field",
+              "solo_timed"
+            ],
+            "description": "Session kind key (sessionkind.Kind), \"unknown\" until it is known"
+          },
+          "track": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackSeen"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where it is being driven; null until the detector has a match"
+          },
+          "car": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The car's name; null when GT7 sent no car code"
+          },
+          "lap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The lap of the last driving frame"
+          },
+          "laps_total": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Laps in the race; null for a timed session"
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Position now; null where the results card hides it"
+          },
+          "cars": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Cars in the field; null where the results card hides the position"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "track",
+          "car",
+          "lap",
+          "laps_total",
+          "position",
+          "cars"
         ],
         "additionalProperties": false
       },
@@ -857,6 +1026,28 @@
         ],
         "additionalProperties": false
       },
+      "TelemetryLink": {
+        "type": "object",
+        "description": "The PS5's telemetry feed.",
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "description": "Packets arrived within GT7_TELEMETRY_TIMEOUT_SECS"
+          },
+          "last_packet_age_s": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Seconds since the last frame; null before the first"
+          }
+        },
+        "required": [
+          "connected",
+          "last_packet_age_s"
+        ],
+        "additionalProperties": false
+      },
       "Trace": {
         "type": "object",
         "description": "One lap's channels against time from the lap start, for lap compare. Thinned to the points asked for, keeping each stretch's slowest and fastest frame, so braking points and top speeds survive.",
@@ -956,6 +1147,36 @@
           "name",
           "sure",
           "evidence"
+        ],
+        "additionalProperties": false
+      },
+      "TrackSeen": {
+        "type": "object",
+        "description": "The track as the detector has placed it so far.",
+        "properties": {
+          "id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "GT7's track id; null when only the circuit is known (Fuji's layouts)"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The track's name, or the circuit's"
+          },
+          "sure": {
+            "type": "boolean",
+            "description": "The detector is sure (probable or confirmed), as the pit wall's Track"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sure"
         ],
         "additionalProperties": false
       }

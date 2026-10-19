@@ -179,9 +179,10 @@ def document(routes: tuple[Route, ...] | list[Route], title: str, description: s
 def spec() -> dict[str, Any]:
     """Everything the browser reads from the pit wall's origin. A module adds
     its routes here: ``routes = (*api_models.ROUTES, *other.ROUTES)``."""
+    from those_who_run import status
     from those_who_run.pitwall import api_models
 
-    routes = (*api_models.ROUTES,)
+    routes = (*api_models.ROUTES, *status.ROUTES)
     return document(
         routes,
         title="Those Who Run: pit wall",

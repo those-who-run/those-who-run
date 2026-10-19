@@ -121,7 +121,7 @@ is unchanged by the rebrand.
 | `GT7_VOICE_MODEL` | `voices/en_GB-alba-medium.onnx` | Piper voice. |
 | `GT7_CACHE_DIR` | `$XDG_CACHE_HOME/those-who-run`, else `~/.cache/those-who-run` | Synthesised sentence clips, reused across laps. Must be owned by the user running the engineer, and must not be inside `GT7_DATA_DIR` (the pit wall can write there). |
 | `GT7_CACHE_MAX_MB` | `100` | Size cap for the speech cache; the least recently used clips go first. |
-| `GT7_METRICS_PORT` | `9850` | `/metrics`, `/healthz` and, as it arrives, the read-only `/api/v1`. |
+| `GT7_METRICS_PORT` | `9850` | `/metrics`, `/healthz` and the read-only `/api/v1` (`/api/v1/status`). |
 | `GT7_CONTROL_PORT` | unset | The control API's port (`9851` on the NUC, ADR 0001). Unset, nothing listens there. |
 | `GT7_BIND_ADDRESS` | `0.0.0.0` | Address both engineer ports listen on. |
 | `DISCORD_RESULTS_CHANNEL_ID` | unset | Text channel for results cards. Unset turns them off. |
@@ -647,6 +647,18 @@ engineer's start if there has been none). A session left open because the
 frames stopped, say the PS5 was switched off mid-lap, counts as idle: a
 restart interrupts no one, and shutdown closes the session. The home-lab
 deploy waits on these, so a new image never restarts the engineer mid-race.
+
+`GET /api/v1/status` says what the engineer is doing right now, for the pit
+wall's header (which reaches it as `/api/engine/status`): `version`,
+`started_at` (epoch seconds), `activity` (`idle`, `driving`, `paused`,
+`replay` or `demo`; `idle` exactly when `/healthz` says `idle`), `idle_secs`,
+`telemetry` (`connected`, `last_packet_age_s`), `voice_connected`, and
+`session`, null when none is open: its `id`, `kind`, `track` (`id`, `name`,
+`sure`), `car`, `lap`, `laps_total` (null when timed), and `position` and
+`cars`, null where the results card would hide the position or GT7 sends
+none. It needs no token and holds no token, secret, or PS5 or Discord id, and
+is sent with `Cache-Control: no-store`. Its schema is in `web/openapi.json`,
+from the models in `those_who_run/status.py`.
 
 ## Livery
 

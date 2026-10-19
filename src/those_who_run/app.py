@@ -4,7 +4,8 @@
 :class:`~those_who_run.supervise.Supervisor`, handles SIGINT and SIGTERM, and
 tears everything down from one :class:`contextlib.AsyncExitStack`. A component
 that fails to start leaves nothing open. The control API (#136) and the rest
-call :meth:`App.status` and :meth:`App.stop`.
+call :meth:`App.status` and :meth:`App.stop`; ``GET /api/v1/status`` serves
+:meth:`App.live_status` (#292).
 
 The PS5, Discord and Piper are reached only through the factories passed in,
 which default to the real classes, so a test runs the whole engineer with fakes.
@@ -27,8 +28,9 @@ from those_who_run.config import LiveSettings, Settings, load_rules_config
 from those_who_run.engine import Engine
 from those_who_run.metrics import Metrics
 from those_who_run.rules import build_rules
-from those_who_run.server import Server
+from those_who_run.server import Server, json_route
 from those_who_run.state import Phase, RaceState
+from those_who_run.status import EngineStatus, TelemetryLink, activity, live_session
 from those_who_run.store import SessionStore
 from those_who_run.supervise import Supervisor
 
@@ -150,13 +152,16 @@ class App:
             port=settings.metrics_port,
             control_port=settings.control_port,
         )
+        self.server.api.router.add_get("/status", json_route(lambda: self.live_status().body()))
         self.writer: RecordingWriter | OutingRecorder | None = None
         self.poster: ResultsPoster | None = None
         self._store_open = False
         # When the last driving frame (in a race, or paused in one) arrived;
         # None until one does, and idle_secs counts from the engineer's start.
         self._started = time.monotonic()
+        self._started_at = time.time()  # the same, for /api/v1/status
         self._driving_at: float | None = None
+        self._frame_at: float | None = None  # when the last frame was taken in
 
     # control
 
@@ -202,6 +207,24 @@ class App:
         since = time.monotonic() - (self._driving_at or self._started)
         busy = self._driving_at is not None and since < self.settings.telemetry_timeout_secs
         return {"idle": not busy, "idle_secs": 0.0 if busy else round(since, 1)}
+
+    def live_status(self) -> EngineStatus:
+        """What the engineer is doing right now: the ``/api/v1/status`` body
+        (#292). Read from state already held, with no I/O, so a poll never holds
+        up the frames; ``activity`` is ``idle`` exactly when :meth:`idle` is."""
+        idle, seen = self.idle(), self._frame_at
+        return EngineStatus(
+            version=__version__,
+            started_at=round(self._started_at, 3),
+            activity=activity(self.engine, idle["idle"]),
+            idle_secs=idle["idle_secs"],
+            telemetry=TelemetryLink(
+                connected=self.telemetry.connected(self.settings.telemetry_timeout_secs),
+                last_packet_age_s=None if seen is None else round(time.monotonic() - seen, 1),
+            ),
+            voice_connected=self.player.connected,
+            session=live_session(self.engine, self.store.session),
+        )
 
     # lifecycle
 
@@ -328,6 +351,7 @@ class App:
     # the loops
 
     async def _handle(self, state: RaceState) -> None:
+        self._frame_at = time.monotonic()
         if self.writer is not None:
             self.writer.write(state)
         if state.phase in (Phase.IN_RACE, Phase.PAUSED):

@@ -33,8 +33,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release PR's branch, the v* tag and the GitHub release
-      pull-requests: write # opens and updates the release PR
+      pull-requests: write # opens and updates the release PR, and turns on its auto-merge
       issues: write # the autorelease labels on the release PR
+      actions: write # dispatches CI on the release branch
     outputs:
       release_created: ${{ steps.rp.outputs.release_created }}
       tag_name: ${{ steps.rp.outputs.tag_name }}
@@ -44,6 +45,21 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # The release PR is made with the GITHUB_TOKEN, so no CI starts on it and its
+      # required checks would never report. A dispatch is the one event that token
+      # may start: run CI on the release branch, and merge the PR when it passes.
+      # Merging it is the release, so a release ships once CI is green; close or
+      # edit the PR to hold one back.
+      - name: CI and auto-merge for the release PR
+        if: steps.rp.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.rp.outputs.pr }}
+        run: |
+          branch=$(jq -r '.headBranchName' <<<"$PR")
+          number=$(jq -r '.number' <<<"$PR")
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash
 
   release:
     needs: release-please

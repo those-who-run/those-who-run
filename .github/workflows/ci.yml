@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # release-please's PR is made with the GITHUB_TOKEN, which starts no workflows;
+  # release-please.yml dispatches this on the release branch instead, so the PR's
+  # required checks report.
+  workflow_dispatch:
 
 # Least privilege: the jobs only read the repository.
 permissions:

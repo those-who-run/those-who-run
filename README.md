@@ -566,6 +566,17 @@ list, each title linking to `/sessions/<id>`; a results card's old
   `web/src/api/schema.d.ts` (`npm run api` in `web/` after `make openapi`), and
   the TanStack Query hooks in `web/src/api/hooks.ts`. ESLint fails `fetch` or
   the client anywhere outside `web/src/api/`.
+- **Style comes only from the design tokens** (ADR 0004,
+  [`docs/design.md`](docs/design.md)) in `web/src/styles/`: ESLint fails a
+  colour literal or an arbitrary Tailwind value anywhere else in `web/src/`, a
+  Vitest test checks every allowed colour pair's contrast, and the brand
+  colours are generated from `brand.py` into `web/src/styles/brand.css` (`make
+  brand-css`; `make check` fails when it is stale). The fonts (Barlow and
+  Barlow Semi Condensed) are self-hosted from `@fontsource`; the app is dark
+  only.
+- **Numbers become text only in `web/src/lib/format.ts`**, whose cases,
+  `tests/fixtures/format-cases.json`, pytest checks against the results card's
+  formatter too.
 - **No browser-only code at module top level**: a Vitest test imports every
   route module under Node with no DOM.
 - **Each route is a lazy chunk**, under a gzipped budget in
@@ -732,6 +743,11 @@ read it.
 | Deep black | `#111111` | background |
 | Carbon grey | `#333333` | panels, secondary |
 | White | `#FFFFFF` | type |
+
+The web app's wordmark and icons (`web/src/assets/*.svg`, `web/public/`) are
+outlines of Noto Sans CJK JP (走り屋) and Barlow Semi Condensed, both under the
+SIL Open Font License 1.1. `make wordmark NOTO=<NotoSansCJK-VF.ttc>` redraws
+them with `scripts/wordmark.py`.
 
 Readouts are monospace. Times look like `1:41.023`, deltas like `+0.512`,
 trackside glyphs are ⏱️ for times, ⛽ for fuel and 🚩 for the flag.

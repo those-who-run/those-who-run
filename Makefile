@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test openapi check build build-pitwall replay web web-build web-dev web-check web-preview archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
@@ -17,6 +17,8 @@ help:
 	@echo "typecheck - mypy on src/"
 	@echo "test     - pytest"
 	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
+	@echo "brand-css - write web/src/styles/brand.css, the web app's brand colours, from brand.py"
+	@echo "wordmark - redraw the wordmark and icons as outlines: make wordmark NOTO=<NotoSansCJK-VF.ttc>"
 	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor, web-check (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "build-pitwall - podman build the slim pit wall image, $(IMAGE_NAME):$(VERSION)-pitwall"
@@ -24,7 +26,7 @@ help:
 	@echo "web      - the Streamlit pit wall on http://localhost:8501 (until #238)"
 	@echo "web-build - build the React pit wall into web/dist (needs Node, web/.node-version)"
 	@echo "web-dev  - Vite's dev server on http://localhost:5173, /api proxied to a local pitwall"
-	@echo "web-check - ESLint, tsc, Vitest, the client freshness check, the bundle budget, Playwright"
+	@echo "web-check - ESLint, tsc, Vitest, the client and brand.css freshness checks, the bundle budget, Playwright"
 	@echo "web-preview - web/dist over a read-only copy of the NUC's store, on http://<laptop>:9852"
 	@echo "archive-push - upload GT7_ARCHIVE_DIR to the outings release (ADR 0002)"
 	@echo "archive-pull - download the outings release into GT7_ARCHIVE_DIR"
@@ -64,10 +66,30 @@ test:
 openapi:
 	$(PY) scripts/openapi.py
 
+brand-css:
+	$(PY) scripts/brand_css.py
+
+# The wordmark and icons (scripts/wordmark.py): outlines of Noto Sans CJK JP and
+# Barlow Semi Condensed (SIL OFL 1.1), then the PNG icons from them. fontTools is
+# not a project dependency: uvx brings a pinned one. The PNGs need ImageMagick.
+NOTO      ?=
+FONTTOOLS := fonttools==4.66.1
+BARLOW_SC := web/node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-700-normal.woff2
+
+wordmark: $(WEB_DEPS)
+	@test -n "$(NOTO)" && test -f "$(NOTO)" || { echo "NOTO must name Noto Sans CJK's NotoSansCJK-VF.ttc (Fedora: google-noto-sans-cjk-vf-fonts; or https://github.com/notofonts/noto-cjk), e.g. make wordmark NOTO=/usr/share/fonts/google-noto-sans-cjk-vf-fonts/NotoSansCJK-VF.ttc" >&2; exit 1; }
+	@command -v magick >/dev/null 2>&1 || { echo "ImageMagick (magick) is missing: it renders the PNG icons" >&2; exit 1; }
+	uvx --with $(FONTTOOLS) --with brotli==1.2.0 python scripts/wordmark.py "$(NOTO)" $(BARLOW_SC)
+	magick -background none web/src/assets/icon.svg -resize 192x192 -strip web/public/icon-192.png
+	magick -background none web/src/assets/icon.svg -strip web/public/icon-512.png
+	magick -background none web/src/assets/icon-maskable.svg -strip web/public/icon-maskable-512.png
+	magick -background none web/src/assets/icon.svg -resize 180x180 -strip web/public/apple-touch-icon.png
+
 # The definition of green: CI runs exactly this. The coverage floor lives in
 # pyproject.toml ([tool.coverage.report] fail_under); a skipped test fails the run;
 # uv.lock must match pyproject.toml; web/openapi.json must match the API's models;
-# and the web app passes web-check, which fails when Node or the browser is missing.
+# and the web app passes web-check (brand.css matching brand.py among it), which
+# fails when Node or the browser is missing.
 check: lint typecheck
 	uv lock --check
 	$(PY) scripts/openapi.py --check
@@ -110,6 +132,7 @@ web-dev: $(WEB_DEPS)
 
 web-check: $(WEB_DEPS)
 	@cd web && node scripts/browser-check.ts
+	$(PY) scripts/brand_css.py --check
 	cd web && npm run lint
 	cd web && npm run typecheck
 	cd web && npm run api:check

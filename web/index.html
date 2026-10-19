@@ -3,6 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Dark only (ADR 0004 point 2): the brand's deep black, before the CSS arrives. -->
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#111111" />
+    <!-- Barlow regular, which body text needs first: the same file the CSS loads. -->
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource/barlow/files/barlow-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Those Who Run · pit wall</title>
   </head>
   <body>

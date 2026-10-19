@@ -36,12 +36,24 @@ paint.
 | `--lap-b` | `var(--text)` | compare: lap B, dashed |
 
 There are no shadows. Elevation is a lighter surface plus a border. Sheets and
-dialogs get one shadow token, `--shadow-overlay`, over a 60% black scrim.
+dialogs get one shadow token, `--shadow-overlay` (`0 8px 32px` at 50% black),
+over a 60% black scrim (`--scrim`).
+
+The tokens live in `web/src/styles/tokens.css`, the brand's from
+`web/src/styles/brand.css` (generated from `brand.py` by `make brand-css`).
+Tailwind's own palette is cleared, so the utilities are the tokens:
+`bg-bg`, `bg-surface`, `bg-surface-raised`, `border-border`,
+`border-border-strong`, `text-fg` (for `--text`), `text-muted`, `text-subtle`,
+`bg-accent`, `bg-accent-hover`, `text-on-accent`, `text-accent-text`,
+`text-timing-best`, `text-timing-improve`, `text-timing-slower`, `text-info`,
+`text-lap-a`, `text-lap-b` and `bg-scrim`.
 
 ### Allowed pairs
 
 These ratios were measured with the WCAG 2 formula. The contrast test (#294
-R3) checks this table.
+R3, `web/src/styles/contrast.test.ts`) checks this table against the tokens,
+and each pair against its floor as `web/src/styles/pairs.json` lists it. A new
+pair goes in both.
 
 | Foreground | On `--bg` | On `--surface` | On `--surface-raised` | Allowed for |
 |---|---|---|---|---|
@@ -50,11 +62,11 @@ R3) checks this table.
 | `--text-subtle` | 4.0 | 3.7 | 3.3 | large text (≥ 24 px, or 19 px bold), icons, disabled |
 | `--accent` | 3.6 | 3.3 | 2.9 | non-text on `--bg` and `--surface` (dots, bars, lines, borders); large text on `--bg` only |
 | `--accent-hover` | 3.9 | 3.6 | 3.2 | the primary button's hover and pressed fill; never text |
-| `--accent-text` | 6.8 | 6.3 | 5.6 | anything |
-| `--timing-best` | 7.2 | 6.6 | 5.9 | anything; dashboards on `--bg` |
+| `--accent-text` | 6.8 | 6.2 | 5.6 | anything |
+| `--timing-best` | 7.1 | 6.6 | 5.9 | anything; dashboards on `--bg` |
 | `--timing-improve` | 10.8 | 10.0 | 8.9 | anything |
 | `--timing-slower` | 11.3 | 10.4 | 9.3 | anything |
-| `--info` | 7.4 | 6.9 | 6.1 | anything |
+| `--info` | 7.4 | 6.8 | 6.1 | anything |
 | `--on-accent` on `--accent` | | | | 5.3: button labels |
 | `--on-accent` on `--accent-hover` | | | | 4.8: button labels on hover and press |
 
@@ -73,11 +85,18 @@ Dashboards need 7:1 for values: `--text`, `--text-muted` (on `--bg`),
     hero.
 
   The fallback is `system-ui`.
-- **Glyphs:** #294 checks that both families' tabular figures are equal width,
-  and that the Latin subset has the true minus (U+2212) and the em dash
-  (U+2014) the formats use.
+- **Glyphs:** checked in #294 on `@fontsource` 5.3.0's Latin files. Both
+  families have a `tnum` feature that sets every digit to one width in each
+  weight used (Barlow 527, 533 and 538 units at 400, 500 and 600; Semi
+  Condensed 507 and 521 at 600 and 700); their default figures are
+  proportional. The Latin subset has the true minus (U+2212) and the em dash
+  (U+2014). Playwright measures `1:11.111` and `1:00.000` at the same width
+  with `.num` in each weight.
 - **Numbers:** `font-variant-numeric: tabular-nums` always, through the
-  components and the `.num` utility.
+  components and the `.num` utility (`num-lg` and `num-xl` for the big ones).
+- **Loading:** `font-display: swap`, and Barlow 400 preloaded. The wordmark
+  (`web/src/assets/wordmark.svg`) and the icons are outlines, so no CJK font
+  is loaded.
 
 | Token | Size / line | Use |
 |---|---|---|
@@ -138,13 +157,20 @@ Python in `tests/fixtures/format-cases.json`.
 | Fuel per lap | `fuelPerLap(v)` | `3.2%` |
 | Speed | `speedKph(v)` | `287 km/h` |
 | Duration | `duration(ms)` | `9 min 57 s`, `1 h 04 min` |
-| Session date | `sessionDate(t)` | `Today 14:04`, `Yesterday 21:10`, `Sat 17 Oct 14:04` |
+| Session date | `sessionDate(t, now, tz)` | `Today 14:04`, `Yesterday 21:10`, `Sat 17 Oct 14:04`, `Fri 17 Oct 2025 14:04` |
 | Missing | `missing()` | `—` (muted) |
 
 Rules:
 - A lap time is never rounded differently from the results card.
 - Gaps always have a sign.
-- "Fuel off" replaces fuel numbers when the session's fuel use is off.
+- "Fuel off" replaces fuel numbers when the session's fuel use is off
+  (`fuelPct(v, { fuelUse: false })`).
+- `position` returns two parts, `{ position: "P3", of: "/16" }`, so the field
+  can be muted. Whether to show it is the API's `position_shown`.
+- Fuel percentages round half to even, as Python's `round()` does on the card.
+- The cases in `tests/fixtures/format-cases.json` are the definition: Vitest
+  checks them all, and pytest checks those with a Python formatter
+  (`results.race_time`).
 - An unknown number is `—`. It is never 0, `None` or blank.
 
 ## Components
@@ -170,7 +196,16 @@ writing anything new. A new pattern goes into the kit first.
 shadcn/ui primitives sit in `web/src/components/ui/`, restyled only through
 tokens. Note here any change from upstream:
 
-- *(none yet)*
+- Two of shadcn's colour names mean something else here, and ours win:
+  `accent` is Advan red, not shadcn's subtle hover fill, and `muted` is muted
+  text, not a muted surface. After `shadcn add`, change `bg-accent` and
+  `bg-muted` (and their `hover:` forms) to `bg-surface-raised`, and
+  `text-destructive` to `text-accent-text`. The other names
+  (`background`, `primary`, `card`, `popover`, `secondary`,
+  `muted-foreground`, `destructive`, `input`, `ring`) map onto ours as they
+  are.
+- `Button`: tokens only (`bg-primary`, `hover:bg-accent-hover`, a
+  `border-input` outline, `text-accent-text` links); #295 designs the rest.
 
 ## States
 

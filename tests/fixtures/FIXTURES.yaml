@@ -423,6 +423,32 @@ fixtures:
         session is open and on the card after it.
     tests: [test_twins]
 
+# `cases` lists the hand-written case files: JSON, not drives, so they have no
+# date, track, car, kind or outing. Each has
+#
+#   file       the file, a .json in this folder
+#   source     what it is and who keeps it
+#   pins       the behaviours the tests check against it
+#   tests      the Python test modules that read it
+#   web_tests  the web app's tests that read it, as paths from the repository root
+
+cases:
+  - file: format-cases.json
+    source: >-
+      Written by hand for #294: how web/src/lib/format.ts writes lap and race
+      times, gaps, positions, fuel, speed, durations and dates, as
+      docs/design.md's Numbers table has them. A case naming a Python formatter
+      (results.race_time) is checked against it too.
+    pins:
+      - The results card and the pit wall write the same lap the same way
+        (49.677, 1:36.595, 1:02:03.456).
+      - A gap always has a sign, with a true minus (U+2212); the best lap is
+        "Best".
+      - A missing value is "—", never 0, null, NaN or undefined; fuel use off is
+        "Fuel off", even at 0.
+    tests: [test_format_cases]
+    web_tests: [web/src/lib/format.test.ts]
+
 outings:
   - id: "20261016-183946"
     date: 2026-10-16

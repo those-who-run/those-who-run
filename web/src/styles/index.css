@@ -1,0 +1,73 @@
+/* The app's one stylesheet: Tailwind, the self-hosted fonts, the brand colours
+   (generated), the tokens and the base styles (ADR 0004 points 1, 2 and 4). Style
+   lives in web/src/styles/ only: a colour literal or an arbitrary Tailwind value
+   anywhere else in src/ fails lint. */
+@import "tailwindcss";
+
+/* Barlow for the UI, Barlow Semi Condensed for big numbers: the Latin subset, in
+   the weights the guide lists, served by the pit wall (no font CDN). */
+@import "@fontsource/barlow/latin-400.css";
+@import "@fontsource/barlow/latin-500.css";
+@import "@fontsource/barlow/latin-600.css";
+@import "@fontsource/barlow-semi-condensed/latin-600.css";
+@import "@fontsource/barlow-semi-condensed/latin-700.css";
+
+@import "./brand.css";
+@import "./tokens.css";
+
+/* Always built, though nothing uses them yet: the kit (#295) and the e2e checks do. */
+@source inline("num num-lg num-xl");
+
+@layer base {
+  html {
+    background-color: var(--bg);
+    color: var(--text);
+  }
+
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border-color: var(--border);
+  }
+
+  :focus-visible {
+    outline-color: var(--accent-text);
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--on-accent);
+  }
+}
+
+/* Numbers: tabular figures always, so lap times line up and live values don't
+   jitter (point 4). Every component that shows a number uses one of these. */
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility num-lg {
+  font-family: var(--font-display);
+  font-size: var(--text-num-lg);
+  line-height: var(--text-num-lg--line-height);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility num-xl {
+  font-family: var(--font-display);
+  font-size: var(--text-num-xl);
+  line-height: var(--text-num-xl--line-height);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The motion tokens as utilities; both are 0 under prefers-reduced-motion. */
+@utility duration-fast {
+  transition-duration: var(--motion-fast);
+}
+
+@utility duration-base {
+  transition-duration: var(--motion-base);
+}

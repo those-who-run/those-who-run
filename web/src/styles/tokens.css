@@ -1,0 +1,150 @@
+/* The design tokens: docs/design.md's values, the only source of style (ADR 0004
+   point 1). Change a value here and in the guide together.
+
+   - Colours are semantic CSS variables on :root, so a light theme is a second set
+     under [data-theme="light"], not a rewrite (point 2). The brand's come from
+     brand.css, which scripts/brand_css.py writes from brand.py.
+   - @theme maps them to Tailwind's utilities (bg-surface, text-muted,
+     text-timing-best…), and Tailwind's own palette, sizes and radii are cleared,
+     so a utility is a token or nothing.
+   - contrast.test.ts checks the colours against the guide's allowed pairs. */
+
+/* Dark, the only theme for now. */
+:root {
+  color-scheme: dark;
+
+  /* Neutrals */
+  --bg: var(--brand-deep-black);
+  --surface: #1a1a1a;
+  --surface-raised: #242424;
+  --border: var(--brand-carbon-grey);
+  --border-strong: #4a4a4a;
+  --text: var(--brand-white);
+  --text-muted: #a3a3a3;
+  --text-subtle: #737373;
+
+  /* Brand accent: identity and the primary action, never "bad" or "slower" */
+  --accent: var(--brand-advan-red);
+  --accent-hover: #da2a25;
+  --on-accent: var(--brand-white);
+  --accent-text: #ff6b63;
+
+  /* Timing: the motorsport convention, for timing only */
+  --timing-best: #c084fc;
+  --timing-improve: #4ade80;
+  --timing-slower: #fbbf24;
+
+  /* Notices */
+  --info: #60a5fa;
+
+  /* Lap compare: B is dashed as well as white */
+  --lap-a: var(--accent);
+  --lap-b: var(--text);
+
+  /* Elevation is a lighter surface plus a border. Sheets and dialogs get one
+     shadow (--shadow-overlay, in @theme below), over a 60% black scrim. */
+  --scrim: rgb(0 0 0 / 0.6);
+}
+
+/* Motion: state changes only, never data (point 12). */
+:root {
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}
+
+/* Type, shape and easing: Tailwind's own scales replaced by the guide's. */
+@theme {
+  --font-*: initial;
+  --font-sans: "Barlow", system-ui, sans-serif;
+  --font-display: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  --text-*: initial;
+  --text-meta: 0.8125rem;
+  --text-meta--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.875rem;
+  --text-num-lg: 2rem;
+  --text-num-lg--line-height: 2.25rem;
+  --text-num-xl: 3.5rem;
+  --text-num-xl--line-height: 3.5rem;
+
+  --radius-*: initial;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+
+  --shadow-*: initial;
+  --shadow-overlay: 0 8px 32px rgb(0 0 0 / 0.5);
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --blur-*: initial;
+
+  --ease-*: initial;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: var(--motion-fast);
+  --default-transition-timing-function: var(--ease-out);
+
+  --container-content: 72rem;
+  --container-list: 48rem;
+}
+
+/* Colours: ours, then shadcn/ui's names mapped onto them, so its components take
+   the brand unedited. Two of shadcn's names mean something else here and ours win:
+   `accent` (shadcn's subtle hover fill) and `muted` (shadcn's muted surface). After
+   `shadcn add`, use `bg-surface-raised` for those (docs/design.md, Components). */
+@theme inline {
+  --color-*: initial;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-text: var(--accent-text);
+  --color-timing-best: var(--timing-best);
+  --color-timing-improve: var(--timing-improve);
+  --color-timing-slower: var(--timing-slower);
+  --color-info: var(--info);
+  --color-lap-a: var(--lap-a);
+  --color-lap-b: var(--lap-b);
+  --color-scrim: var(--scrim);
+
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--surface-raised);
+  --color-secondary-foreground: var(--text);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--accent);
+  --color-input: var(--border-strong);
+  --color-ring: var(--accent-text);
+}

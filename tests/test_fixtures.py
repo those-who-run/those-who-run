@@ -13,16 +13,19 @@ from those_who_run.replay import read_recording, write_recording
 
 FIXTURES = Path(__file__).parent / "fixtures"
 INDEX = FIXTURES / "FIXTURES.yaml"
+REPO = Path(__file__).parent.parent
 FIELDS = ("file", "date", "track", "car", "kind", "outing", "source", "pins", "tests")
+CASE_FIELDS = ("file", "source", "pins", "tests", "web_tests")
 OUTING = re.compile(r"^\d{8}-\d{6}$")
 
 
-def index_problems(folder: Path) -> list[str]:
+def index_problems(folder: Path, repo: Path = REPO) -> list[str]:
     """What is wrong with the fixtures in ``folder`` against its FIXTURES.yaml."""
-    entries: list[dict[str, Any]] = yaml.safe_load(
-        (folder / "FIXTURES.yaml").read_text(encoding="utf-8")
-    )["fixtures"]
-    listed = [e.get("file") for e in entries]
+    index = yaml.safe_load((folder / "FIXTURES.yaml").read_text(encoding="utf-8"))
+    entries: list[dict[str, Any]] = index["fixtures"]
+    cases: list[dict[str, Any]] = index.get("cases") or []
+    drives = [e.get("file") for e in entries]
+    listed = drives + [c.get("file") for c in cases]
     present = sorted(p.name for p in folder.iterdir() if p.name != "FIXTURES.yaml")
     problems = [f"{name}: not in FIXTURES.yaml" for name in present if name not in listed]
     problems += [f"{name}: listed but missing" for name in listed if name not in present]
@@ -30,9 +33,22 @@ def index_problems(folder: Path) -> list[str]:
     problems += [
         f"{name}: not a .jsonl.gz (thin writes gzip by default)"
         for name in present
-        if not name.endswith(".jsonl.gz")
+        if not name.endswith(".jsonl.gz") and (name in drives or name not in listed)
     ]
     tests = Path(__file__).parent
+    for c in cases:
+        name = c.get("file")
+        problems += [f"{name}: no {f}" for f in CASE_FIELDS if f not in c or c[f] in ("", [])]
+        if not str(name).endswith(".json"):
+            problems.append(f"{name}: a case file is .json")
+        problems += [
+            f"{name}: no test module {t}"
+            for t in c.get("tests") or []
+            if not (tests / f"{t}.py").exists()
+        ]
+        problems += [
+            f"{name}: no web test {t}" for t in c.get("web_tests") or [] if not (repo / t).is_file()
+        ]
     for e in entries:
         name = e.get("file")
         problems += [f"{name}: no {f}" for f in FIELDS if f not in e or e[f] in ("", [])]
@@ -53,15 +69,45 @@ def test_every_fixture_is_indexed():
 
 def test_an_unlisted_fixture_fails_the_index(tmp_path):
     (tmp_path / "FIXTURES.yaml").write_text(INDEX.read_text(encoding="utf-8"), encoding="utf-8")
-    for e in yaml.safe_load(INDEX.read_text(encoding="utf-8"))["fixtures"]:
+    index = yaml.safe_load(INDEX.read_text(encoding="utf-8"))
+    for e in index["fixtures"] + index["cases"]:
         (tmp_path / e["file"]).write_bytes(b"")
     assert index_problems(tmp_path) == []
     (tmp_path / "real-new-drive-2026-10-18.jsonl.gz").write_bytes(b"")
     (tmp_path / "real-plain-2026-10-18.jsonl").write_bytes(b"")
+    (tmp_path / "more-cases.json").write_bytes(b"")
     assert index_problems(tmp_path) == [
+        "more-cases.json: not in FIXTURES.yaml",
         "real-new-drive-2026-10-18.jsonl.gz: not in FIXTURES.yaml",
         "real-plain-2026-10-18.jsonl: not in FIXTURES.yaml",
+        "more-cases.json: not a .jsonl.gz (thin writes gzip by default)",
         "real-plain-2026-10-18.jsonl: not a .jsonl.gz (thin writes gzip by default)",
+    ]
+
+
+def test_a_case_file_needs_its_tests(tmp_path):
+    """Case files (#294) are JSON with no drive fields, and their tests must exist."""
+    index = yaml.safe_load(INDEX.read_text(encoding="utf-8"))
+    index["cases"] = [
+        {"file": "a.json", "source": "s", "pins": ["p"], "tests": ["test_nope"], "web_tests": []},
+        {"file": "b.yaml", "source": "s", "pins": ["p"], "tests": ["test_format_cases"]},
+        {
+            "file": "c.json",
+            "source": "s",
+            "pins": ["p"],
+            "tests": ["test_format_cases"],
+            "web_tests": ["web/src/lib/nope.test.ts"],
+        },
+    ]
+    (tmp_path / "FIXTURES.yaml").write_text(yaml.safe_dump(index), encoding="utf-8")
+    for e in index["fixtures"] + index["cases"]:
+        (tmp_path / e["file"]).write_bytes(b"")
+    assert index_problems(tmp_path) == [
+        "a.json: no web_tests",
+        "a.json: no test module test_nope",
+        "b.yaml: no web_tests",
+        "b.yaml: a case file is .json",
+        "c.json: no web test web/src/lib/nope.test.ts",
     ]
 
 

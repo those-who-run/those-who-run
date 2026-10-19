@@ -5,7 +5,7 @@ export function AppShell() {
   return (
     <div className="mx-auto max-w-3xl p-4">
       <header className="mb-4">
-        <h1 className="text-xl font-bold">
+        <h1 className="text-xl font-semibold">
           <Link to="/">Those Who Run · pit wall</Link>
         </h1>
       </header>

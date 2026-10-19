@@ -5,6 +5,8 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import { styleLiteralsPlugin } from "./scripts/style-literals.ts";
+
 const DATA_RULE =
   "All data goes through the generated client and its hooks (ADR 0003 point 3): use a hook from @/api/hooks, or add one there.";
 
@@ -44,6 +46,14 @@ export default defineConfig([
         },
       ],
     },
+  },
+  {
+    // ADR 0004 point 1: style only through the tokens, which live in src/styles/.
+    files: ["src/**/*.{ts,tsx}"],
+    // Tests are not styling, and cite issues ("#116") that read as colours.
+    ignores: ["src/styles/**", "src/**/*.test.{ts,tsx}"],
+    plugins: { "twr-style": styleLiteralsPlugin },
+    rules: { "twr-style/no-style-literals": "error" },
   },
   {
     files: ["scripts/**/*.ts", "e2e/**/*.ts", "*.config.{ts,js}"],

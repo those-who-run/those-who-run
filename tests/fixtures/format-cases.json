@@ -1,0 +1,73 @@
+{
+  "about": "How numbers become text (ADR 0004 point 5, docs/design.md, Numbers). Each case calls fn from web/src/lib/format.ts with args and expects out; web/src/lib/format.test.ts checks every case. A case with python also calls that function in those_who_run (module.function) with the same args, and tests/test_format_cases.py checks it gives the same out, so the results card and the page agree. sessionDate's args are a Unix time, now and a time zone; 2026-10-18 is a Sunday.",
+  "cases": [
+    { "fn": "lapTime", "args": [49677], "out": "49.677", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [96595], "out": "1:36.595", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [87764], "out": "1:27.764", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [60000], "out": "1:00.000", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [59999], "out": "59.999", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [71111], "out": "1:11.111", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [5007], "out": "5.007", "python": "results.race_time" },
+    { "fn": "lapTime", "args": [null], "out": "—" },
+    { "fn": "lapTime", "args": [0], "out": "—" },
+    { "fn": "lapTime", "args": [-1], "out": "—" },
+
+    { "fn": "raceTime", "args": [596826], "out": "9:56.826", "python": "results.race_time" },
+    { "fn": "raceTime", "args": [3723456], "out": "1:02:03.456", "python": "results.race_time" },
+    { "fn": "raceTime", "args": [3600000], "out": "1:00:00.000", "python": "results.race_time" },
+    { "fn": "raceTime", "args": [49677], "out": "49.677", "python": "results.race_time" },
+    { "fn": "raceTime", "args": [null], "out": "—" },
+
+    { "fn": "gap", "args": [866], "out": "+0.866" },
+    { "fn": "gap", "args": [-312], "out": "−0.312" },
+    { "fn": "gap", "args": [0], "out": "+0.000" },
+    { "fn": "gap", "args": [0, { "best": true }], "out": "Best" },
+    { "fn": "gap", "args": [61234], "out": "+1:01.234" },
+    { "fn": "gap", "args": [-61234], "out": "−1:01.234" },
+    { "fn": "gap", "args": [null], "out": "—" },
+
+    { "fn": "position", "args": [3, 16], "out": { "position": "P3", "of": "/16" } },
+    { "fn": "position", "args": [1, 1], "out": { "position": "P1", "of": "/1" } },
+    { "fn": "position", "args": [4, null], "out": { "position": "P4", "of": "" } },
+    { "fn": "position", "args": [null, 16], "out": { "position": "—", "of": "" } },
+    { "fn": "position", "args": [0, 16], "out": { "position": "—", "of": "" } },
+
+    { "fn": "fuelPct", "args": [43.2], "out": "43%" },
+    { "fn": "fuelPct", "args": [100], "out": "100%" },
+    { "fn": "fuelPct", "args": [42.5], "out": "42%" },
+    { "fn": "fuelPct", "args": [43.5], "out": "44%" },
+    { "fn": "fuelPct", "args": [0], "out": "0%" },
+    { "fn": "fuelPct", "args": [0, { "fuelUse": false }], "out": "Fuel off" },
+    { "fn": "fuelPct", "args": [43.2, { "fuelUse": true }], "out": "43%" },
+    { "fn": "fuelPct", "args": [null], "out": "—" },
+
+    { "fn": "fuelPerLap", "args": [3.24], "out": "3.2%" },
+    { "fn": "fuelPerLap", "args": [3.25], "out": "3.2%" },
+    { "fn": "fuelPerLap", "args": [12], "out": "12.0%" },
+    { "fn": "fuelPerLap", "args": [0, { "fuelUse": false }], "out": "Fuel off" },
+    { "fn": "fuelPerLap", "args": [-40.5], "out": "—" },
+    { "fn": "fuelPerLap", "args": [null], "out": "—" },
+
+    { "fn": "speedKph", "args": [287.4], "out": "287 km/h" },
+    { "fn": "speedKph", "args": [0], "out": "0 km/h" },
+    { "fn": "speedKph", "args": [null], "out": "—" },
+
+    { "fn": "duration", "args": [596826], "out": "9 min 57 s" },
+    { "fn": "duration", "args": [3840000], "out": "1 h 04 min" },
+    { "fn": "duration", "args": [3723456], "out": "1 h 02 min" },
+    { "fn": "duration", "args": [42000], "out": "42 s" },
+    { "fn": "duration", "args": [65000], "out": "1 min 05 s" },
+    { "fn": "duration", "args": [3599600], "out": "1 h 00 min" },
+    { "fn": "duration", "args": [null], "out": "—" },
+
+    { "fn": "sessionDate", "args": [1792328640, 1792332000, "Europe/London"], "out": "Today 14:04" },
+    { "fn": "sessionDate", "args": [1792267800, 1792332000, "Europe/London"], "out": "Yesterday 21:10" },
+    { "fn": "sessionDate", "args": [1792087200, 1792332000, "Europe/London"], "out": "Thu 15 Oct 19:00" },
+    { "fn": "sessionDate", "args": [1760706240, 1792332000, "Europe/London"], "out": "Fri 17 Oct 2025 14:04" },
+    { "fn": "sessionDate", "args": [1792274400, 1792279800, "Europe/London"], "out": "Yesterday 23:00" },
+    { "fn": "sessionDate", "args": [1792274400, 1792279800, "UTC"], "out": "Today 22:00" },
+    { "fn": "sessionDate", "args": [null, 1792332000, "Europe/London"], "out": "—" },
+
+    { "fn": "missing", "args": [], "out": "—" }
+  ]
+}

@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { searchForWorkspaceRoot } from "vite";
 import { defineConfig } from "vitest/config";
 
 // `make web-dev` runs `those-who-run pitwall` on this port and Vite in front of it.
@@ -17,6 +18,15 @@ export default defineConfig({
     manifest: true,
   },
   server: {
+    // Outside web/, what the tests read: the format cases shared with pytest
+    // and the design guide whose contrast table the tokens are checked against.
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        fileURLToPath(new URL("../tests/fixtures", import.meta.url)),
+        fileURLToPath(new URL("../docs", import.meta.url)),
+      ],
+    },
     proxy: { "/api": { target: pitwall, ws: true }, "/healthz": pitwall },
   },
   test: {

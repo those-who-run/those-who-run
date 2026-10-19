@@ -206,10 +206,18 @@ test("a horizontal touch drag scrubs; a vertical one scrolls the page (AC3)", as
   // The vertical drag moved the page, not the cursor's time much.
   const after = await readoutState(page);
   expect(Math.abs(after.x! - scrubbed.x!)).toBeLessThan(5);
-  // The readout stays pinned under the header while the charts scroll.
-  const pinned = (await readout(page).boundingBox())!;
-  expect(pinned.y).toBeGreaterThanOrEqual(50);
-  expect(pinned.y).toBeLessThan(80);
+  // The readout stays pinned under the header while the charts scroll. How far a
+  // touch drag scrolls varies run to run, so scroll past the readout's sticky point
+  // first, then measure it against the header itself once the page has settled.
+  await page.evaluate(() => window.scrollBy(0, 400));
+  const header = page.locator("[data-slot=header]");
+  await expect
+    .poll(async () => {
+      const h = (await header.boundingBox())!;
+      const r = (await readout(page).boundingBox())!;
+      return Math.abs(r.y - (h.y + h.height));
+    })
+    .toBeLessThanOrEqual(1);
 });
 
 /** Points at the middle of a chart, so the readout has values. */

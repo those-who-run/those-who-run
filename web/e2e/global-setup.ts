@@ -132,11 +132,23 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
   }
 }
 
+/** Replays so far, for E2E_REPLAY_CLOCK. */
+let replays = 0;
+
+/** `replay`'s `--clock`, when E2E_REPLAY_CLOCK (epoch seconds) is set: each replay's
+ * sessions are dated from it, an hour apart in replay order, in place of the wall
+ * clock, so the store is the same on every run and every day (the docs'
+ * screenshots, #336). Unset, the replay names its sessions by the clock. */
+function clockArgs(): string[] {
+  const start = process.env.E2E_REPLAY_CLOCK;
+  return start ? ["--clock", String(Number(start) + 3600 * replays++)] : [];
+}
+
 /** Replays `recordings` into the store at `data`, in order. */
 function replay(command: string, data: string, recordings: string[]): void {
   const env = { ...process.env, LOG_LEVEL: "WARNING", GT7_DATA_DIR: data };
   for (const recording of recordings) {
-    run(command, ["replay", recording, "--store", data], env);
+    run(command, ["replay", recording, "--store", data, ...clockArgs()], env);
   }
 }
 

@@ -4,6 +4,9 @@ For the driver and anyone running the pit wall: the web app as a driver uses it,
 
 ## Pages
 
+The screenshots are taken by `make docs-screenshots` from the fixtures the
+tests use ([Development](development.md#screenshots)).
+
 The pit wall is a React app over the session store, served with its read-only
 data API by `those-who-run pitwall` on port 9852 (`--port` or
 `GT7_PITWALL_PORT`, `--address` to bind; ADR 0003). One column, so it works on
@@ -27,6 +30,16 @@ a phone straight after a race:
   another at the same track, with one cursor across every chart (a horizontal
   drag scrubs on a phone), drag or pinch to zoom. Comparing by distance instead of
   time is planned.
+
+| | Phone | Desktop |
+|---|---|---|
+| Sessions | ![The session list on a phone: today's sessions as cards, each with its track, kind, car, time, result and best lap](assets/screens/phone/sessions.png) | ![The session list on a desktop: filters for track, car, kind and date over today's five sessions](assets/screens/desktop/sessions.png) |
+| A session | ![A 12-lap race at Circuit Gilles Villeneuve on a phone: P15 of 20, retired on lap 3, and stat tiles for best lap, average, laps, fuel used, pit stops and driving time](assets/screens/phone/session.png) | ![The same race on a desktop: the result, the stat tiles and the lap table, with lap 1 the best and lap 3 partial](assets/screens/desktop/session.png) |
+| Lap compare | ![Lap compare on a phone: lap 1 against lap 2 of the race, the cursor readout, and the speed and throttle charts](assets/screens/phone/compare.png) | ![Lap compare on a desktop: lap 1, the best, against lap 2, with speed and throttle charts of both laps](assets/screens/desktop/compare.png) |
+| `/_kit` | ![The component kit on a phone: lap times, gaps and positions in each of their states](assets/screens/phone/kit.png) | ![The component kit on a desktop: lap times, gaps, positions and kind badges in each of their states, loading included](assets/screens/desktop/kit.png) |
+
+`/_kit` is the component kit's review page (ADR 0004), not a page a driver
+uses.
 
 A results card's old link, `/?session=<id>`, opens that session. The pit wall
 only reads: the index is opened read-only and no session data is written.

@@ -38,6 +38,7 @@ Every target, as `make help` lists it:
 | `web-build` | Builds the React pit wall into `web/dist` (needs Node). |
 | `web-dev` | Vite's dev server on http://localhost:5173, `/api` proxied to a local pitwall. |
 | `web-check` | ESLint, tsc, Vitest, the client and `brand.css` freshness checks, the bundle budget, Playwright. |
+| `docs-screenshots` | The docs' pit wall screenshots into `docs/assets/screens/`, with Playwright over the e2e store ([Screenshots](#screenshots)). |
 | `web-preview` | `web/dist` over a copy of a deployed store, on `http://<laptop>:9852`; see [the preview](pitwall.md#the-preview-on-the-phone-and-ipad). |
 | `archive-push` | Uploads `GT7_ARCHIVE_DIR` to the `outings` release of those-who-run/outings ([ADR 0002](adr/0002-outing-archive.md)). |
 | `archive-pull` | Downloads the `outings` release into `GT7_ARCHIVE_DIR`. |
@@ -59,6 +60,23 @@ The React pit wall in `web/` has its own guide, [web/README.md](../web/README.md
 the stack, the rules its build enforces (the generated client, the design
 tokens, the formatter, the bundle budget, Playwright) and Node. It sits in
 `web/` so it moves with the app.
+
+## Screenshots
+
+The pit wall's pictures in the README and [the pit wall guide](pitwall.md#pages)
+are taken by `make docs-screenshots`: the session list, the race's session
+page, lap compare and `/_kit`, at the phone (390×844, device scale 2) and
+desktop (1440×900) sizes, into `docs/assets/screens/<viewport>/<page>.png`.
+It runs `web/playwright.docs.config.ts` and `web/e2e/docs.screens.ts` over the
+e2e suite's global setup (the built app on the real pit wall, the replayed
+fixtures, the stub engineer), with the store dated from a fixed time
+(`replay --clock`, through `E2E_REPLAY_CLOCK`), the browser's clock, time zone
+and locale fixed, motion reduced and the engineer idle. Two runs give the same
+bytes on one machine. `make web-check` never runs it and never writes `docs/`.
+
+Run it in a PR that changes how one of those pages looks, and look at the
+diff of the PNGs in review. `make check` does not compare them: font
+rendering differs between machines.
 
 ## Brand and wordmark
 

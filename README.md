@@ -21,7 +21,7 @@ through Discord, so it needs a Discord server and a bot.
 <!-- x-release-please-start-version -->
 ```
  ┌───────────────────────────────────────────────┐
- │  THOSE WHO RUN        走り屋        v0.7.3     │
+ │  THOSE WHO RUN        走り屋        v0.7.4     │
  │  PS5 ──UDP 33740──▶ engineer ──Piper──▶ Discord │
  │  ⏱️  lap times   ⛽ fuel   🚩 final lap   P1▲   │
  └───────────────────────────────────────────────┘
@@ -153,7 +153,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.7.3  # x-release-please-version
+  muldoon/those-who-run:0.7.4  # x-release-please-version
 ```
 
 From source:
@@ -509,7 +509,7 @@ The pitwall image (below) carries the built app:
 
 <!-- x-release-please-start-version -->
 ```sh
-podman run --rm -p 9852:9852 -v ./data:/data muldoon/those-who-run:0.7.3-pitwall
+podman run --rm -p 9852:9852 -v ./data:/data muldoon/those-who-run:0.7.4
 ```
 <!-- x-release-please-end -->
 

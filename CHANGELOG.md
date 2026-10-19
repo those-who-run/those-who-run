@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.4](https://github.com/those-who-run/those-who-run/compare/v0.7.3...v0.7.4) (2026-10-19)
+
+
+### Features
+
+* the React pit wall is the only pit wall; Streamlit removed ([#238](https://github.com/those-who-run/those-who-run/issues/238)) ([#332](https://github.com/those-who-run/those-who-run/issues/332)) ([c6549ad](https://github.com/those-who-run/those-who-run/commit/c6549ad61e7813b073084d40ab1634477b626e79))
+
+
+### Dependencies
+
+* bump typescript-eslint from 8.71.0 to 8.71.1 in /web in the web group across 1 directory ([#346](https://github.com/those-who-run/those-who-run/issues/346)) ([654547f](https://github.com/those-who-run/those-who-run/commit/654547f018648b90c2787533b5ed8abf7b8fdf51))
+
 ## [0.7.3](https://github.com/those-who-run/those-who-run/compare/v0.7.2...v0.7.3) (2026-10-19)
 
 

@@ -27,11 +27,14 @@ on:
         description: The v* tag release-please created.
         required: true
         type: string
+    # Not passed in: the publish job reads them from the `release` environment,
+    # which only main and v* tags can use. A caller can't hand environment secrets
+    # on (workflow_call has no environment), so these stay optional and unused.
     secrets:
       DOCKERHUB_USERNAME:
-        required: true
+        required: false
       DOCKERHUB_TOKEN:
-        required: true
+        required: false
 
 # Least privilege: the image goes to Docker Hub with its own secrets, so the
 # GITHUB_TOKEN only reads the repository.
@@ -99,6 +102,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     needs: check
+    # The Docker Hub token lives only here: main and v* tags, never a PR.
+    environment: release
     env:
       IMAGE: muldoon/those-who-run
       VERSION: ${{ needs.check.outputs.version }}
@@ -116,8 +121,6 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: those-who-run:smoke
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - name: Smoke test the image
         run: |
           docker run --rm those-who-run:smoke --version | tee /dev/stderr | grep -F " $PACKAGE"
@@ -131,8 +134,6 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: those-who-run:smoke-pitwall
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
       - name: Smoke test the pit wall
         run: |
           docker run --rm those-who-run:smoke-pitwall --version | grep -F " $PACKAGE"
@@ -141,7 +142,8 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      # The same build again, from the cache, pushed. `latest` only for a final release.
+      # The same build again, from this job's own layers (no Actions cache: nothing
+      # another run wrote goes into a published image), pushed. `latest` only for a final release.
       - name: Push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -151,7 +153,6 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ env.VERSION }}
             ${{ needs.check.outputs.latest == 'true' && format('{0}:latest', env.IMAGE) || '' }}
-          cache-from: type=gha
       # The pit wall next to it, <version>-pitwall (ADR 0001 point 5, amended by ADR
       # 0003). No `latest`: a deployment pins the version it runs.
       - name: Push the pit wall
@@ -162,4 +163,3 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.IMAGE }}:${{ env.VERSION }}-pitwall
-          cache-from: type=gha

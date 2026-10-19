@@ -1,8 +1,8 @@
 name: Dependabot auto-merge
 
 # Squash-merges the Dependabot updates that are safe to take unreviewed, once CI has
-# passed on the PR's head commit. The repo has no branch protection or required
-# checks (private, free plan), so `gh pr merge --auto` cannot wait for CI: this does.
+# passed on the PR's head commit. It predates the `main` ruleset (required checks
+# `test` and `image`); the ruleset now also stops a merge before CI passes.
 #
 #   Merged:  patch updates; minor updates of packages at >= 1.0; minor updates of
 #            GitHub Actions.

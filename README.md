@@ -831,8 +831,8 @@ squash-merges the safe ones once CI has passed on the PR's head commit:
   ecosystem (the Python base image and the uv image). A group merges only when every
   update in it is safe.
 
-The repo has no branch protection or required checks, so `gh pr merge --auto` cannot
-wait for CI. Instead `dependabot/fetch-metadata` classifies the PR (on
+`main` is protected by a ruleset: a pull request, squash only, with the `test` and
+`image` checks passing. For Dependabot, `dependabot/fetch-metadata` classifies the PR (on
 `pull_request_target`, from main's copy of the workflow) and marks a safe head commit
 with the `dependabot/auto-merge` status; when CI completes successfully on that
 commit (`workflow_run`), the merge job squash-merges the PR, pinned to that SHA. No

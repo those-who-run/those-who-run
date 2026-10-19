@@ -1,7 +1,7 @@
 ---
 name: Bug
 about: Something the engineer did wrong on a real drive
-labels: [bug]
+labels: [bug, "needs triage"]
 ---
 
 ## What happened

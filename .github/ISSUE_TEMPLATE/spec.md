@@ -1,7 +1,7 @@
 ---
 name: Spec
 about: A feature or change, written so a person or an agent can build it (see docs/ISSUE_FORMAT.md)
-labels: []
+labels: ["needs triage"]
 ---
 
 ## Summary

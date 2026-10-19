@@ -51,10 +51,12 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-      # The same command as locally: lint, mypy, tests with the coverage floor, and
-      # web-check. Tests that replay an archived outing fetch it from the `outings`
-      # release of those-who-run/outings with gh (ADR 0002), which needs a token; without one they skip, and
-      # a skip fails make check.
+      # The same command as locally: lint, mypy, workflow-lint (zizmor and
+      # actionlint), tests with the coverage floor, and web-check. Tests that replay
+      # an archived outing fetch it from the `outings` release of
+      # those-who-run/outings with gh (ADR 0002), which needs a token; without one
+      # they skip, and a skip fails make check. The token also turns on zizmor's
+      # online audits (impostor commits, known-vulnerable actions).
       - run: make check
         env:
           GH_TOKEN: ${{ github.token }}

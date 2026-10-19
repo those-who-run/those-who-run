@@ -142,8 +142,9 @@ because it already exists.
 ## Dependabot
 
 Dependabot (`.github/dependabot.yml`) bumps the SHA-pinned actions, `uv.lock`,
-`web/package-lock.json` (releases at least 14 days old) and the digest-pinned base
-images weekly. `.github/workflows/dependabot-automerge.yml`
+`web/package-lock.json` and the digest-pinned base images weekly. A release must be
+7 days old before it is offered (npm: 14), so a compromised release is usually
+pulled before it reaches a PR. `.github/workflows/dependabot-automerge.yml`
 squash-merges the safe ones once CI has passed on the PR's head commit:
 
 - **Merged after CI:** patch updates; minor updates of packages at 1.0 or later;

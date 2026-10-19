@@ -9,12 +9,22 @@ app): issues, the definition of done, pull requests, merging and releases.
 ## Make targets
 
 ```sh
-make check           # what CI runs: ruff, mypy, pytest with the coverage floor, web-check
+make check           # what CI runs: ruff, mypy, workflow-lint, pytest with the coverage floor, web-check
 make lint test       # ruff + pytest only, quicker while iterating
+make workflow-lint   # zizmor and actionlint over .github/workflows/ and dependabot.yml
 make web-check       # the web app only (needs Node and the Playwright browser)
 make lock            # after changing dependencies in pyproject.toml: re-resolve uv.lock
 make build           # podman build for linux/amd64, local only
 ```
+
+**Workflows.** `make workflow-lint` runs [zizmor](https://docs.zizmor.sh/audits/)
+(fails on a finding of medium severity or above) and
+[actionlint](https://github.com/rhysd/actionlint) (with shellcheck over each `run:`
+step), at the exact versions in the `dev` extra. With `GH_TOKEN` set, as in CI,
+zizmor adds its online audits (impostor commits, known-vulnerable actions). A
+`# zizmor: ignore[<audit>]` comment is the last resort: it needs the reason on the
+same line or the line above, and the PR that adds it says why the finding is wrong
+or accepted.
 
 Every target, as `make help` lists it:
 
@@ -27,13 +37,14 @@ Every target, as `make help` lists it:
 | `lint` | `ruff check` and the format check. |
 | `fmt` | `ruff format`. |
 | `typecheck` | mypy on `src/`. |
+| `workflow-lint` | zizmor and actionlint over `.github` (`make check` runs it). |
 | `test` | pytest. |
 | `docs-check` | Every internal link and anchor in the Markdown resolves, offline ([Docs checks](#docs-checks)). |
 | `openapi` | Writes `web/openapi.json`, the pit wall API's schema, from its models. |
 | `brand-css` | Writes `web/src/styles/brand.css`, the web app's brand colours, from `brand.py`. |
 | `wordmark` | Redraws the wordmark and icons as outlines: `make wordmark NOTO=<NotoSansCJK-VF.ttc>`. |
 | `brand-assets` | Writes the docs' banners, wordmarks and social preview into `docs/assets/` from `brand.py` ([Brand and wordmark](#brand-and-wordmark)). |
-| `check` | Everything a PR must pass: lint, typecheck, tests with the coverage floor, `web-check`. CI runs this. |
+| `check` | Everything a PR must pass: lint, typecheck, workflow-lint, tests with the coverage floor, `web-check`. CI runs this. |
 | `build` | Builds the engineer's image for linux/amd64 with podman, local only. |
 | `build-pitwall` | Builds the slim pit wall image, `<version>-pitwall`. |
 | `replay` | Replays `FILE=recording.jsonl`. |

@@ -123,9 +123,73 @@ def test_a_command_it_cannot_parse_asks_when_it_names_git():
     assert decision("ls 'unterminated") == "allow"
 
 
-def test_a_program_in_a_variable_asks_when_it_names_git():
-    assert decision('$GIT commit -n -m "git"') == "ask"
-    assert decision('"$PY" scripts/openapi.py --check') == "allow"
+@pytest.mark.parametrize(
+    "command",
+    [
+        '$GIT commit -n -m "git"',
+        '"$PY" scripts/openapi.py --check',
+        "${G} status",
+        "$(which git) status",
+        "g=git; $g status",
+        "alias g=git; g status",
+        "alias ll='ls -l'; ll",
+    ],
+)
+def test_a_program_in_a_variable_or_an_alias_asks(command):
+    assert decision(command) == "ask"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "g=git; $g commit --no-verify -m x",
+        "export g=git; $g commit -n -m x",
+        "G=/usr/bin/git; ${G} commit -n -m x",
+        "alias g=git; g commit --no-verify -m x",
+        "alias g='git commit'; g -n -m x",
+    ],
+)
+def test_a_variable_or_an_alias_set_in_the_command_is_followed(command):
+    assert decision(command) == "block"
+
+
+def test_a_variable_or_an_alias_set_elsewhere_does_not_follow_the_program():
+    assert decision("g=git; echo $g") == "allow"
+    assert decision("alias g=git; echo g") == "allow"
+
+
+# (blocked, near miss): writes to the common .git/hooks or to .git/config, which holds
+# core.hooksPath, turn the hooks off for every worktree.
+HOOKS_DIR = [
+    ("rm -rf .git/hooks", "rm -rf .github/hooks-notes"),
+    ("chmod -x .git/hooks/pre-commit", "chmod +x scripts/git-hook.sh"),
+    ("cp scripts/git-hook.sh .git/hooks/pre-commit", "cat .git/hooks/pre-commit"),
+    ("mv .git/hooks/commit-msg /tmp/x", "ls .git/hooks"),
+    ("echo x > .git/hooks/pre-commit", "echo x > notes.txt"),
+    ("printf '[core]\\n' >> .git/config", "grep hooksPath .git/config"),
+    ("tee -a /home/u/repo/.git/config < x", "tee notes.txt < x"),
+    ("sudo rm .git/hooks/commit-msg", "sudo ls .git/hooks"),
+    ("bash -c 'truncate -s0 .git/hooks/pre-commit'", "bash -c 'wc -l .git/hooks/pre-commit'"),
+    ('rm -rf "$(git rev-parse --git-common-dir)/hooks"', 'ls "$(git rev-parse --git-common-dir)"'),
+    (
+        'd=$(git rev-parse --git-path hooks); rm -rf "$d"',
+        'd=$(git rev-parse --git-path hooks); ls "$d"',
+    ),
+    ("python3 -c \"open('.git/hooks/pre-commit', 'w')\"", "python3 -c \"print('hooks')\""),
+    ("find .git/hooks -delete", "find . -name '*.py'"),
+]
+
+
+@pytest.mark.parametrize(("blocked", "near_miss"), HOOKS_DIR)
+def test_writing_the_hooks_directory_or_git_config_is_blocked(blocked, near_miss):
+    assert decision(blocked) == "block"
+    assert decision(near_miss) == "allow"
+
+
+def test_text_that_mentions_the_hooks_directory_is_allowed():
+    assert decision('git commit -m "docs: never rm .git/hooks"') == "allow"
+    assert decision("gh pr comment 1 --body 'rm -rf .git/hooks is blocked'") == "allow"
+    assert decision("make hooks") == "allow"
 
 
 def test_nesting_beyond_the_limit_asks():

@@ -14,8 +14,14 @@ documents fed to a shell, `env`/`VAR=` prefixes and wrappers such as `sudo` or
   * ask (JSON `permissionDecision: "ask"`): the maintainer is asked before it runs;
   * nothing: Claude Code's own permission rules decide.
 
-It fails closed: if the guard itself errors, the command is blocked, and a command
-it can't follow that names one of the guarded programs is sent to `ask`.
+It fails closed: if the guard itself errors, the command is blocked. A command it
+can't parse that names one of the guarded programs, and a command whose program is a
+variable (`$g ...`) or an alias set in the same command, are sent to `ask`.
+
+It is a guard against mistakes, not a sandbox. It can't see into a script file, a
+program that runs git itself (`python3 -c 'subprocess.run(...)'`), or a command
+decoded at run time (`eval "$(echo ... | base64 -d)"`). CI, which runs the hooks on
+every file and gitleaks on a PR's commits, and the `main` ruleset are the backstop.
 
 Run it on a command to see the verdict:
 
@@ -30,6 +36,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sys
 from dataclasses import dataclass, field
 
@@ -222,11 +229,49 @@ def pre_commit_rule(args: list[str], env: dict[str, str]) -> Verdict:
     return ALLOWED
 
 
+# Where the hooks live and what says where they are: the common .git/hooks (or a path
+# built from `$(git rev-parse ...)`), and .git/config, which holds core.hooksPath.
+GIT_INTERNALS = re.compile(
+    r"\.git/(worktrees/[^/\s'\"]+/)?(hooks|config)(?![\w.-])"
+    r"|[)`]/hooks(?![\w.-])"
+    r"|--git-path[\s=]+hooks(?![\w.-])"
+)
+# Programs that change, move or remove the files named in their arguments.
+FILE_WRITERS = {
+    "rm", "rmdir", "unlink", "mv", "cp", "ln", "install", "chmod", "chown", "chgrp",
+    "touch", "truncate", "tee", "dd", "shred", "sed", "perl", "ruby", "node", "python",
+    "python3", "find", "rsync", "mkdir",
+}  # fmt: skip
+# A redirection that writes its target.
+WRITE_REDIRECTIONS = {">", ">>", ">|", "&>", "&>>", "<>", ">&"}
+VARIABLE = re.compile(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?")
+
+
+def expand(word: str, env: dict[str, str]) -> str:
+    """The word with the variables the command set itself (`d=...; rm "$d"`) filled in."""
+    return VARIABLE.sub(lambda m: env.get(m.group(1), m.group(0)), word)
+
+
+def git_internals(word: str, env: dict[str, str]) -> Verdict:
+    if GIT_INTERNALS.search(expand(word, env)) is None:
+        return ALLOWED
+    return block(
+        "git-hooks-dir",
+        "changing .git/hooks or .git/config can turn the hooks off for every worktree: "
+        + HOOKS_SKIP,
+    )
+
+
+def file_writer_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    return worst([git_internals(a, env) for a in args])
+
+
 # Program name -> rule. Programs are matched by their base name, so `/usr/bin/git`
 # is `git`.
 RULES = {
     "git": git_rule,
     "pre-commit": pre_commit_rule,
+    **dict.fromkeys(FILE_WRITERS, file_writer_rule),
 }
 
 
@@ -252,6 +297,7 @@ class Command:
     words: list[str] = field(default_factory=list)
     subs: list[str] = field(default_factory=list)
     stdin_scripts: list[str] = field(default_factory=list)  # here-documents and <<< strings
+    redirects: list[tuple[str, str]] = field(default_factory=list)  # (operator, target)
 
 
 OPERATORS = ("&&", "||", ";;", "|&", ";", "|", "&", "(", ")")
@@ -518,7 +564,7 @@ def parse(text: str) -> list[Command]:
     while i < len(tokens):
         tok = tokens[i]
         if tok.kind == "op":
-            if cmd.words or cmd.subs or cmd.stdin_scripts:
+            if cmd.words or cmd.subs or cmd.stdin_scripts or cmd.redirects:
                 commands.append(cmd)
             cmd = Command()
         elif tok.kind == "redir":
@@ -528,13 +574,14 @@ def parse(text: str) -> list[Command]:
             elif i + 1 < len(tokens) and tokens[i + 1].kind == "word":
                 i += 1
                 cmd.subs.extend(tokens[i].subs)
+                cmd.redirects.append((tok.text, tokens[i].text))
                 if tok.text == "<<<":
                     cmd.stdin_scripts.append(tokens[i].text)
         else:
             cmd.words.append(tok.text)
             cmd.subs.extend(tok.subs)
         i += 1
-    if cmd.words or cmd.subs or cmd.stdin_scripts:
+    if cmd.words or cmd.subs or cmd.stdin_scripts or cmd.redirects:
         commands.append(cmd)
     return commands
 
@@ -573,10 +620,11 @@ def check_command(cmd: Command, shell_env: dict[str, str], text: str, depth: int
         k, v = words[i].split("=", 1)
         env[k] = v
         i += 1
+    writes = [git_internals(t, env) for op, t in cmd.redirects if op in WRITE_REDIRECTIONS]
     if i == len(words):
         shell_env.update(env)
-        return ALLOWED
-    return check_argv(words[i:], env, cmd, shell_env, text, depth)
+        return worst(writes)
+    return worst([*writes, check_argv(words[i:], env, cmd, shell_env, text, depth)])
 
 
 def check_argv(
@@ -587,11 +635,18 @@ def check_argv(
     text: str,
     depth: int,
 ) -> Verdict:
-    prog = argv[0]
+    prog, args = argv[0], argv[1:]
     if "$" in prog or "`" in prog:
-        return ask_if_sensitive(" ".join(argv), "the program is a variable")
+        return indirect(prog, env.get(variable_name(prog) or ""), args, depth)
+    if ALIAS + prog in env:
+        return indirect(prog, env[ALIAS + prog], args, depth)
     name = os.path.basename(prog)
-    args = argv[1:]
+    if name == "alias":
+        for a in args:
+            if "=" in a and not a.startswith("-"):
+                k, v = a.split("=", 1)
+                shell_env[ALIAS + k] = v
+        return ALLOWED
     if name in KEYWORDS:
         return check_argv(args, env, cmd, shell_env, text, depth) if args else ALLOWED
     if name in ("export", "declare", "typeset", "local", "readonly"):
@@ -610,6 +665,27 @@ def check_argv(
         return check_wrapper(args, env, cmd, shell_env, text, depth)
     rule = RULES.get(name)
     return rule(args, env) if rule is not None else ALLOWED
+
+
+# Aliases set earlier in the command live in its environment under this prefix, which
+# no variable name can have.
+ALIAS = "alias "
+
+
+def variable_name(word: str) -> str | None:
+    m = VARIABLE.fullmatch(word)
+    return m.group(1) if m else None
+
+
+def indirect(prog: str, value: str | None, args: list[str], depth: int) -> Verdict:
+    """`$g push`, `alias g=git; g push`: the guard can't be sure what runs, so it asks;
+    when the command set the variable or alias itself, what it names is checked too."""
+    verdicts = [
+        ask("indirect", f"the program is {prog}, and the guard can't be sure what that runs")
+    ]
+    if value is not None:
+        verdicts.append(check(" ".join([value, *map(shlex.quote, args)]), depth + 1))
+    return worst(verdicts)
 
 
 def runs_something(word: str) -> bool:

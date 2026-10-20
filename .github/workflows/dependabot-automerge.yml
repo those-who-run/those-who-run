@@ -7,7 +7,8 @@ name: Dependabot auto-merge
 #   Merged:  patch updates; minor updates of packages at >= 1.0; minor updates of
 #            GitHub Actions.
 #   Left for a human: majors, 0.x minors, anything in the Docker ecosystem (the
-#            Python base image and the uv image).
+#            Python base image and the uv image), and every commit hook bump (the
+#            pre-commit ecosystem): the hooks run code on the maintainer's machine.
 #
 # Two jobs, each from this file on main (never the PR's copy), neither checking out
 # or running PR code:
@@ -53,7 +54,7 @@ jobs:
           verdict=$(jq -r '
             def major: ltrimstr("v") | split(".")[0] | tonumber? // -1;
             def safe:
-              .packageEcosystem != "docker" and (
+              (.packageEcosystem | IN("docker", "pre-commit", "pre_commit") | not) and (
                 .updateType == "version-update:semver-patch" or (
                   .updateType == "version-update:semver-minor" and (
                     .packageEcosystem == "github_actions" or

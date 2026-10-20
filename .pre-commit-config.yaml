@@ -74,12 +74,21 @@ repos:
         files: ^(pyproject\.toml|uv\.lock)$
         pass_filenames: false
 
-  # The staged changes, before they are committed. In `--all-files` runs (CI) there
-  # is nothing staged, so it scans nothing there.
+  # gitleaks: the staged changes, before they are committed. In `--all-files` runs
+  # (CI) there is nothing staged, so it scans nothing there; gitleaks-pr does that
+  # job in CI: every commit from HEAD's first parent to HEAD, which on a PR's merge
+  # commit is every commit in the PR, even one made with --no-verify or on the web.
   - repo: https://github.com/gitleaks/gitleaks
     rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
     hooks:
       - id: gitleaks
+      - id: gitleaks
+        alias: gitleaks-pr
+        name: gitleaks (the commits after HEAD^1)
+        entry: gitleaks git --redact --verbose --log-opts=HEAD^1..HEAD
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
 
   # The workflows: actionlint for syntax and expressions, zizmor for the security
   # audits that need no network. shellcheck and pyflakes are off, so a run gives the

@@ -135,6 +135,88 @@ and the rest). pytest, mypy, `tsc`, Vitest and Playwright stay in `make check`.
   lets the command run.
 - `pre-commit run --all-files` runs them all by hand; `pre-commit run <id>` runs one.
 
+## Agent guardrails
+
+Agents (Claude Code) do most of the work here, as the maintainer, with the maintainer's `gh` token
+(admin on this repository), kubeconfigs and registry logins. The repository is
+public, so an agent also reads text from strangers. The committed
+`.claude/settings.json` applies to every session and subagent in every worktree
+(#352):
+
+- **Denied: reading or editing secrets.** `.env` and `.env.*` in any directory,
+  `~/.kube/`, `~/.ssh/`, `~/.aws/`, `~/.config/gcloud/`, `~/.gnupg/`,
+  `~/.config/helm/`, `~/.docker/`, `~/.config/gh/`, `~/.config/containers/auth.json`,
+  `/run/user/*/containers/auth.json` (`$XDG_RUNTIME_DIR`), `~/.netrc`,
+  `~/.claude/.credentials.json`, `~/.claude.json`, and any `*.pem`, `*.key`, `id_rsa*`
+  or `id_ed25519*`. The deny rules in `.claude/settings.json` cover the Read and Edit
+  tools. For Bash, the guard blocks a command that names one of those paths as an
+  argument or a redirection (`cat`, `head`, `sed`, `cp`, `tar`, `source`, `curl -F`,
+  `python3 -c "open(...)"` and the rest; `ls`, `echo` and `test` pass, and for `git`
+  and `gh` only a bare path argument counts, not a commit message or a PR body). It
+  does not stop a program or script that builds the path itself; only the sandbox
+  does. `.env.*` also covers a template such as `.env.example`: none exists, and one
+  that does needs an exception here.
+- **Blocked: actions that reach outside the repository, by
+  `.claude/hooks/guard.py`.** The guard is a PreToolUse hook that parses every Bash
+  command, following chains, `$(...)`, `bash -c`, `env` and wrappers. A blocked
+  command tells the agent why and to ask the maintainer:
+  - `git push` that forces (`-f`, `--force*`, `+ref`), mirrors, deletes, prunes,
+    pushes tags or a `v*` ref, or pushes to `main`, and `git tag v*`: a `v*` tag
+    publishes a release;
+  - `gh pr merge --admin`, `gh release create|edit|delete|upload`,
+    `gh workflow run|enable|disable`, `gh repo edit|delete|rename|archive`,
+    `gh secret`, `gh variable` and `gh ruleset` writes, `gh alias set`, `gh auth token`;
+  - `gh api` writes to the repository itself, its rulesets, Actions permissions,
+    environments, collaborators, hooks, keys, branch protection, releases, refs,
+    dispatches and merges, and the GraphQL mutations that do the same;
+  - `docker`/`podman` `login`, `logout`, `push` (and `--push`), `--privileged`, and
+    mounting `/`, the home directory, its secrets or the container socket;
+  - `kubectl` (and `oc`) and `helm` commands that change the cluster or the current
+    context. Reading (`get`, `logs`, `describe`) is fine. The cluster changes through
+    the deployment repository and Argo CD;
+  - skipping the commit hooks (see [Commit hooks](#commit-hooks)).
+- **Asked first: public posts in the maintainer's name, and other repositories.**
+  `gh issue create|comment|edit|close`, `gh pr create|comment|review|close` (also
+  through `gh api`), `gh pr merge` and `gh pr ready` (agents merge only when asked),
+  `gh` with `-R`/`--repo` outside `those-who-run/`, and `gh run rerun`, which may
+  re-run a release. The guard's `GH_ASK` is the one list of these: `settings.json`
+  has no `Bash(...)` rules to drift from it, and a test keeps it that way. Edits to
+  `.claude/settings.json`, `settings.local.json` and `.claude/hooks/` ask too (Edit
+  rules in `settings.json`), so an agent can't quietly loosen its own policy.
+- **Fails closed.** If the guard crashes or times out, the command is blocked
+  (`onFailure: "block"`, Claude Code v2.1.295 or later). If it can't parse a command
+  that names git, gh, kubectl, helm, docker or podman, or the program is a variable
+  or an alias (`g=git; $g push`), it asks. `--dangerously-skip-permissions` is
+  refused here (`disableBypassPermissionsMode`).
+- **Not a sandbox.** The guard reads the command line, so it catches mistakes, not
+  an agent set on getting round it: a script file, a program that runs git or opens
+  a file itself, or a command decoded at run time gets past it. A bare `git push` on
+  a branch that tracks `main` names no branch, so the guard can't see it; the `main`
+  ruleset (a pull request, squash only, `test` and `image` passing) refuses it, as it
+  refuses any direct push to `main`. CI and the ruleset are the backstop.
+- **Logged.** Every block and ask goes to `~/.claude/twr-guard.log`: time, decision,
+  rule, and the first 200 characters of the command, with tokens, `Authorization`
+  headers, passwords and secret values redacted.
+
+It runs only in Claude Code: the maintainer's own terminal is untouched. To see
+what it would do with a command:
+
+```sh
+echo '{"tool_name": "Bash", "tool_input": {"command": "git push --tags"}}' | python3 .claude/hooks/guard.py
+```
+
+A new rule is one line in the tables at the top of `guard.py` plus a blocked case
+and a near miss in `tests/test_claude_hooks.py`.
+
+**Kept in user settings, outside the repository** (`~/.claude/settings.json`). Claude
+Code reads these only from user or managed scope:
+
+- `autoMode.environment`: describe this repository (public, `those-who-run`, the
+  rules above) rather than another project's.
+- The sandbox (`sandbox.enabled`, with `filesystem.denyRead` on the secret paths
+  above). It is the only control that also stops a script reading those files
+  itself.
+
 ## Docs checks
 
 `make check` keeps the docs and the code in step, so a PR that changes one

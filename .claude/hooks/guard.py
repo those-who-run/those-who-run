@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code's PreToolUse guard on Bash for this repository (#339).
+"""Claude Code's PreToolUse guard on Bash for this repository (#339, #352).
 
 Claude Code runs it before every Bash command an agent sends (`.claude/settings.json`)
 with the hook input as JSON on stdin. It never runs in the maintainer's own shell.
@@ -19,8 +19,9 @@ can't parse that names one of the guarded programs, and a command whose program 
 variable (`$g ...`) or an alias set in the same command, are sent to `ask`.
 
 It is a guard against mistakes, not a sandbox. It can't see into a script file, a
-program that runs git itself (`python3 -c 'subprocess.run(...)'`), or a command
-decoded at run time (`eval "$(echo ... | base64 -d)"`). CI, which runs the hooks on
+program that runs git itself (`python3 -c 'subprocess.run(...)'`), a file it opens
+by a path it builds, or a command decoded at run time (`eval "$(echo ... | base64
+-d)"`). CI, which runs the hooks on
 every file and gitleaks on a PR's commits, and the `main` ruleset are the backstop.
 
 Run it on a command to see the verdict:
@@ -38,6 +39,7 @@ import os
 import re
 import shlex
 import sys
+import time
 from dataclasses import dataclass, field
 
 ALLOW, ASK, BLOCK = 0, 1, 2
@@ -218,8 +220,108 @@ def git_config_rule(args: list[str], env: dict[str, str]) -> Verdict:
     return ALLOWED
 
 
+RELEASE = "a v* tag starts release.yml, which publishes the images to Docker Hub"
+
+
+def is_release_tag(ref: str) -> bool:
+    ref = ref.lstrip("+")
+    return ref.startswith("refs/tags/") or re.match(r"v\d", ref) is not None
+
+
+# git push's options: those that take a separate value, and those the guard blocks.
+PUSH_LONG_WITH_VALUE = {"--repo", "--push-option", "--receive-pack", "--exec"}
+PUSH_DANGEROUS_LONG = {
+    "--force": "force-pushing rewrites published history",
+    "--force-with-lease": "force-pushing rewrites published history",
+    "--force-if-includes": "force-pushing rewrites published history",
+    "--mirror": "--mirror pushes, and deletes, every ref",
+    "--delete": "deleting a remote branch or tag can't be undone from here",
+    "--prune": "--prune deletes remote branches",
+    "--tags": f"pushing tags: {RELEASE}",
+    "--follow-tags": f"pushing tags: {RELEASE}",
+    "--all": "pushing every branch pushes main, which takes changes only through a PR",
+    "--branches": "pushing every branch pushes main, which takes changes only through a PR",
+}
+PUSH_DANGEROUS_SHORT = {
+    "f": "force-pushing rewrites published history",
+    "d": "deleting a remote branch or tag can't be undone from here",
+}
+MAIN = {"main", "refs/heads/main"}
+
+
+def git_push_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    positionals, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            positionals.extend(args[i + 1 :])
+            break
+        if a.startswith("--"):
+            hit = long_option(a, tuple(PUSH_DANGEROUS_LONG))
+            if hit:
+                return block("git-push", PUSH_DANGEROUS_LONG[hit])
+            if a in PUSH_LONG_WITH_VALUE:
+                i += 1
+        elif a.startswith("-") and len(a) > 1:
+            flags = short_flags(a, "o")
+            for f in sorted(flags & set(PUSH_DANGEROUS_SHORT)):
+                return block("git-push", PUSH_DANGEROUS_SHORT[f])
+            if a.endswith("o"):
+                i += 1  # -o <push option>
+        else:
+            positionals.append(a)
+        i += 1
+    for spec in positionals[1:]:  # after the remote
+        if spec == "tag":
+            return block("git-push", f"pushing a tag: {RELEASE}")
+        if spec.startswith("+"):
+            return block("git-push", "a + refspec force-pushes, which rewrites published history")
+        if spec.startswith(":"):
+            return block("git-push", "an empty source deletes the remote ref")
+        src, _, dst = spec.partition(":")
+        if is_release_tag(src) or is_release_tag(dst):
+            return block("git-push", f"pushing a tag: {RELEASE}")
+        if (dst or src) in MAIN:
+            return block("git-push", "main takes changes only through a PR")
+    return ALLOWED
+
+
+TAG_LONG_WITH_VALUE = {
+    "--message", "--file", "--local-user", "--sort", "--format", "--cleanup", "--trailer",
+    "--contains", "--no-contains", "--points-at", "--merged", "--no-merged",
+}  # fmt: skip
+TAG_READS = {"--list", "--delete", "--verify", "--contains", "--points-at", "--merged"}
+
+
+def git_tag_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    """Creating a v* tag. Listing, verifying and deleting local tags are fine."""
+    positionals, reading, i = [], False, 0
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            positionals.extend(args[i + 1 :])
+            break
+        if a.startswith("--"):
+            reading = reading or long_option(a, tuple(TAG_READS)) is not None
+            if a in TAG_LONG_WITH_VALUE:
+                i += 1
+        elif a.startswith("-") and len(a) > 1:
+            flags = short_flags(a, "mFu")
+            reading = reading or bool(flags & set("ldvn"))
+            if a[-1] in "mFu":
+                i += 1
+        else:
+            positionals.append(a)
+        i += 1
+    if positionals and not reading and is_release_tag(positionals[0]):
+        return block("git-tag", f"creating a v* tag: {RELEASE}; releases go through release-please")
+    return ALLOWED
+
+
 GIT_RULES = {
     "config": git_config_rule,
+    "push": git_push_rule,
+    "tag": git_tag_rule,
 }
 
 
@@ -266,12 +368,354 @@ def file_writer_rule(args: list[str], env: dict[str, str]) -> Verdict:
     return worst([git_internals(a, env) for a in args])
 
 
+# gh: (command, subcommand) -> why it is blocked. "*" is every subcommand but `reads`.
+OWNER = "those-who-run"
+GH_BLOCK = {
+    ("release", "create"): RELEASE.replace("a v* tag", "a release and its v* tag"),
+    ("release", "edit"): "releases are made by release-please, and are public",
+    ("release", "delete"): "releases are made by release-please, and are public",
+    ("release", "upload"): "releases are made by release-please, and are public",
+    ("release", "delete-asset"): "releases are made by release-please, and are public",
+    ("workflow", "run"): "a workflow run can release or publish (release.yml)",
+    ("workflow", "enable"): "turning workflows on or off changes what CI enforces",
+    ("workflow", "disable"): "turning workflows on or off changes what CI enforces",
+    ("repo", "edit"): "it changes the repository's settings",
+    ("repo", "delete"): "it deletes the repository",
+    ("repo", "rename"): "it renames the repository",
+    ("repo", "archive"): "it archives the repository",
+    ("repo", "unarchive"): "it changes the repository's settings",
+    ("alias", "set"): "an alias can hide a blocked command",
+    ("alias", "import"): "an alias can hide a blocked command",
+    ("auth", "token"): "it prints the maintainer's token",
+    ("auth", "login"): "it changes the maintainer's GitHub login",
+    ("auth", "logout"): "it changes the maintainer's GitHub login",
+    ("auth", "refresh"): "it changes the token's scopes",
+}
+# Commands blocked whatever the subcommand, except the read-only ones listed.
+GH_BLOCK_ALL = {
+    "secret": ({"list"}, "it changes the repository's secrets"),
+    "variable": ({"list", "get"}, "it changes the repository's variables"),
+    "ruleset": ({"list", "view", "check"}, "it changes the repository's rulesets"),
+}
+# Public, permanent and in the maintainer's name: the maintainer sees them first.
+GH_ASK = {
+    ("issue", "create"), ("issue", "comment"), ("issue", "edit"), ("issue", "close"),
+    ("issue", "delete"), ("pr", "create"), ("pr", "comment"), ("pr", "review"),
+    ("pr", "close"), ("pr", "merge"), ("pr", "ready"),
+}  # fmt: skip
+# gh api: a write (any method but GET or HEAD) to one of these blocks.
+GH_API_PROTECTED = re.compile(
+    r"""^(
+        repos/[^/]+/[^/]+/?$                       # the repository itself
+      | repos/[^/]+/[^/]+/(
+            rulesets | actions/permissions | environments | collaborators | invitations
+          | hooks | keys | branches/[^/]+/protection | actions/secrets | actions/variables
+          | releases | git/refs | git/tags | dispatches | actions/workflows/[^/]+/
+          | actions/runs/[^/]+/rerun | pulls/[^/]+/merge | transfer | topics
+          | vulnerability-alerts | automated-security-fixes | deployments
+        )
+      | orgs/[^/]+ | user(/|$)
+    )""",
+    re.X,
+)
+# GraphQL mutations that do what the blocked commands do.
+GH_GRAPHQL_PROTECTED = re.compile(
+    r"\b(mergePullRequest|updateRepository|deleteRepository|archiveRepository|"
+    r"(create|update|delete)(Ref|RepositoryRuleset|BranchProtectionRule|Environment)|"
+    r"updateRefs|createCommitOnBranch|(create|update|delete)Release)\b"
+)
+# What `gh issue|pr create|comment|edit|close|review` do, through the API: ask, as they do.
+GH_API_POSTS = re.compile(r"^repos/[^/]+/[^/]+/(issues|pulls)(/|$)")
+GH_GRAPHQL_POSTS = re.compile(
+    r"\b(addComment|updateIssueComment|addPullRequestReview\w*|submitPullRequestReview|"
+    r"(create|update|close|reopen|delete)(Issue|PullRequest)|addDiscussionComment)\b"
+)
+GH_API_WITH_VALUE = {
+    "-X", "--method", "-f", "--raw-field", "-F", "--field", "-H", "--header", "--input",
+    "-q", "--jq", "-t", "--template", "--hostname", "-p", "--preview", "--cache",
+}  # fmt: skip
+
+
+def repo_owner(repo: str) -> str:
+    parts = repo.strip("/").split("/")
+    return (parts[-2] if len(parts) >= 3 else parts[0]).lower()
+
+
+def gh_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    positionals, repos, i = [], [], 0
+    if env.get("GH_REPO"):
+        repos.append(env["GH_REPO"])
+    while i < len(args):
+        a = args[i]
+        if a in ("-R", "--repo") and i + 1 < len(args):
+            repos.append(args[i + 1])
+            i += 2
+            continue
+        if a.startswith("--repo="):
+            repos.append(a.split("=", 1)[1])
+        elif a.startswith("-R") and len(a) > 2:
+            repos.append(a[2:])
+        elif not a.startswith("-"):
+            positionals.append(a)
+        i += 1
+    if not positionals:
+        return ALLOWED
+    cmd = positionals[0]
+    sub = positionals[1] if len(positionals) > 1 else ""
+    verdicts = []
+    if cmd == "pr" and sub == "merge" and any(a.split("=")[0] == "--admin" for a in args):
+        verdicts.append(block("gh-admin-merge", "--admin merges past the required checks"))
+    if (cmd, sub) in GH_BLOCK:
+        verdicts.append(block(f"gh-{cmd}-{sub}", GH_BLOCK[(cmd, sub)]))
+    if cmd in GH_BLOCK_ALL and sub:
+        reads, why = GH_BLOCK_ALL[cmd]
+        if sub not in reads:
+            verdicts.append(block(f"gh-{cmd}", why))
+    if cmd == "run" and sub == "rerun":
+        verdicts.append(ask("gh-run-rerun", "re-running a run can re-run a release (release.yml)"))
+    if cmd == "api":
+        verdicts.append(gh_api_rule(args))
+    if (cmd, sub) in GH_ASK:
+        verdicts.append(ask(f"gh-{cmd}-{sub}", "it posts in public, in the maintainer's name"))
+    others = sorted({r for r in repos if repo_owner(r) != OWNER})
+    if others:
+        verdicts.append(ask("gh-other-repo", f"it acts on {', '.join(others)}, outside {OWNER}"))
+    return worst(verdicts)
+
+
+def gh_api_rule(args: list[str]) -> Verdict:
+    endpoint, method, fields, has_input, i = None, None, [], False, 0
+    while i < len(args):
+        a = args[i]
+        name, eq, attached = a.partition("=")
+        value = None
+        if a in GH_API_WITH_VALUE and i + 1 < len(args):
+            name, value = a, args[i + 1]
+            i += 1
+        elif a.startswith("--") and eq:
+            value = attached
+        elif a[:2] in ("-X", "-f", "-F") and len(a) > 2:
+            name, value = a[:2], a[2:]
+        else:
+            name = a
+        if name in ("-X", "--method"):
+            method = (value or "").upper()
+        elif name in ("-f", "--raw-field", "-F", "--field"):
+            fields.append(value or "")
+        elif name == "--input":
+            has_input = True
+        elif not a.startswith("-") and a != "api" and endpoint is None:
+            endpoint = a
+        i += 1
+    if method is None:
+        method = "POST" if fields or has_input else "GET"
+    if endpoint is None or method in ("GET", "HEAD"):
+        return ALLOWED
+    path = endpoint.split("?", 1)[0].lstrip("/")
+    if path == "graphql":
+        query = " ".join(fields)
+        m = GH_GRAPHQL_PROTECTED.search(query)
+        if m:
+            return block(
+                "gh-api", f"the GraphQL mutation {m.group(0)} does what a blocked command does"
+            )
+        m = GH_GRAPHQL_POSTS.search(query)
+        if m:
+            return ask("gh-api", f"{m.group(0)} posts in public, in the maintainer's name")
+        if has_input:
+            return ask("gh-api", "a GraphQL request from a file the guard can't read")
+        return ALLOWED
+    if GH_API_PROTECTED.match(path):
+        return block(
+            "gh-api", f"{method} {path} changes the repository's settings, releases or refs"
+        )
+    if GH_API_POSTS.match(path):
+        return ask("gh-api", f"{method} {path} posts in public, in the maintainer's name")
+    return ALLOWED
+
+
+# docker and podman: options before the subcommand that take a separate value.
+CONTAINER_GLOBAL_WITH_VALUE = {
+    "--config", "-c", "--context", "-H", "--host", "-l", "--log-level", "--tlscacert",
+    "--tlscert", "--tlskey", "--connection", "--url", "--identity", "--root", "--runroot",
+    "--storage-driver", "--storage-opt", "--cgroup-manager", "--events-backend", "--module",
+    "--runtime", "--tmpdir", "--volumepath", "--imagestore", "--conmon", "--ssh",
+}  # fmt: skip
+HOME = os.path.expanduser("~")
+# Host paths a container must not see.
+MOUNT_FORBIDDEN = re.compile(
+    r"^(/|~|\$HOME|\$\{HOME\}|/home|/root"
+    r"|(~|\$HOME|\$\{HOME\}|/home/[^/]+|/root)/(\.kube|\.ssh|\.docker|\.config|\.netrc|\.gnupg)(/.*)?"
+    r"|.*/(docker|podman)\.sock)$"
+)
+
+
+def forbidden_mount(spec: str) -> bool:
+    if spec.startswith(("type=", "src=", "source=")) or ",src=" in spec or ",source=" in spec:
+        parts = dict(p.partition("=")[::2] for p in spec.split(","))
+        source = parts.get("source") or parts.get("src") or ""
+    else:
+        source = spec.split(":", 1)[0]
+    if not source:
+        return False  # an anonymous volume
+    source = source.rstrip("/") or "/"
+    if source == HOME or source.startswith(HOME + "/"):
+        source = "~" + source[len(HOME) :]
+    return MOUNT_FORBIDDEN.match(source) is not None
+
+
+def container_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        i += 2 if args[i] in CONTAINER_GLOBAL_WITH_VALUE else 1
+    if i >= len(args):
+        return ALLOWED
+    sub, rest = args[i], args[i + 1 :]
+    first = next((a for a in rest if not a.startswith("-")), "")
+    if sub in ("login", "logout", "push") or (
+        sub in ("image", "manifest", "artifact", "compose") and first == "push"
+    ):
+        return block("container-registry", "it signs in to or pushes to a registry")
+    if sub == "buildx" and first == "imagetools":
+        return block("container-registry", "it pushes to a registry")
+    for j, a in enumerate(rest):
+        if a == "--":
+            break
+        if a == "--push" or "type=registry" in a or a.startswith("--push="):
+            return block("container-registry", "it pushes to a registry")
+        if a == "--privileged" or a.startswith("--privileged="):
+            return block("container-privileged", "a privileged container can reach the host")
+        spec = None
+        if a in ("-v", "--volume", "--mount") and j + 1 < len(rest):
+            spec = rest[j + 1]
+        elif a.startswith(("--volume=", "--mount=")):
+            spec = a.split("=", 1)[1]
+        elif a.startswith("-v") and len(a) > 2 and not a.startswith("--"):
+            spec = a[2:]
+        if spec is not None and forbidden_mount(spec):
+            return block(
+                "container-mount",
+                f"mounting {spec} hands the host's files or secrets to a container",
+            )
+    return ALLOWED
+
+
+KUBECTL_GLOBAL_WITH_VALUE = {
+    "--context", "--kubeconfig", "-n", "--namespace", "--cluster", "--user", "-s", "--server",
+    "--token", "--as", "--as-group", "--as-uid", "--request-timeout", "-v", "--v",
+    "--cache-dir", "--certificate-authority", "--client-certificate", "--client-key",
+    "--tls-server-name", "--profile", "--profile-output", "--password", "--username",
+    "--log-file",
+}  # fmt: skip
+KUBECTL_WRITES = {
+    "apply", "create", "delete", "edit", "patch", "replace", "scale", "set", "label",
+    "annotate", "drain", "cordon", "uncordon", "taint", "exec", "attach", "port-forward",
+    "cp", "run", "expose", "autoscale", "debug",
+}  # fmt: skip
+KUBECTL_ROLLOUT_WRITES = {"restart", "undo", "pause", "resume"}
+KUBECTL_CONFIG_READS = {"current-context", "get-contexts", "get-clusters", "get-users", "view"}
+HELM_GLOBAL_WITH_VALUE = {
+    "--kube-context", "--kubeconfig", "-n", "--namespace", "--registry-config",
+    "--repository-cache", "--repository-config", "--burst-limit", "--kube-apiserver",
+    "--kube-as-group", "--kube-as-user", "--kube-ca-file", "--kube-token", "--qps",
+    "--kube-tls-server-name", "--content-cache",
+}  # fmt: skip
+HELM_WRITES = {"install", "upgrade", "uninstall", "delete", "del", "un", "rollback", "test", "push"}
+CLUSTER = "the cluster changes through the deployment repository and Argo CD, not from here"
+
+
+def verb_and_rest(args: list[str], with_value: set[str]) -> tuple[str, list[str]]:
+    """The first argument that isn't an option or an option's value, and what follows it."""
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in with_value:
+            i += 2
+        elif a.startswith("-"):
+            i += 1
+        else:
+            return a, args[i + 1 :]
+    return "", []
+
+
+def kubectl_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    verb, rest = verb_and_rest(args, KUBECTL_GLOBAL_WITH_VALUE)
+    nxt, _ = verb_and_rest(rest, KUBECTL_GLOBAL_WITH_VALUE)
+    if verb in KUBECTL_WRITES or (verb == "rollout" and nxt in KUBECTL_ROLLOUT_WRITES):
+        return block("kubectl-write", f"kubectl {verb} changes the cluster: {CLUSTER}")
+    if verb == "config" and nxt and nxt not in KUBECTL_CONFIG_READS:
+        return block("kubectl-config", f"kubectl config {nxt} changes the kubeconfig: {CLUSTER}")
+    if verb == "certificate" and nxt in ("approve", "deny"):
+        return block("kubectl-write", f"kubectl certificate {nxt} changes the cluster: {CLUSTER}")
+    return ALLOWED
+
+
+def helm_rule(args: list[str], env: dict[str, str]) -> Verdict:
+    verb, rest = verb_and_rest(args, HELM_GLOBAL_WITH_VALUE)
+    nxt, _ = verb_and_rest(rest, HELM_GLOBAL_WITH_VALUE)
+    if verb in HELM_WRITES:
+        return block("helm-write", f"helm {verb} changes the cluster or a registry: {CLUSTER}")
+    if verb == "registry" and nxt in ("login", "logout"):
+        return block("helm-registry", "it signs in to a registry")
+    return ALLOWED
+
+
+# The secrets on this machine: the paths .claude/settings.json denies to the Read and
+# Edit tools, which don't cover a Bash command that reads them.
+_HOMES = "|".join(
+    [r"~", r"\$HOME", r"\$\{HOME\}", r"/home/[^/\s'\"]+", r"/root"]
+    + ([re.escape(HOME)] if HOME.startswith("/") and HOME != "/" else [])
+)
+SECRET_PATH = re.compile(
+    r"(?<![\w.-])\.env(\.[\w.-]+)?(?![\w.-])"
+    rf"|({_HOMES})/(\.aws|\.config/gcloud|\.gnupg|\.config/helm|\.docker|\.kube|\.ssh"
+    r"|\.config/gh)(?![\w.-])"
+    rf"|({_HOMES})/(\.claude/\.credentials\.json|\.claude\.json|\.netrc"
+    r"|\.config/containers/auth\.json)(?![\w.-])"
+    r"|(/run/user/[^/\s'\"]+|\$\{?XDG_RUNTIME_DIR\}?)/containers/auth\.json"
+    r"|[\w-][\w.-]*\.(pem|key)(?![\w.-])"
+    r"|(?<![\w.-])id_(rsa|ed25519)[\w.-]*"
+)
+# Programs whose arguments are mostly prose (a commit message, a PR body): only an
+# argument that is a bare path is checked. echo, printf, ls and test read nothing;
+# kubectl, oc and helm use a kubeconfig (`--kubeconfig ~/.kube/...`) without printing it.
+SECRET_PROSE = {"git", "gh"}
+SECRET_HARMLESS = {"echo", "printf", "ls", "test", "[", "true", ":", "kubectl", "oc", "helm"}
+# Redirections whose target is a file (not a here-document's delimiter or text).
+FILE_REDIRECTIONS = WRITE_REDIRECTIONS | {"<", "<&"}
+
+
+def secret_path(word: str, env: dict[str, str]) -> Verdict:
+    m = SECRET_PATH.search(expand(word, env))
+    if m is None:
+        return ALLOWED
+    return block(
+        "secret-read",
+        f"{m.group(0)} holds secrets, which agents don't read or change "
+        "(the deny rules in .claude/settings.json)",
+    )
+
+
+def secret_args(name: str, args: list[str], env: dict[str, str]) -> Verdict:
+    if name in SECRET_HARMLESS:
+        return ALLOWED
+    if name in SECRET_PROSE:
+        args = [a for a in args if not any(c.isspace() for c in a)]
+    return worst([secret_path(a, env) for a in args])
+
+
 # Program name -> rule. Programs are matched by their base name, so `/usr/bin/git`
 # is `git`.
 RULES = {
     "git": git_rule,
     "pre-commit": pre_commit_rule,
     **dict.fromkeys(FILE_WRITERS, file_writer_rule),
+    "gh": gh_rule,
+    "docker": container_rule,
+    "podman": container_rule,
+    "kubectl": kubectl_rule,
+    "oc": kubectl_rule,
+    "helm": helm_rule,
 }
 
 
@@ -620,11 +1064,19 @@ def check_command(cmd: Command, shell_env: dict[str, str], text: str, depth: int
         k, v = words[i].split("=", 1)
         env[k] = v
         i += 1
-    writes = [git_internals(t, env) for op, t in cmd.redirects if op in WRITE_REDIRECTIONS]
+    files = [
+        v
+        for op, t in cmd.redirects
+        if op in FILE_REDIRECTIONS
+        for v in (
+            git_internals(t, env) if op in WRITE_REDIRECTIONS else ALLOWED,
+            secret_path(t, env),
+        )
+    ]
     if i == len(words):
         shell_env.update(env)
-        return worst(writes)
-    return worst([*writes, check_argv(words[i:], env, cmd, shell_env, text, depth)])
+        return worst(files)
+    return worst([*files, check_argv(words[i:], env, cmd, shell_env, text, depth)])
 
 
 def check_argv(
@@ -664,7 +1116,7 @@ def check_argv(
     if name in WRAPPERS or (name == "uv" and args[:1] == ["run"]):
         return check_wrapper(args, env, cmd, shell_env, text, depth)
     rule = RULES.get(name)
-    return rule(args, env) if rule is not None else ALLOWED
+    return worst([secret_args(name, args, env), rule(args, env) if rule else ALLOWED])
 
 
 # Aliases set earlier in the command live in its environment under this prefix, which
@@ -709,6 +1161,8 @@ def check_wrapper(
         if runs_something(a):
             verdicts.append(check_argv(args[j:], env, cmd, shell_env, text, depth))
             break
+    else:  # `sudo cat ~/.ssh/...`: a program the guard has no rule for
+        verdicts.append(secret_args("", args, env))
     return worst(verdicts)
 
 
@@ -776,10 +1230,55 @@ BLOCKED = (
 )
 
 
+# What the log leaves out: a token in a header, an option or a variable, and the
+# token formats GitHub, AWS, Slack and the LLM providers use.
+REDACT = [
+    (re.compile(r"(?i)(authorization:\s*(bearer|token|basic)?\s*)[^\s'\"]+"), r"\1[redacted]"),
+    (
+        re.compile(
+            r"(?i)([\w-]*(token|passw(or)?d|secret|api[_-]?key|credential)[\w-]*"
+            r"(\s*[=:]\s*|\s+))(\"[^\"]*\"|'[^']*'|[^\s'\"]+)"
+        ),
+        r"\1[redacted]",
+    ),
+    # `docker login -p ...`, `helm registry login -p ...`
+    (re.compile(r"(\blogin\b[^;&|\n]*?\s-p\s*)(\"[^\"]*\"|'[^']*'|[^\s'\"]+)"), r"\1[redacted]"),
+    (
+        re.compile(
+            r"\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|AKIA[0-9A-Z]{16}"
+            r"|xox[abprs]-[\w-]{10,}|sk-[\w-]{20,}|glpat-[\w-]{20,})"
+        ),
+        "[redacted]",
+    ),
+]
+
+
+def redact(command: str) -> str:
+    for pattern, replacement in REDACT:
+        command = pattern.sub(replacement, command)
+    return command
+
+
+def log(decision: str, rule: str, command: str) -> None:
+    """One line per block or ask in ~/.claude/twr-guard.log (TWR_GUARD_LOG moves it; empty
+    turns it off), to look at afterwards, with tokens and passwords redacted. A log that
+    can't be written is skipped."""
+    path = os.environ.get("TWR_GUARD_LOG", os.path.join("~", ".claude", "twr-guard.log"))
+    if not path:
+        return
+    when = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    try:
+        with open(os.path.expanduser(path), "a", encoding="utf-8") as f:
+            f.write(f"{when}\t{decision}\t{rule}\t{json.dumps(redact(command)[:200])}\n")
+    except OSError:
+        pass
+
+
 def main(stdin=None, stdout=None, stderr=None) -> int:
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     stderr = stderr or sys.stderr
+    command = ""
     try:
         data = json.load(stdin)
         if data.get("tool_name") != "Bash":
@@ -794,7 +1293,10 @@ def main(stdin=None, stdout=None, stderr=None) -> int:
             "is blocked. Tell the maintainer.",
             file=stderr,
         )
+        log("error", type(e).__name__, command if isinstance(command, str) else repr(command))
         return 2
+    if verdict.level != ALLOW:
+        log("block" if verdict.level == BLOCK else "ask", verdict.rule, command)
     if verdict.level == BLOCK:
         print(BLOCKED.format(rule=verdict.rule, reason=verdict.reason), file=stderr)
         return 2

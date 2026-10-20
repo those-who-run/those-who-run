@@ -22,10 +22,14 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # the test guard reads the PR's description
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0 # the test guard diffs the PR against its base
       # What the PR changes in uv.lock and web/package-lock.json, from the dependency
       # graph (#355): fails on a known vulnerability of moderate severity or above,
       # or a licence outside this list: the licences GPL-3.0-only can take that the
@@ -56,6 +60,20 @@ jobs:
           version: "0.11.23"
           enable-cache: true
       - run: make venv
+      # A PR that deletes, skips or loosens tests says why (#358): a line
+      # `Tests weakened: <reason>` in its description, read when this runs (so a
+      # re-run sees an edit), never interpolated into a shell. Dependabot's PRs
+      # don't touch tests. What it finds goes to the job summary either way.
+      - name: Weakened tests need a reason
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .venv/bin/python scripts/test_guard.py "$BASE" "$HEAD" --pr "$PR"
       # Node and the Playwright browser for make web-check (ADR 0003 point 5): the
       # Node in web/.node-version, the browser cached by Playwright's version.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

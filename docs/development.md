@@ -37,6 +37,33 @@ package is gone. On a PR, CI's dependency review fails on a known vulnerability
 (moderate or above) or a licence GPL-3.0 can't take in what the lockfiles change.
 `web/.npmrc` sets `ignore-scripts=true`: no package's install script runs.
 
+**Weakened tests.** On a pull request, CI's `test` job runs
+`scripts/test_guard.py` over the PR's change. It fails the job when the change
+deletes a test file or a test, adds a skip, an expected failure or a focused test
+(`pytest.mark.skip`, `xfail`, `test.skip`, `test.only` and the rest; Playwright's
+conditional `test.skip(<condition>, "<reason>")` inside a test is by design and
+passes), adds a `no cover` pragma or a coverage `omit` or exclusion, lowers
+`fail_under`, turns off `xfail_strict`, raises a bundle budget, or edits the
+`TWR_FAIL_ON_SKIP` switch or Playwright's `forbidOnly`, unless the PR description
+has a line saying why:
+
+```text
+Tests weakened: the bounds were too tight for CI's slower runner (#348)
+```
+
+at least ten characters after the colon: what was wrong with the test. Editing the
+description starts no run, so re-run the failed job afterwards (`gh run rerun
+<run-id> --failed`); the script reads the description when it runs. Never delete,
+skip or loosen a test to make CI pass without that line. What it found goes to the
+job summary either way. Dependabot's PRs are exempt. Locally:
+`.venv/bin/python scripts/test_guard.py origin/main HEAD`. `xfail_strict = true`
+makes an expected failure that passes fail the run.
+
+The guard is a "say why" speed bump, not a protection: CI runs the PR's own copy
+of the script, and the author writes the description, so a PR can change the
+script, the workflow or just write the line. It makes the reason visible; the
+maintainer's review is what decides.
+
 Every target, as `make help` lists it:
 
 | Target | What it does |

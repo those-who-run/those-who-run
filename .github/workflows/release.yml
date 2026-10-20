@@ -95,9 +95,13 @@ jobs:
           npx playwright install --with-deps chromium
       # As in CI: archived-outing tests fetch from those-who-run/outings' outings release with gh
       # (ADR 0002), which needs a token (contents: read); a skip fails make check.
+      # zizmor runs offline here: its online audits (known-vulnerable actions,
+      # impostor commits) gate PRs in CI, and an advisory published after the
+      # release PR went green must not stop the publish.
       - run: make check
         env:
           GH_TOKEN: ${{ github.token }}
+          ZIZMOR_OFFLINE: "true"
 
   publish:
     runs-on: ubuntu-latest

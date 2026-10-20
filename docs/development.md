@@ -21,7 +21,8 @@ make build           # podman build for linux/amd64, local only
 (fails on a finding of medium severity or above) and
 [actionlint](https://github.com/rhysd/actionlint) (with shellcheck over each `run:`
 step), at the exact versions in the `dev` extra. With `GH_TOKEN` set, as in CI,
-zizmor adds its online audits (impostor commits, known-vulnerable actions). A
+zizmor adds its online audits (impostor commits, known-vulnerable actions);
+`release.yml` sets `ZIZMOR_OFFLINE`, so a new advisory fails PRs, not a publish. A
 `# zizmor: ignore[<audit>]` comment is the last resort: it needs the reason on the
 same line or the line above, and the PR that adds it says why the finding is wrong
 or accepted.

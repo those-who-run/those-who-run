@@ -67,7 +67,8 @@ typecheck:
 # severity or above, actionlint on a syntax or expression error, with shellcheck
 # over each run: step. All three are exact versions in the dev extra (uv.lock).
 # With GH_TOKEN set (CI sets it) zizmor also runs its online audits: impostor
-# commits, known-vulnerable actions, a tag that is also a branch.
+# commits, known-vulnerable actions, a tag that is also a branch. release.yml sets
+# ZIZMOR_OFFLINE=true: a new advisory fails PRs, never a publish.
 BIN := $(dir $(PY))
 workflow-lint:
 	$(BIN)zizmor --min-severity medium --format plain \

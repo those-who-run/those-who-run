@@ -1,0 +1,8 @@
+# New issues come from the two templates, which add `needs triage`; the maintainer
+# removes it when an issue is accepted as a spec. Agents don't act on an issue
+# that still has it. docs/ISSUE_FORMAT.md has the details.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/those-who-run/those-who-run/security/advisories/new
+    about: Report it privately, not in a public issue. See the security policy.

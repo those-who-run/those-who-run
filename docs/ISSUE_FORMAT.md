@@ -50,6 +50,12 @@ build it without asking around first. The template is
 | Open questions | Decisions still to make, and who makes them. |
 | References | Prior art, docs, related issues and PRs. |
 
+An issue opened from a template gets the `needs triage` label. The
+maintainer removes it once the issue is accepted as a spec; until then
+agents don't work on it. That holds for his own issues too, so he removes the
+label from them when he opens them, or opens them with `gh issue create`
+without a template.
+
 Findings that arrive later (a new recording, a test that changed the
 picture) go in a comment and are folded into the body, so the body is always
 the current spec.

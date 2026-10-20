@@ -4,6 +4,9 @@ version: 2
 # with the updates that would otherwise merge on their own.
 # Commits are `deps: ...`, which release-please lists under "Dependencies" in the
 # release PR and the changelog (release-please-config.json).
+# Every ecosystem has a cooldown: a release must be 7 days old (npm: 14) before it is
+# offered, so one pulled for being malicious never reaches a PR (zizmor's
+# dependabot-cooldown audit, make workflow-lint).
 updates:
   # The SHA-pinned actions in .github/workflows. Minors and patches merge after CI;
   # each major gets its own PR, for review.
@@ -11,6 +14,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: deps
     groups:
@@ -23,6 +28,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: deps
     groups:
@@ -36,6 +43,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: deps
   # The web app's npm packages (web/package-lock.json), pinned exactly. A release

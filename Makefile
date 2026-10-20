@@ -5,7 +5,7 @@ VOICE      := en_GB-alba-medium
 VOICE_URL  := https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium
 PY         ?= .venv/bin/python
 
-.PHONY: help venv lock voice lint fmt typecheck test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
+.PHONY: help venv lock voice lint fmt typecheck workflow-lint test openapi brand-css wordmark check build build-pitwall replay web-build web-dev web-check web-preview archive-push archive-pull clean
 
 help:
 	@echo "help     - this list"
@@ -15,13 +15,14 @@ help:
 	@echo "lint     - ruff check + format check"
 	@echo "fmt      - ruff format"
 	@echo "typecheck - mypy on src/"
+	@echo "workflow-lint - zizmor and actionlint over .github (make check runs it)"
 	@echo "test     - pytest"
 	@echo "docs-check - every internal link and anchor in the Markdown resolves (offline)"
 	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
 	@echo "brand-css - write web/src/styles/brand.css, the web app's brand colours, from brand.py"
 	@echo "wordmark - redraw the wordmark and icons as outlines: make wordmark NOTO=<NotoSansCJK-VF.ttc>"
 	@echo "brand-assets - write the docs' banners, wordmarks and social preview into docs/assets/ from brand.py"
-	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor, web-check (CI runs this)"
+	@echo "check    - everything a PR must pass: lint, typecheck, workflow-lint, tests with coverage floor, web-check (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "build-pitwall - podman build the slim pit wall image, $(IMAGE_NAME):$(VERSION)-pitwall"
 	@echo "replay   - replay FILE=recording.jsonl"
@@ -61,6 +62,18 @@ fmt:
 
 typecheck:
 	$(PY) -m mypy
+
+# The workflows and dependabot.yml (#354): zizmor fails on a finding of medium
+# severity or above, actionlint on a syntax or expression error, with shellcheck
+# over each run: step. All three are exact versions in the dev extra (uv.lock).
+# With GH_TOKEN set (CI sets it) zizmor also runs its online audits: impostor
+# commits, known-vulnerable actions, a tag that is also a branch. release.yml sets
+# ZIZMOR_OFFLINE=true: a new advisory fails PRs, never a publish.
+BIN := $(dir $(PY))
+workflow-lint:
+	$(BIN)zizmor --min-severity medium --format plain \
+		.github/workflows/ .github/dependabot.yml
+	$(BIN)actionlint -shellcheck $(BIN)shellcheck
 
 test:
 	$(PY) -m pytest -q
@@ -115,9 +128,10 @@ brand-assets: $(WEB_DEPS)
 # The definition of green: CI runs exactly this. The coverage floor lives in
 # pyproject.toml ([tool.coverage.report] fail_under); a skipped test fails the run;
 # uv.lock must match pyproject.toml; web/openapi.json must match the API's models;
-# and the web app passes web-check (brand.css matching brand.py among it), which
-# fails when Node or the browser is missing.
-check: lint typecheck
+# the workflows pass zizmor and actionlint; and the web app passes web-check
+# (brand.css matching brand.py among it), which fails when Node or the browser is
+# missing.
+check: lint typecheck workflow-lint
 	uv lock --check
 	$(PY) scripts/openapi.py --check
 	$(PY) scripts/brand_assets.py --check

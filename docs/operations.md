@@ -108,9 +108,39 @@ merge, and the maintainer's approval of the release PR is the decision to ship.
    `v` plus `__version__`, builds both images, runs `--version` in each, checks
    neither has the old pit wall's packages and smoke-tests the pit wall
    (`scripts/smoke-pitwall.sh`), and pushes `muldoon/those-who-run:x.y.z`, `latest`
-   and `x.y.z-pitwall`.
+   and `x.y.z-pitwall`, each with signed build provenance and an SPDX SBOM
+   attested (below).
 4. **Deploy it.** Rolling the new tags out is up to whoever runs it (see
    [Deploying](#deploying)).
+
+**Verifying an image.** Each published image carries two attestations, signed
+with this repository's release workflow identity through Sigstore and stored both
+here and on Docker Hub next to the image: SLSA build provenance (which workflow,
+from which tagged commit) and an SPDX SBOM (what is in it). Before deploying a
+version, check both images came from here:
+
+```sh
+WF=those-who-run/those-who-run/.github/workflows/release.yml
+gh attestation verify oci://docker.io/muldoon/those-who-run:x.y.z \
+  -R those-who-run/those-who-run --signer-workflow "$WF"
+gh attestation verify oci://docker.io/muldoon/those-who-run:x.y.z-pitwall \
+  -R those-who-run/those-who-run --signer-workflow "$WF"
+# the SBOM:
+gh attestation verify oci://docker.io/muldoon/those-who-run:x.y.z \
+  -R those-who-run/those-who-run --signer-workflow "$WF" \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+`--signer-workflow` accepts only `release.yml`'s signature: without it, any
+workflow in the repository with `attestations: write` would do. An image pushed
+to the same tag by anything else (a leaked Docker Hub token) fails the check.
+Pinning the verified digest in a deployment makes the check stick; in Kustomize
+that is the image's `digest:` field (`digest: sha256:...`), not `newTag`.
+
+The attestations are made after the tags are pushed, so a publish that fails
+there leaves the image out but unattested, with a red run. `gh workflow run
+release.yml -f tag=vx.y.z` releases that tag again: it builds, pushes the same
+tags and attests what it pushed.
 
 **Versions follow the milestones.** Before 1.0, `feat:` and `fix:` both bump the
 patch (0.6.2 to 0.6.3), and a breaking change bumps the minor

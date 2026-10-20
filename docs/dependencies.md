@@ -17,10 +17,25 @@ Before adding a dependency, check that:
 
 Version bumps don't touch this file; Dependabot never adds a name.
 
+The test reads the names a manifest declares: in `pyproject.toml`, `[build-system]
+requires`, `[project.dependencies]`, the optional-dependencies extras and the
+dependency groups; in `web/package.json`, `dependencies`, `devDependencies`,
+`optionalDependencies`, `peerDependencies` and the names in `overrides`. These
+tables are the direct dependencies, not everything installed: a package that
+arrives only in `uv.lock` or `web/package-lock.json`, pulled in by one listed
+here, is covered only by CI's dependency review (known vulnerabilities and
+licences), never by this file.
+
 Names are as the manifests spell them (Python names compare normalised, as PEP 503
 does). Each table's first column is the name in backticks, which the test reads.
 
 ## Python (`pyproject.toml`)
+
+### `[build-system] requires`: builds the wheel
+
+| Package | Registry | Why |
+| --- | --- | --- |
+| `hatchling` | [PyPI](https://pypi.org/project/hatchling/) | The build backend: `uv sync` builds the project with it, locally and in both images, reading the version from `__init__.py`. |
 
 ### Core (`[project.dependencies]`): the pit wall's data API, and both images
 

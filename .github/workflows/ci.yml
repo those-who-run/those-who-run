@@ -30,20 +30,24 @@ jobs:
       # graph (#355): fails on a known vulnerability of moderate severity or above,
       # or a licence outside this list: the licences GPL-3.0-only can take that the
       # current dependencies use. The fonts (SIL OFL 1.1) and caniuse-lite's data
-      # (CC-BY-4.0, build-time only) are allowed by package, not by licence. New
-      # names are gated by tests/test_dependencies.py and docs/dependencies.md.
+      # (CC-BY-4.0, build-time only) are allowed by package, not by licence, and so
+      # is uri-js (eslint's, via ajv), which the dependency graph reads as
+      # BSD-2-Clause AND BSD-2-Clause-Views. Dev packages count too: vite, vitest
+      # and the eslint plugins run in CI with a token. New names are gated by
+      # tests/test_dependencies.py and docs/dependencies.md.
       - name: Dependency review
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: moderate
+          fail-on-scopes: runtime, development, unknown
           allow-licenses: >-
             0BSD, Apache-2.0, BlueOak-1.0.0, BSD-2-Clause, BSD-3-Clause, CC0-1.0,
             GPL-3.0-only, GPL-3.0-or-later, ISC, LGPL-3.0-only, LGPL-3.0-or-later,
             MIT, MIT-0, MPL-2.0, PSF-2.0, Python-2.0, Unlicense, Zlib
           allow-dependencies-licenses: >-
             pkg:npm/%40fontsource/barlow, pkg:npm/%40fontsource/barlow-semi-condensed,
-            pkg:npm/caniuse-lite
+            pkg:npm/caniuse-lite, pkg:npm/uri-js
           show-openssf-scorecard: true
           comment-summary-in-pr: never
       # uv installs the Python in .python-version and the packages in uv.lock.

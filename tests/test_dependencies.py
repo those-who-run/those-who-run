@@ -159,3 +159,40 @@ def test_a_python_name_under_npm_does_not_count():
     )
     found = problems(dependencies.direct_dependencies(PYPROJECT, PACKAGE_JSON), doc)
     assert any(f.startswith("ruff (pyproject.toml") for f in found)
+
+
+def test_build_system_requires_is_read():
+    pyproject = '[build-system]\nrequires = ["hatchling>=1.25", "hatch-vcs"]\n' + PYPROJECT
+    deps = dependencies.python_dependencies(pyproject)
+    assert deps["hatchling"] == "build-system"
+    assert deps["hatch-vcs"] == "build-system"
+
+
+@pytest.mark.parametrize("section", ["optionalDependencies", "peerDependencies"])
+def test_npm_optional_and_peer_dependencies_are_read(section):
+    package_json = f'{{"dependencies": {{"react": "19"}}, "{section}": {{"fsevents": "2"}}}}'
+    assert dependencies.npm_dependencies(package_json) == {
+        "react": "dependencies",
+        "fsevents": section,
+    }
+
+
+def test_npm_overrides_names_are_read_nested_and_without_versions():
+    package_json = """{"dependencies": {"react": "19"}, "overrides": {
+        "left-pad": "npm:@evil/left-pad@1",
+        "@scope/pkg@^2": {".": "2.1.0", "is-odd": "3"},
+        "react": "19.3.0"
+    }}"""
+    assert dependencies.npm_dependencies(package_json) == {
+        "react": "dependencies",
+        "left-pad": "overrides",
+        "@scope/pkg": "overrides",
+        "is-odd": "overrides",
+    }
+
+
+def test_a_new_name_in_overrides_fails():
+    package_json = PACKAGE_JSON[:-1] + ', "overrides": {"left-pad": "1.3.0"}}'
+    found = problems(dependencies.direct_dependencies(PYPROJECT, package_json), DOC_TEXT)
+    assert len(found) == 1
+    assert found[0].startswith("left-pad (web/package.json, overrides)")

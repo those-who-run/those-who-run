@@ -33,10 +33,13 @@ def _requirement_name(requirement: str) -> str:
 
 def python_dependencies(pyproject: str) -> dict[str, str]:
     """{normalised name: where it is declared} for `[project.dependencies]`, every
-    `[project.optional-dependencies]` group and every `[dependency-groups]` group."""
+    `[project.optional-dependencies]` group, every `[dependency-groups]` group and
+    `[build-system] requires` (what builds the wheel runs at install time too)."""
     data = tomllib.loads(pyproject)
     project = data.get("project", {})
     found: dict[str, str] = {}
+    for requirement in data.get("build-system", {}).get("requires", []):
+        found.setdefault(normalise(_requirement_name(requirement)), "build-system")
     for requirement in project.get("dependencies", []):
         found.setdefault(normalise(_requirement_name(requirement)), "dependencies")
     for extra, requirements in project.get("optional-dependencies", {}).items():
@@ -49,13 +52,41 @@ def python_dependencies(pyproject: str) -> dict[str, str]:
     return found
 
 
+# npm's sections that name a package to install: each adds a name to the tree.
+NPM_SECTIONS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+
+
+def _override_name(key: str) -> str:
+    """An `overrides` key is a name, optionally with a version range after an `@`
+    that is not the scope's: `foo`, `foo@1`, `@scope/foo@^2`."""
+    at = key.find("@", 1)
+    return key if at == -1 else key[:at]
+
+
+def _override_names(overrides: dict[str, object]) -> list[str]:
+    """Every package an `overrides` tree names, nested ones included; `.` is the
+    parent's own version, not a name."""
+    names = []
+    for key, value in overrides.items():
+        if key == ".":
+            continue
+        names.append(_override_name(key))
+        if isinstance(value, dict):
+            names.extend(_override_names(value))
+    return names
+
+
 def npm_dependencies(package_json: str) -> dict[str, str]:
-    """{name: section} for `dependencies` and `devDependencies`."""
+    """{name: section} for `dependencies`, `devDependencies`,
+    `optionalDependencies`, `peerDependencies` and every name in `overrides`
+    (an override can pull in a package by name with an `npm:` alias or a URL)."""
     data = json.loads(package_json)
     found: dict[str, str] = {}
-    for section in ("dependencies", "devDependencies"):
+    for section in NPM_SECTIONS:
         for name in data.get(section, {}):
             found.setdefault(name, section)
+    for name in _override_names(data.get("overrides", {})):
+        found.setdefault(name, "overrides")
     return found
 
 

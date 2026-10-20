@@ -2,9 +2,12 @@ name: Release PR
 
 # Merged PRs collect in one release PR, `chore(release): x.y.z`, that release-please
 # keeps up to date on every push to main: the next version, CHANGELOG.md, and the
-# version strings in src/those_who_run/__init__.py and the docs. Merging it is the
-# decision to ship: the next run tags the merge commit vx.y.z, creates the GitHub
-# release from the changelog, and calls release.yml to check and publish the image.
+# version strings in src/those_who_run/__init__.py and the docs. This workflow runs
+# CI on it and turns on auto-merge; the main ruleset needs a human approval for a
+# bot-authored change, so the maintainer's approval is the decision to ship, and the
+# PR merges itself once CI is green. Close or edit it to hold a release back. The
+# next run tags the merge commit vx.y.z, creates the GitHub release from the
+# changelog, and calls release.yml to check and publish the image.
 #
 # Config: release-please-config.json and .release-please-manifest.json. Pre-1.0,
 # feat and fix both bump the patch (0.6.2 -> 0.6.3); moving to the next milestone
@@ -13,8 +16,9 @@ name: Release PR
 # Tokens: release-please uses the GITHUB_TOKEN. A tag that token creates starts no
 # workflow, so release.yml is called here (workflow_call) rather than on the tag
 # push: no PAT or App key with write access to this repo exists anywhere. The same
-# rule means the release PR, opened by that token, gets no CI run; release.yml runs
-# make check on the tagged commit before anything is published.
+# rule means the release PR, opened by that token, starts no CI of its own, so the
+# job below dispatches it. The Docker Hub secrets live in the `release` environment
+# (main and v* tags only) and are passed to release.yml by name.
 on:
   push:
     branches: [main]

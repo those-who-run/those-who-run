@@ -76,7 +76,7 @@ from the models in `those_who_run/status.py`.
 ## Releasing
 
 Merged PRs collect in one release PR; merging it ships. Nothing is released per
-merge.
+merge, and the maintainer's approval of the release PR is the decision to ship.
 
 1. **The release PR.** On every push to `main`, release-please
    (`.github/workflows/release-please.yml`) keeps one open PR,
@@ -87,7 +87,11 @@ merge.
    marker, and each file with one is listed under `extra-files` in
    `release-please-config.json`). `docs:`, `test:`, `refactor:`, `build:`, `ci:` and `chore:`
    commits ship in it but are not listed, and on their own they open no release PR.
-2. **Ship it.** Merge the release PR. release-please tags the merge commit
+2. **Ship it.** release-please starts CI on the release PR (a `workflow_dispatch`
+   of `ci.yml` on its branch) and turns on auto-merge. The `main` ruleset needs a
+   human approval for a bot-authored change, so the maintainer approves the release
+   PR, and it squash-merges itself once CI is green. To hold a release back, close
+   the release PR or edit it. On the merge, release-please tags the merge commit
    `vx.y.z`, creates the GitHub release from the changelog, then calls
    `.github/workflows/release.yml`. That runs `make check`, fails unless the tag is
    `v` plus `__version__`, builds both images, runs `--version` in each, checks
@@ -118,11 +122,15 @@ v0.7.0-rc1`. The tag push runs `release.yml` directly, and the tag matches as a 
 **Tokens and secrets.** release-please runs with the Actions token. A tag that
 token creates starts no workflow, so `release-please.yml` calls `release.yml`
 (`workflow_call`) instead of relying on the tag push. That way no PAT or App key can
-write to this repo, and each release runs once. For the same reason the release PR
-gets no CI run of its own; `release.yml` runs `make check` on the tagged commit
-before anything is published. Repository secrets:
+write to this repo, and each release runs once. A PR that token opens starts no CI
+either, so `release-please.yml` dispatches CI on the release branch, the one event
+the token may start. The Docker Hub secrets live in the `release` environment,
+which only `main` and `v*` tags can use:
 
-- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`: the push to Docker Hub.
+- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`: the push to Docker Hub. A called
+  workflow sees a secret only when the caller passes it, so `release-please.yml`
+  passes both by name, and `release.yml`'s publish job takes the values from the
+  `release` environment.
 
 The repository setting *Actions → General → Allow GitHub Actions to create and
 approve pull requests* must be on for release-please to open its PR.

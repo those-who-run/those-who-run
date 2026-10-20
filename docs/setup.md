@@ -20,7 +20,7 @@ is unchanged by the rebrand.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GT7_PS5_IP` | required | PS5 address. Broadcast discovery is not used when set. |
+| `GT7_PS5_IP` | required for `run` | PS5 address. Optional for `record`, which takes `--ps5-ip` or finds the PS5 by broadcast discovery when neither is set. |
 | `DISCORD_BOT_TOKEN` | required | Bot token. |
 | `DISCORD_VOICE_CHANNEL_ID` | required | Voice channel the PS5 joins. |
 | `GT7_RULES_FILE` | built-in defaults | YAML overriding any value in `rules.example.yaml`. |
@@ -39,6 +39,7 @@ is unchanged by the rebrand.
 | `GT7_CONTINUE_WINDOW_SECS` | `600` | After the engineer restarts mid-race, a session joined part way within this long of the one the shutdown ended (same car and kind) continues it. That session's results card waits this long for it. `0` never continues. |
 | `GT7_RECORD_DIR` | unset | Record every outing as `<dir>/<timestamp>.jsonl.gz` (see [Recordings](telemetry.md#recordings)). |
 | `GT7_RECORD_KEEP` | `20` | How many outing recordings to keep. |
+| `GT7_ARCHIVE_DIR` | `~/.cache/those-who-run/outings` | The outing archive's working copy: `recordings archive` fills it, `make archive-push` and `archive-pull` mirror it (see [The archive](telemetry.md#the-archive)). |
 | `GT7_PITWALL_PORT` | `9852` | The pit wall's data API and web app (`those-who-run pitwall`). |
 | `GT7_PITWALL_STATIC` | unset | The built web app `pitwall` serves, as `--static` (which wins). The pitwall image sets `/app/web`. |
 | `GT7_ENGINEER_URL` | `http://those-who-run:9850` | Where `pitwall` reaches the engineer's read-only port, for `/api/engine/status` and `/api/engine/dash`. |

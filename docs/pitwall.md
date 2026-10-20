@@ -25,15 +25,15 @@ a phone straight after a race:
 - **Lap compare** (`/sessions/<id>/compare?a=&b=`): speed, throttle, brake, gear
   and RPM of two laps over time from each lap's start, from the same session or
   another at the same track, with one cursor across every chart (a horizontal
-  drag scrubs on a phone), drag or pinch to zoom. Distance replaces time once
-  #15 lands.
+  drag scrubs on a phone), drag or pinch to zoom. Comparing by distance instead of
+  time is planned.
 
 A results card's old link, `/?session=<id>`, opens that session. The pit wall
 only reads: the index is opened read-only and no session data is written.
 
 ## The shell
 
-Every page sits in the shell (`web/src/app/`, #296): a header with the 走り屋
+Every page sits in the shell (`web/src/app/`): a header with the 走り屋
 wordmark and the **live engineer chip**, which asks `/api/engine/status` every
 5 s while the tab is visible and says "Live · Suzuka Circuit · L3", "Paused",
 "Replay", "Demo", "Idle" (or "In the menus"), or "Engineer offline" when the
@@ -48,13 +48,14 @@ deploy is never hidden behind a stale cache.
 
 ## Running it
 
-Because the index is in WAL mode, a reader still needs to write SQLite's
+The pit wall runs beside the engineer, from the pitwall image or from source,
+reading the engineer's data directory. One thing to know before mounting that
+directory: because the index is in WAL mode, a reader still needs to write SQLite's
 shared-memory file, `index.sqlite-shm`, next to it, and needs `-wal` and `-shm`
 to exist already if it cannot create them. SQLite removes both when the last
 connection closes, so on a read-only mount (`:ro`, `readOnly: true`) the pit
 wall can only open the index while the engineer is running. Mount the data
-directory read-write for the pit wall; it still opens the index `mode=ro`
-(see #35).
+directory read-write for the pit wall; it still opens the index `mode=ro`.
 
 It needs only the core install (aiohttp, DuckDB, PyYAML), not the `engineer`
 extra (Discord, Piper, gt-telem, metrics), and the built web app (`make
@@ -171,7 +172,7 @@ held up by disk. A lap's row goes into the index only once its file is
 complete, so the pit wall never shows a lap without its frames. A partial lap at the end of a session is written with
 `complete = 0`. Restarting from the pause menu closes the session and opens a
 new one; quitting closes it; Ctrl-C closes whatever is open. Budget roughly
-20 MB per hour of driving (#36 measured 17.5 to 23 MB). Parquet is written and
+20 MB per hour of driving (17.5 to 23 MB measured). Parquet is written and
 read with DuckDB; any Parquet-aware tool can read the files. From 0.3 frames also carry the body
 rotation (`rot_x`, `rot_y`, `rot_z`, `orientation`) and spin (`ang_vel_*`),
 raw from the packet, for drift detection; older laps lack those columns.

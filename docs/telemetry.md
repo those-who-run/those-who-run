@@ -140,7 +140,7 @@ Learned from recordings, and encoded in `state.py`:
   with no loading screen since the last menu is a demo, ignored like a replay.
   With no menu seen (the engineer started mid-demo) it is a demo if GT7 reports
   two or more cars with the flag off. Anything else is a drive. The unflagged
-  races of 2026-10-15 (#63) were demos.
+  races of 2026-10-15 were demos.
 
 ## Known limits
 

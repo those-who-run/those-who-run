@@ -205,7 +205,7 @@ those-who-run post 20261016-190000             # send it
 
 ## Sessions
 
-A pause is not driving time (#229). `summary.json` and the index carry
+A pause is not driving time. `summary.json` and the index carry
 `driving_ms`, `paused_ms` and `ended_paused` next to the wall-clock
 `started_at` and `ended_at`, and the pit wall's session length is `driving_ms`.
 A pause of any length keeps the session, whether GT7 sends paused frames or
@@ -221,9 +221,9 @@ node reboot: the first frame is a race frame past lap 1), it says "Back with
 you. Lap seven. P one." instead of a start brief, makes no cold-tyre call, does
 not measure fuel on the lap it joined, and names no track until the finish line
 is seen. The session's `joined_on_lap` is set in `summary.json` and the index,
-and the card says "Joined on lap 7" (#265).
+and the card says "Joined on lap 7".
 
-A restart in the middle of a race does not split it (#273). A session the
+A restart in the middle of a race does not split it. A session the
 engineer's shutdown ended is marked `engineer_shutdown` in `summary.json` and
 the index, and its results card is held. If the engineer joins a session part
 way within `GT7_CONTINUE_WINDOW_SECS` (10 minutes by default), in the same car,

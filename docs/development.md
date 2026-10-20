@@ -27,6 +27,16 @@ zizmor adds its online audits (impostor commits, known-vulnerable actions);
 same line or the line above, and the PR that adds it says why the finding is wrong
 or accepted.
 
+**Dependencies.** Every direct dependency, Python and npm, has a row in
+[dependencies.md](dependencies.md) saying why it is there. To add one:
+check it is the package you mean (owner, source repository, release history,
+downloads) and that nothing already listed does the job, add it to `pyproject.toml`
+(then `make lock`) or `web/package.json`, and add its row in the same PR;
+`tests/test_dependencies.py` fails `make check` until you do, and on a row whose
+package is gone. On a PR, CI's dependency review fails on a known vulnerability
+(moderate or above) or a licence GPL-3.0 can't take in what the lockfiles change.
+`web/.npmrc` sets `ignore-scripts=true`: no package's install script runs.
+
 Every target, as `make help` lists it:
 
 | Target | What it does |

@@ -1,14 +1,18 @@
 """What a release changes in the places that need a human look (#357).
 
     python scripts/release_digest.py v0.7.4..main     the digest, as Markdown
-    python scripts/release_digest.py                  from the last v* tag to HEAD
+    python scripts/release_digest.py                  from the last release tag
+                                                      (not an -rc) to HEAD
+    ... --github-output                               also `needs_look=true|false`
+                                                      in $GITHUB_OUTPUT
 
 Lists, from git history only, for the release PR's comment (release-please.yml):
 
 - new direct dependencies (names, not versions) in pyproject.toml and
   web/package.json;
 - changed files in the watched places: workflows, agent policy, the image's build,
-  release config and scripts (WATCHED);
+  release config and scripts, the lockfiles and toolchain versions, CODEOWNERS and
+  tests/conftest.py (WATCHED);
 - weakened tests, as scripts/test_guard.py sees them (#358): test files deleted,
   tests removed, skips and expected failures added, the coverage floor lowered,
   the bundle budget raised;
@@ -21,6 +25,7 @@ from the history it reads; standard library only.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -44,9 +49,20 @@ WATCHED = (
     ".dockerignore",
     "Makefile",
     "release-please-config.json",
+    ".release-please-manifest.json",
     ".pre-commit-config.yaml",
     "scripts/",
     "web/.npmrc",
+    # Dependencies and toolchains: new transitive packages appear only in the locks.
+    "uv.lock",
+    "web/package-lock.json",
+    ".python-version",
+    "web/.node-version",
+    "docs/dependencies.md",
+    # Who reviews what, and the test session's own switches.
+    "CODEOWNERS",
+    "docs/CODEOWNERS",
+    "tests/conftest.py",
 )
 MANIFESTS = {"python": "pyproject.toml", "npm": "web/package.json"}
 _PR = re.compile(r"\(#(\d+)\)\s*$")
@@ -73,13 +89,19 @@ def _deps(ecosystem: str, text: str) -> dict[str, str]:
     return dependencies.npm_dependencies(text)
 
 
+def code(text: str) -> str:
+    """`text` as a Markdown code span that it cannot close: a backtick becomes `'`.
+    Inside the span, `@name` pings nobody and `[x](url)` is no link."""
+    return "`" + text.replace("`", "'") + "`"
+
+
 def _prs(subjects: list[str]) -> list[str]:
     """`#N` for each subject that names its PR, in order, once each; the short
-    subject itself for one that doesn't (a direct push)."""
+    subject itself, as code, for one that doesn't (a direct push)."""
     out: list[str] = []
     for subject in subjects:
         m = _PR.search(subject)
-        ref = f"#{m.group(1)}" if m else f"`{subject[:60]}`"
+        ref = f"#{m.group(1)}" if m else code(subject[:60])
         if ref not in out:
             out.append(ref)
     return out
@@ -130,14 +152,14 @@ def digest(rev_range: str, cwd: str | None = None) -> Digest:
                 if name in credited:
                     credited[name].append(subject)
         for name in new:
-            label = f"`{name}` ({manifest}, {after[name]})"
+            label = f"{code(name)} ({manifest}, {after[name]})"
             out.new_dependencies.append((label, _prs(credited[name])))
 
     for row in _git("diff", "--name-status", "-M", rev_range, cwd=cwd).splitlines():
         status, *paths = row.split("\t")
         path = paths[-1]
         if _watched(path) or (len(paths) > 1 and _watched(paths[0])):
-            shown = " -> ".join(f"`{p}`" for p in paths)
+            shown = " -> ".join(code(p) for p in paths)
             subjects = _subjects(rev_range, path, cwd)
             out.watched.append((f"{status[0]} {shown}", _prs(subjects)))
 
@@ -149,10 +171,10 @@ def digest(rev_range: str, cwd: str | None = None) -> Digest:
         elif finding.what == "test file deleted":
             pickaxe = ["--diff-filter=D"]
         subjects = _subjects(rev_range, finding.path, cwd, *pickaxe)
-        out.weakened.append((f"`{finding.path}`: {finding.what}", _prs(subjects)))
+        out.weakened.append((f"{code(finding.path)}: {finding.what}", _prs(subjects)))
 
-    old_floor, _ = test_guard._coverage(_show(since, test_guard.PYPROJECT, cwd))
-    new_floor, _ = test_guard._coverage(_show(until, test_guard.PYPROJECT, cwd))
+    old_floor = test_guard._coverage(_show(since, test_guard.PYPROJECT, cwd)).floor
+    new_floor = test_guard._coverage(_show(until, test_guard.PYPROJECT, cwd)).floor
     if old_floor != new_floor:
         subjects = _subjects(rev_range, test_guard.PYPROJECT, cwd, "-G", "fail_under")
         out.limits.append(
@@ -176,13 +198,25 @@ def markdown(d: Digest) -> str:
         MARKER,
         "### Before you merge: what needs a look",
         "",
-        f"Changes from `{d.since}` to `{d.until}` in the places a release should not "
-        "ship unread (`scripts/release_digest.py`, #357). This comment is updated on "
-        "every push to `main`.",
+        f"Changes from {code(d.since)} to {code(d.until)} in the places a release should "
+        "not ship unread (`scripts/release_digest.py`, #357). This comment is updated "
+        "on every push to `main`.",
         "",
     ]
     if d.empty:
-        return "\n".join([*lines, "Nothing in the watched places changed.", ""])
+        return "\n".join(
+            [
+                *lines,
+                "Nothing in the watched places changed, so auto-merge is on: the PR "
+                "merges once CI passes and a maintainer approves it.",
+                "",
+            ]
+        )
+    lines += [
+        "**Auto-merge is off for this release.** Read the list below, then merge "
+        "by hand; approving alone does not ship it.",
+        "",
+    ]
     sections = (
         ("New direct dependencies", d.new_dependencies),
         ("Workflows, agent policy, build and release files", d.watched),
@@ -200,15 +234,30 @@ def markdown(d: Digest) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("range", nargs="?", help="<tag>..<ref>; default: last v* tag..HEAD")
+    parser.add_argument(
+        "range", nargs="?", help="<tag>..<ref>; default: the last release tag..HEAD"
+    )
+    parser.add_argument(
+        "--github-output",
+        action="store_true",
+        help="also write needs_look=true|false to the file $GITHUB_OUTPUT names",
+    )
     args = parser.parse_args(argv)
     rev_range = args.range
     if not rev_range:
-        tag = _git("describe", "--tags", "--abbrev=0", "--match", "v*", "HEAD").strip()
+        # A release candidate (v0.8.0-rc1) is not a release: the digest covers
+        # everything since the last real one.
+        tag = _git(
+            "describe", "--tags", "--abbrev=0", "--match", "v*", "--exclude", "*-rc*", "HEAD"
+        ).strip()
         rev_range = f"{tag}..HEAD"
     if ".." not in rev_range or "..." in rev_range:
         parser.error("the range is <from>..<to>, e.g. v0.7.4..main")
-    print(markdown(digest(rev_range)), end="")
+    d = digest(rev_range)
+    print(markdown(d), end="")
+    if args.github_output:
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+            f.write(f"needs_look={'false' if d.empty else 'true'}\n")
     return 0
 
 

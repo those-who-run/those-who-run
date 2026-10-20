@@ -134,11 +134,63 @@ def test_a_direct_push_is_named_by_its_subject(repo):
     assert "- A `Makefile` (`fix the Makefile by hand`)" in run(repo)
 
 
+def test_a_subject_cannot_break_out_of_its_code_span(repo):
+    commit(repo, "fix `make` for @someone [x](http://e.test)", {"Makefile": "check:\n"})
+    text = run(repo)
+    assert "- A `Makefile` (`fix 'make' for @someone [x](http://e.test)`)" in text
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["uv.lock", "web/package-lock.json", ".python-version", "tests/conftest.py", "CODEOWNERS"],
+)
+def test_locks_toolchains_and_owners_are_watched(repo, path):
+    commit(repo, "chore: touch (#41)", {path: "x\n"})
+    assert f"- A `{path}` (#41)" in run(repo)
+
+
+def test_a_root_commit_in_the_range(tmp_path):
+    """A commit with no parent: the manifest before it is empty, so its names count."""
+    _git(tmp_path, "init", "-q", "-b", "main")
+    commit(tmp_path, "chore: elsewhere (#1)", {"README.md": "x\n"})
+    _git(tmp_path, "tag", "v0.1.0")
+    _git(tmp_path, "switch", "-q", "--orphan", "fresh")
+    commit(tmp_path, "feat: start (#2)", {"pyproject.toml": PYPROJECT})
+    _git(tmp_path, "switch", "-q", "main")
+    _git(tmp_path, "merge", "-q", "--allow-unrelated-histories", "-m", "merge (#3)", "fresh")
+    d = release_digest.digest("v0.1.0..main", cwd=str(tmp_path))
+    assert ("`pyyaml` (pyproject.toml, dependencies)", ["#2"]) in d.new_dependencies
+
+
 def test_nothing_watched(repo):
     commit(repo, "fix: the app (#40)", {"src/app.py": "x = 2\n"})
     text = run(repo)
-    assert "Nothing in the watched places changed." in text
+    assert "Nothing in the watched places changed, so auto-merge is on" in text
     assert "#40" not in text
+
+
+def test_something_watched_says_auto_merge_is_off(repo):
+    commit(repo, "ci: tweak (#42)", {".github/workflows/ci.yml": "on: pull_request\n"})
+    assert "**Auto-merge is off for this release.**" in run(repo)
+
+
+def test_main_skips_release_candidates_and_writes_the_output(repo, monkeypatch, tmp_path):
+    commit(repo, "ci: tweak (#50)", {".github/workflows/ci.yml": "on: pull_request\n"})
+    _git(repo, "tag", "v0.2.0-rc1")
+    commit(repo, "fix: app (#51)", {"src/app.py": "x = 3\n"})
+    monkeypatch.chdir(repo)
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    assert release_digest.main(["--github-output"]) == 0
+    assert output.read_text() == "needs_look=true\n"
+
+
+def test_main_writes_needs_look_false_when_nothing_changed(repo, monkeypatch, tmp_path):
+    monkeypatch.chdir(repo)
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    assert release_digest.main(["--github-output"]) == 0
+    assert output.read_text() == "needs_look=false\n"
 
 
 def test_main_defaults_to_the_last_tag(repo, monkeypatch, capsys):

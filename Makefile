@@ -16,6 +16,7 @@ help:
 	@echo "fmt      - ruff format"
 	@echo "typecheck - mypy on src/"
 	@echo "test     - pytest"
+	@echo "docs-check - every internal link and anchor in the Markdown resolves (offline)"
 	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
 	@echo "brand-css - write web/src/styles/brand.css, the web app's brand colours, from brand.py"
 	@echo "wordmark - redraw the wordmark and icons as outlines: make wordmark NOTO=<NotoSansCJK-VF.ttc>"
@@ -63,6 +64,15 @@ typecheck:
 
 test:
 	$(PY) -m pytest -q
+
+# Every internal link and anchor in the repository's Markdown resolves
+# (scripts/docs_links.py, offline, no network or binary to fetch). The tables the
+# docs keep in step with the code (config, commands, make targets, metrics) are
+# checked by tests/test_docs.py, in pytest. make check runs the link check once,
+# in pytest (test_the_repositorys_links_resolve); this is the quick local target.
+.PHONY: docs-check
+docs-check:
+	$(PY) scripts/docs_links.py
 
 openapi:
 	$(PY) scripts/openapi.py

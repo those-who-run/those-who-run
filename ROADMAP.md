@@ -5,7 +5,11 @@ are the source of truth for the details. Each milestone is a release, each
 release below links to its milestone, and every open issue carries a `stream:`
 label so a stream can be worked on its own.
 
-Last reviewed 2026-10-18, when the releases were cut down to the smallest
+Last reviewed 2026-10-20, after 0.7.5 shipped: rows for the 0.6.x patches,
+0.7.5, 0.7.6 Track map and 0.11.1 Observability, the order from 0.7.6 on, the
+web app in its own repo (#347) in Decided, and the table checked against every
+milestone's issues. The review before was on 2026-10-18, when the releases
+were cut down to the smallest
 that still ship something whole, so changes ship quickly. Earlier
 the same day, after the UI decision (ADR 0003), 0.6 was cut down to the MVP
 and the rest of its foundations moved to the release that first needs each
@@ -37,20 +41,21 @@ it (checked against every issue's "Blocked by" line on 2026-10-18).
 
 | Release | What it delivers |
 |---|---|
-| [0.5 Solid ground](https://github.com/those-who-run/those-who-run/milestone/19) | The bugs from the code review fixed, including the stored best lap (#185). Guardrails: `make check` with type checking, reproducible builds, release checks, deterministic tests, gzipped fixtures. The pit wall deployed (#35), after the data and network decisions (#194). An archive for the outings specs rely on (#197). Now taking 0.5.x patches (#260). |
-| [0.6 Runtime and API server](https://github.com/those-who-run/those-who-run/milestone/20) | **The MVP, part one.** CLI commands in their own modules (#171), a runtime object that owns the live engineer (#172), and an API server on the engineer's event loop (#173). Sessions that stay right through a pause (#229) and a restart on lap 1 (#157). |
-| [0.7 React pit wall](https://github.com/those-who-run/those-who-run/milestone/26) | **The MVP, part two**, in five small releases, to [ADR 0003](docs/adr/0003-ui-stack.md) and [ADR 0004](docs/adr/0004-design-language.md) (the design language, #291). **0.7.0:** the read-only data API that proxies the engineer (#236), the engineer's status route (#292), and the web scaffold with a device preview from the laptop (#237). A deployment keeps one pit wall, Streamlit, until 0.7.4 switches it. **[0.7.1 Design system](https://github.com/those-who-run/those-who-run/milestone/44):** tokens, fonts and one formatter shared with Python (#294), the component kit on `/_kit` (#295), the app shell with the live engineer chip (#296). **[0.7.2 Sessions](https://github.com/those-who-run/those-who-run/milestone/45):** the session list (#297) and the session page (#298). **[0.7.3 Lap compare](https://github.com/those-who-run/those-who-run/milestone/46):** compare on uPlot (#299) and the race-story chart (#300). **[0.7.4 Streamlit retired](https://github.com/those-who-run/those-who-run/milestone/47):** the cut-over in place (#238). |
+| [0.5 Solid ground](https://github.com/those-who-run/those-who-run/milestone/19) | The bugs from the code review fixed, including the stored best lap (#185). Guardrails: `make check` with type checking, reproducible builds, release checks, deterministic tests, gzipped fixtures. The pit wall deployed, after the data and network decisions (#194). An archive for the outings specs rely on (#197). The 0.5.x patches (#260). Shipped. |
+| [0.6 Runtime and API server](https://github.com/those-who-run/those-who-run/milestone/20) | **The MVP, part one.** CLI commands in their own modules (#171), a runtime object that owns the live engineer (#172), and an API server on the engineer's event loop (#173). Sessions that stay right through a pause (#229) and a restart on lap 1 (#157). Shipped, then three patch releases. **[0.6.1 Track detection fixes](https://github.com/those-who-run/those-who-run/milestone/42):** twin layouts named by their circuit, and a loading screen that no longer wipes the track (#275). **[0.6.2 Safe deploys](https://github.com/those-who-run/those-who-run/milestone/41):** deploy only when the engineer is idle (#272), and a mid-race restart continues the same session (#273). **[0.6.3 GitOps and release automation](https://github.com/those-who-run/those-who-run/milestone/43):** merged PRs collect in one release PR that ships when merged (#286), and a published release bumps the deployment's manifest (#287). |
+| [0.7 React pit wall](https://github.com/those-who-run/those-who-run/milestone/26) | **The MVP, part two**, in five small releases, then two more after it, to [ADR 0003](docs/adr/0003-ui-stack.md) and [ADR 0004](docs/adr/0004-design-language.md) (the design language, #291). **0.7.0:** the read-only data API that proxies the engineer (#236), the engineer's status route (#292), and the web scaffold with a device preview from the laptop (#237). A deployment keeps one pit wall, Streamlit, until 0.7.4 switches it. **[0.7.1 Design system](https://github.com/those-who-run/those-who-run/milestone/44):** tokens, fonts and one formatter shared with Python (#294), the component kit on `/_kit` (#295), the app shell with the live engineer chip (#296). **[0.7.2 Sessions](https://github.com/those-who-run/those-who-run/milestone/45):** the session list (#297) on its API (#318) and the session page (#298). **[0.7.3 Lap compare](https://github.com/those-who-run/those-who-run/milestone/46):** compare on uPlot (#299) and the race-story chart (#300). **[0.7.4 Streamlit retired](https://github.com/those-who-run/those-who-run/milestone/47):** the cut-over in place (#238). 0.7.0 to 0.7.4 shipped. **[0.7.5 Docs and guardrails](https://github.com/those-who-run/those-who-run/milestone/48):** the docs as guides with diagrams and screenshots (#333, #334, #336), checks that keep the docs and the code in step (#338), commit hooks agents can't skip (#339), agent settings and the AI policy (#352, #359), and supply-chain checks in CI (#354, #355, #356, #357, #358, #360). Shipped. **[0.7.6 Track map](https://github.com/those-who-run/those-who-run/milestone/50):** the car's position in the lap trace (#349) and the track map on lap compare (#350), with a flaky Playwright test fixed (#379) and this roadmap brought up to date (#384). |
 | [0.8 Engine model](https://github.com/those-who-run/those-who-run/milestone/27) | Packages by area (#195), deterministic tests (#165), one frame delta (#175), a per-frame `RaceContext` for rules (#176), one lap model (#177), one fuel model (#186), and a frame budget (#196). |
 | [0.9 GT7 decoder](https://github.com/those-who-run/those-who-run/milestone/28) | Frame sources behind one interface (#182) and our own GT7 decoder in place of gt-telem (#235), the A-packet flags (#130), the extended packet modes (#88), and raw packet recordings (#192). |
 | [0.10 Speech pipeline](https://github.com/those-who-run/those-who-run/milestone/29) | A speech policy layer (#179), the audio pipeline (#180), a Verbaliser with units (#181), structured messages (#187), replay that speaks in real time (#188), phrase tuning (#28) and voice selection (#29). |
 | [0.11 Wheel dashboard](https://github.com/those-who-run/those-who-run/milestone/30) | The first wheel dashboard on a phone or tablet (#240), fed by a live dash stream from the engineer (#239). |
+| [0.11.1 Observability](https://github.com/those-who-run/those-who-run/milestone/49) | Structured logs with the session, lap, outing and callout on every line (#341), the callout pipeline measured stage by stage (#343), the pit wall measured on `/metrics` (#344), and an ADR on tracing (#345). |
 | [0.12 Session awareness](https://github.com/those-who-run/those-who-run/milestone/31) | A recording of each session kind (#66), start type (#62), the mode with no flag (#63), the cars-on-track flag read right (#129), body velocity and slip angle (#131), and track detection through a pit stop (#134). |
 | [0.13 Cockpit voice](https://github.com/those-who-run/those-who-run/milestone/21) | The engineer as a HUD in VR: the timing gate (#89), verbosity profiles (#90), traction-aid (#91) and rev-limiter (#92) calls, and the state-of-the-race bundle (#93). |
 | [0.14 Drift](https://github.com/those-who-run/those-who-run/milestone/32) | Drift detection (#65), drift callouts (#86) and drift results on the card (#87). |
-| [0.15 Engineer settings](https://github.com/those-who-run/those-who-run/milestone/33) | One config schema (#191), settings on the data volume with an unconfigured start (#135), an admin token (#140), the control and status API (#136), and the Discord token from External Secrets (#25). |
+| [0.15 Engineer settings](https://github.com/those-who-run/those-who-run/milestone/33) | One config schema (#191), settings on the data volume with an unconfigured start (#135), an admin token (#140), the control and status API (#136), and the decision on pit wall access (#385). |
 | [0.16 Pit wall setup](https://github.com/those-who-run/those-who-run/milestone/22) | PS5 discovery (#137) with the engineer on the host network (#142), the PlayStation (#138) and Discord (#139) setup pages as React routes, and a slimmer engineer image (#26). |
 | [0.17 Lap storage](https://github.com/those-who-run/those-who-run/milestone/34) | Engine events (#174), versioned storage (#178), the lap summary table (#115), and index reads for the pit wall (#183). |
-| [0.18 Lap model and live delta](https://github.com/those-who-run/those-who-run/milestone/23) | Distance along the track (#15), reference laps (#16), live delta (#17), corner names (#94), reference data on the data volume (#193), and the racing line and delta trace on the pit wall (#117). |
+| [0.18 Lap model and live delta](https://github.com/those-who-run/those-who-run/milestone/23) | Distance along the track (#15), reference laps (#16), live delta (#17), corner names (#94), reference data on the data volume (#193), the racing line and delta trace on the pit wall (#117), and naming an unknown track from the pit wall (#319). |
 | [0.19 Strategy](https://github.com/those-who-run/those-who-run/milestone/35) | Tyre wear (#18) and drop-off (#95), timed-race strategy (#132), the fuel saving target (#19), stop now or later (#96), a race summary that tells how the strategy played out (#246), and per-car overrides (#119). |
 | [0.20 Corner coaching](https://github.com/those-who-run/those-who-run/milestone/24) | Corner by corner against your own best, in the car: lockups and wheelspin (#97), spins and big hits (#98), braking points (#99), minimum and exit speeds (#100). |
 | [0.21 Debrief](https://github.com/those-who-run/those-who-run/milestone/36) | A job runner for after-session work (#189), theoretical best and consistency (#101), the debrief (#102), and braking points and corner growth on the pit wall (#34). |
@@ -66,12 +71,16 @@ it (checked against every issue's "Blocked by" line on 2026-10-18).
 ```mermaid
 flowchart LR
   R05[0.5 Solid ground] --> R06[0.6 Runtime and API server]
-  R06 --> R07[0.7 React pit wall]
-  R07 --> R08[0.8 Engine model]
+  R06 --> R061[0.6.1 to 0.6.3 patches]
+  R06 --> R07[0.7.0 to 0.7.4 React pit wall]
+  R07 --> R075[0.7.5 Docs and guardrails]
+  R075 --> R076[0.7.6 Track map]
+  R076 --> R08[0.8 Engine model]
   R08 --> R09[0.9 GT7 decoder]
   R09 --> R010[0.10 Speech pipeline]
   R010 --> R011[0.11 Wheel dashboard]
-  R011 --> R012[0.12 Session awareness]
+  R011 --> R0111[0.11.1 Observability]
+  R0111 --> R012[0.12 Session awareness]
   R012 --> R013[0.13 Cockpit voice]
   R013 --> R014[0.14 Drift]
   R014 --> R015[0.15 Engineer settings]
@@ -99,31 +108,32 @@ nothing after 0.6; 0.15 and 0.16 (setup) need only the MVP.
 
 | Stream | Label | Releases |
 |---|---|---|
-| Code health | `stream: health` | 0.5, 0.6, 0.8, the decoder and frame sources in 0.9, the speech foundations in 0.10, single pieces in 0.15, 0.17, 0.18, 0.21 and 1.0, and Polish and ops |
-| Session awareness | `stream: session` | 0.5 (patches), 0.6 (pause and restart), 0.12, and drift detection in 0.14 |
+| Code health | `stream: health` | 0.5, 0.6, 0.7.5 (guardrails), 0.8, the decoder and frame sources in 0.9, the speech foundations in 0.10, 0.11.1 Observability, single pieces in 0.13, 0.15, 0.17, 0.18, 0.21 and 1.0, and Polish and ops |
+| Session awareness | `stream: session` | 0.5 (patches), 0.6 (pause and restart), 0.6.1 and 0.6.2 (track detection, a restart mid-race), 0.12, and drift detection in 0.14 |
 | A. Engineer voice | `stream: voice` | 0.9 (telemetry fields), 0.13, 0.14 |
 | B. Lap model and coaching | `stream: coaching` | 0.18, 0.20, 0.21, 1.1, 1.2 |
-| C. Pit wall and progression | `stream: pit wall` | 0.5 (deploy), 0.7 (the move to React), 0.15 and 0.16 (setup), 0.17, 0.18, 0.21 to 0.23 |
+| C. Pit wall and progression | `stream: pit wall` | 0.5 (deploy), 0.7.0 to 0.7.4 (the move to React), 0.7.6 (the track map), 0.15 and 0.16 (setup), 0.17, 0.18, 0.21 to 0.23 |
 | D. Strategy | `stream: strategy` | 0.19 |
 | E. Conversation | `stream: conversation` | 0.24, 1.0 |
 | F. Dashboards | `stream: dashboards` | 0.11 (the dash stream and the first dashboard), 1.3 (the layout designer) |
-| Ops | `stream: ops` | 0.10 (voices), 0.11 (HTTPS), 0.15, 0.16, 0.19, and Polish and ops |
+| Ops | `stream: ops` | 0.6.2 and 0.6.3 (deploys and release automation), 0.7.5 (docs), 0.10 (voices), 0.11 (HTTPS), 0.16, 0.19, and Polish and ops |
 
 ## Order
 
-- **Now: 0.5 Solid ground.** 0.5.x patches as bugs turn up (#260). The pit
-  wall gets deployed (#35).
-- **Next: the MVP, in two releases.** 0.6: #171, #172, #173 (the API server on
-  the event loop), with the pause fix (#229) and the lap-1 restart (#157, AC1,
-  which waits for a recording) in parallel from the start. 0.7: the data API
-  (#236), the scaffold (#237) and the port (#238), which removes Streamlit.
-  Everything after 0.7 is an enhancement.
+- **Shipped: the MVP.** 0.5 Solid ground, then 0.6 (the API server on the
+  event loop) and 0.7.0 to 0.7.4 (the React pit wall, which removed
+  Streamlit), with the 0.6.x patches between them and 0.7.5 (docs and
+  guardrails) after. Everything from here is an enhancement.
+- **Now: 0.7.6 Track map.** The car's position in the lap trace (#349), then
+  the track map on lap compare (#350).
+- **Next: 0.8 Engine model**, the first of the foundations.
 - **Then the foundations, one small release each.** 0.8 starts with packages
   by area (#195), while little is in flight, then #175, #176, #177 and #186,
   with the frame budget (#196) measuring each step. 0.9 starts with frame
   sources (#182) and the decoder (#235). 0.10 builds the speech layers (#179,
   #180, #181, #187, #188), then phrasing and voices (#28, #29).
-- **Then the cockpit:** the wheel dashboard (0.11), session awareness (0.12),
+- **Then the cockpit:** the wheel dashboard (0.11) and its observability
+  patch (0.11.1: logs, metrics, the tracing ADR #345), session awareness (0.12),
   cockpit voice (0.13) and drift (0.14). 0.12 needs a driving session for its
   recordings (#66), so start it early.
 - **Then setup, laps, strategy, coaching and progression:** 0.15 starts with
@@ -134,7 +144,8 @@ nothing after 0.6; 0.15 and 0.16 (setup) need only the MVP.
 
 ## Open decisions
 
-- Pit wall access: LAN only (current assumption), or behind a login.
+- Pit wall access: LAN only (current assumption), or behind a login (#385,
+  in 0.15).
 - AI coach: local model only, or allow an optional hosted model. Planned as
   local by default, with hosted as an opt-in setting, to be decided after the
   evaluation set (#114).
@@ -169,6 +180,11 @@ nothing after 0.6; 0.15 and 0.16 (setup) need only the MVP.
   and tablets trust once (option B), and HTTP redirected to it. This gives #240
   (0.11 Wheel dashboard) the secure context for install and the screen wake lock.
 
+- The web app in its own repo (#347), decided on 2026-10-19 when the project
+  moved to the `those-who-run` organisation: a UI repo and a server repo, with
+  the contracts they share made explicit and versioned. How each contract
+  crosses the boundary is ADR 0006 (#386), written before any code moves.
+
 ## Earlier milestones
 
 Until 2026-10-17 milestones were themes, and their numbers were not versions.
@@ -200,4 +216,5 @@ comments and PRs still use both. This is where that work went:
 | Architecture: building blocks | #194 and #197 in 0.5; the rest in 0.8, 0.9, 0.10, 0.15, 0.17, 0.18, 0.21 and 1.0 |
 
 Releases so far: the race feed shipped in 0.3.1, the timed-race finish in
-0.3.2, pit-stop detection with pit wall phase 1 in 0.4.0, and 0.5.0 and 0.5.1.
+0.3.2, pit-stop detection with pit wall phase 1 in 0.4.0, 0.5.0 and 0.5.1,
+0.6.0 to 0.6.3, and 0.7.0 to 0.7.5.

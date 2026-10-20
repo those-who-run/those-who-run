@@ -150,4 +150,22 @@ describe("the session list", () => {
     expect(alert.textContent).toContain("file is not a database");
     expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
   });
+
+  it("shows a page more for each click on Show more, however quick (R6, #379)", async () => {
+    const sessions = Array.from({ length: 80 }, (_, i) => ({
+      ...SESSIONS.raceFinished,
+      session_id: `20261001-${String(100000 + i)}`,
+      started_at: NOW - 3600 - 60 * i,
+    }));
+    answer({ ...BODY, sessions, total: sessions.length, matched: sessions.length });
+    const router = renderAt("/");
+    const more = await screen.findByRole("button", { name: "Show more" });
+    // Both clicks land before the first one's navigation has rendered.
+    fireEvent.click(more);
+    fireEvent.click(more);
+    await waitFor(() =>
+      expect(within(screen.getByRole("list", { name: "Sessions" })).getAllByRole("link")).toHaveLength(75),
+    );
+    expect(router.state.location.state).toMatchObject({ shown: 75 });
+  });
 });

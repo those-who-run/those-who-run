@@ -42,11 +42,19 @@ function useShown(): [number, () => void] {
   const navigate = useNavigate();
   const state = location.state as { shown?: number } | null;
   const shown = state?.shown ?? PAGE_SIZE;
-  const more = () =>
+  // A second click can land before the first one's navigation has rendered, while
+  // `shown` is still the old count; it builds on what the first asked for, so each
+  // click is a page (#379). Every navigation is a new key, so this resets itself.
+  const asked = useRef<{ key: string; shown: number } | null>(null);
+  const more = () => {
+    const from = asked.current?.key === location.key ? asked.current.shown : shown;
+    const next = from + PAGE_SIZE;
+    asked.current = { key: location.key, shown: next };
     void navigate(
       { search: location.search },
-      { replace: true, state: { ...state, shown: shown + PAGE_SIZE }, preventScrollReset: true },
+      { replace: true, state: { ...state, shown: next }, preventScrollReset: true },
     );
+  };
   return [shown, more];
 }
 

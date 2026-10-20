@@ -9,8 +9,8 @@ that file wins for anything outside `web/`.
 
 These files are advice. What enforces a rule is named next to it: ESLint,
 Vitest and Playwright in `make web-check`, CI's required `test` and `image`
-checks, and, once they land, the Claude Code project settings (#352) and the
-pre-commit hooks (#339).
+checks, the Claude Code project settings (#352) and the commit hooks (#339).
+Where a guard is not in your checkout, follow the rule anyway.
 
 ## The ground rules, in short
 

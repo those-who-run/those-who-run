@@ -123,9 +123,10 @@ class LapRow:
 
 @dataclass(frozen=True, slots=True)
 class Trace:
-    """One lap's channels against time from the lap start, for lap compare.
-    Thinned to the points asked for, keeping each stretch's slowest and
-    fastest frame, so braking points and top speeds survive."""
+    """One lap's channels against time from the lap start, for lap compare and
+    its track map. Thinned to the points asked for, keeping each stretch's
+    slowest and fastest frame, so braking points and top speeds survive, and
+    both frames either side of a position jump (the pit cut-scene)."""
 
     session_id: str = doc("The session")
     lap: int = doc("The lap")
@@ -135,6 +136,8 @@ class Trace:
     brake_pct: tuple[float, ...] = doc("Brake, 0 to 100")
     gear: tuple[int, ...] = doc("Gear; 0 is neutral or reverse")
     rpm: tuple[float, ...] = doc("Engine speed")
+    x: tuple[float, ...] = doc("The car's position on GT7's x axis, in metres, to 0.1 m")
+    z: tuple[float, ...] = doc("The car's position on GT7's z axis; with x, the lap in plan")
 
     def __len__(self) -> int:
         return len(self.t)

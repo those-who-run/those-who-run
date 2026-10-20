@@ -1122,7 +1122,7 @@
       },
       "Trace": {
         "type": "object",
-        "description": "One lap's channels against time from the lap start, for lap compare. Thinned to the points asked for, keeping each stretch's slowest and fastest frame, so braking points and top speeds survive.",
+        "description": "One lap's channels against time from the lap start, for lap compare and its track map. Thinned to the points asked for, keeping each stretch's slowest and fastest frame, so braking points and top speeds survive, and both frames either side of a position jump (the pit cut-scene).",
         "properties": {
           "session_id": {
             "type": "string",
@@ -1173,6 +1173,20 @@
               "type": "number"
             },
             "description": "Engine speed"
+          },
+          "x": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "The car's position on GT7's x axis, in metres, to 0.1 m"
+          },
+          "z": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "The car's position on GT7's z axis; with x, the lap in plan"
           }
         },
         "required": [
@@ -1183,7 +1197,9 @@
           "throttle_pct",
           "brake_pct",
           "gear",
-          "rpm"
+          "rpm",
+          "x",
+          "z"
         ],
         "additionalProperties": false
       },

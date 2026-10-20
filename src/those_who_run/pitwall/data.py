@@ -53,6 +53,13 @@ PIT_REFUEL = 2.0
 # this long on the time axis, so traces of two laps still line up.
 MAX_STEP_SECS = 0.1
 
+# A step in position longer than this, and longer than twice what the car's speed
+# covers in the time between the frames, is a jump: the pit cut-scene moves the
+# car 120 to 160 m in one frame, while at 60 Hz a car covers at most 1.3 m (#117).
+# The speed term only matters for a sparse recording (the 2 Hz fixtures), where a
+# fast car really does cover 20 m between frames.
+JUMP_METRES = 20.0
+
 # How long a read waits on a busy index before the page shows an error.
 READ_TIMEOUT_SECS = 5.0
 
@@ -548,14 +555,16 @@ def lap_file(data_dir: Path, session_id: str, lap: int) -> tuple[str, int] | Non
 
 
 def lap_trace(data_dir: Path, session_id: str, lap: int, max_points: int = 1500) -> Trace | None:
-    """Speed, throttle, brake, gear and RPM for one lap against time, thinned to
-    at most ``max_points`` frames (a phone does not need 60 Hz). None when the
-    lap or its file is missing.
+    """Speed, throttle, brake, gear, RPM and position for one lap against time,
+    thinned to at most ``max_points`` frames (a phone does not need 60 Hz), plus
+    two for each position jump. None when the lap or its file is missing.
 
     Thinning keeps peaks (#183 R2): the frames are cut into stretches, and each
     stretch keeps its slowest and its fastest frame, so a braking point's
     minimum and a straight's top speed survive. The first and last frames are
-    always kept. Under four points, it takes every n-th frame instead."""
+    always kept, and so are the two frames either side of a position jump
+    (``JUMP_METRES``, #349 R2), so a map can break its line there. Under four
+    points, it takes every n-th frame instead."""
     import duckdb
 
     found = lap_file(data_dir, session_id, lap)
@@ -576,20 +585,25 @@ def lap_trace(data_dir: Path, session_id: str, lap: int, max_points: int = 1500)
             keep = f"rn % {size} = 0"
         else:
             size = math.ceil(n / ((points - 2) // 2))  # two frames a stretch, plus the ends
-            keep = "lo = 1 OR hi = 1 OR rn = 0 OR rn = n - 1"
+            keep = "lo = 1 OR hi = 1 OR rn = 0 OR rn = n - 1 OR jump"
         data = con.execute(
             "WITH f AS (SELECT *, row_number() OVER (ORDER BY t) - 1 AS rn, count(*) OVER () AS n,"
-            " least(coalesce(t - lag(t) OVER (ORDER BY t), 0), ?) AS dt FROM read_parquet(?)),"
+            " least(coalesce(t - lag(t) OVER (ORDER BY t), 0), ?) AS dt,"
+            " coalesce(sqrt((pos_x - lag(pos_x) OVER (ORDER BY t)) ** 2"
+            " + (pos_z - lag(pos_z) OVER (ORDER BY t)) ** 2) > greatest(?, 2 / 3.6"
+            " * greatest(speed_kph, lag(speed_kph) OVER (ORDER BY t))"
+            " * (t - lag(t) OVER (ORDER BY t))), false) AS jumped FROM read_parquet(?)),"
             " g AS (SELECT *, sum(dt) OVER (ORDER BY t ROWS UNBOUNDED PRECEDING) AS el,"
+            " jumped OR coalesce(lead(jumped) OVER (ORDER BY t), false) AS jump,"
             f" row_number() OVER (PARTITION BY rn // {size} ORDER BY speed_kph, rn) AS lo,"
             f" row_number() OVER (PARTITION BY rn // {size} ORDER BY speed_kph DESC, rn) AS hi"
             " FROM f) SELECT el, speed_kph, throttle * 100.0 / 255, brake * 100.0 / 255, gear,"
-            f" engine_rpm FROM g WHERE {keep} ORDER BY t",
-            [MAX_STEP_SECS, str(path)],
+            f" engine_rpm, pos_x, pos_z FROM g WHERE {keep} ORDER BY t",
+            [MAX_STEP_SECS, JUMP_METRES, str(path)],
         ).fetchall()
     finally:
         con.close()
-    cols = list(zip(*data, strict=True)) if data else [()] * 6
+    cols = list(zip(*data, strict=True)) if data else [()] * 8
     return Trace(
         session_id=session_id,
         lap=lap,
@@ -599,4 +613,8 @@ def lap_trace(data_dir: Path, session_id: str, lap: int, max_points: int = 1500)
         brake_pct=tuple(round(v, 1) for v in cols[3]),
         gear=tuple(cols[4]),
         rpm=tuple(cols[5]),
+        # A tenth of a metre: a frame at 60 Hz moves up to 1.3 m, and the map
+        # needs no finer, while each extra digit costs every point a byte.
+        x=tuple(round(v, 1) for v in cols[6]),
+        z=tuple(round(v, 1) for v in cols[7]),
     )

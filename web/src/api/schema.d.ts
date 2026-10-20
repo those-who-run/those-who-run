@@ -353,7 +353,7 @@ export interface components {
             /** @description Seconds since the last frame; null before the first */
             last_packet_age_s: number | null;
         };
-        /** @description One lap's channels against time from the lap start, for lap compare. Thinned to the points asked for, keeping each stretch's slowest and fastest frame, so braking points and top speeds survive. */
+        /** @description One lap's channels against time from the lap start, for lap compare and its track map. Thinned to the points asked for, keeping each stretch's slowest and fastest frame, so braking points and top speeds survive, and both frames either side of a position jump (the pit cut-scene). */
         Trace: {
             /** @description The session */
             session_id: string;
@@ -371,6 +371,10 @@ export interface components {
             gear: number[];
             /** @description Engine speed */
             rpm: number[];
+            /** @description The car's position on GT7's x axis, in metres, to 0.1 m */
+            x: number[];
+            /** @description The car's position on GT7's z axis; with x, the lap in plan */
+            z: number[];
         };
         /** @description The track as the detector placed it. */
         Track: {

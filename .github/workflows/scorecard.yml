@@ -1,8 +1,10 @@
 name: Scorecard
 
 # OpenSSF Scorecard (#360): an outside, weekly check that the repository's settings
-# and workflows stay as the guardrails set them (branch protection, token
-# permissions, pinned dependencies, dangerous workflows, SAST and more). The result
+# and workflows stay as the guardrails set them (token permissions, pinned
+# dependencies, dangerous workflows, SAST and more). It runs with the Actions token,
+# which can't read branch rules, so its Branch-Protection check is inconclusive;
+# no PAT exists for it. The result
 # is published to https://scorecard.dev/viewer/?uri=github.com/those-who-run/those-who-run
 # (the README's badge) and uploaded to code scanning. It gates nothing: the score is
 # for drift. `ossf/scorecard-action` must be on the repository's allowed-actions list.
@@ -11,8 +13,7 @@ on:
     - cron: "17 5 * * 1" # Mondays, 05:17 UTC
   push:
     branches: [main]
-  # Scorecard's Branch-Protection check reads the rules; re-score when they change.
-  branch_protection_rule:
+  workflow_dispatch: # a score on demand, e.g. the first one behind the badge
 
 # Least privilege: nothing by default; the job asks for what the action uses.
 permissions: {}

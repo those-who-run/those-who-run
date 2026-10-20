@@ -27,7 +27,7 @@
     ".": {
       "package-name": "those-who-run",
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["src/those_who_run/__init__.py", "README.md"]
+      "extra-files": ["src/those_who_run/__init__.py", "README.md", "docs/pitwall.md"]
     }
   }
 }

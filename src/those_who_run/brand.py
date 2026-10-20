@@ -2,8 +2,9 @@
 
 Everything user-facing that carries the name or the colours reads it from
 here, so the results cards, the pit wall and any dashboard use the same
-palette as the README. The palette is a 90s Japanese track-day shop: Advan
-red on black, carbon grey for secondary panels, white type.
+palette as the docs (docs/development.md, "Brand and wordmark"). The
+palette is a 90s Japanese track-day shop: Advan red on black, carbon grey
+for secondary panels, white type.
 """
 
 from __future__ import annotations

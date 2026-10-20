@@ -107,6 +107,8 @@ function trace(t: number[], speed: number[]): Trace {
     brake_pct: speed.map(() => 0),
     gear: speed.map(() => 3),
     rpm: speed.map(() => 6000),
+    x: speed.map(() => 0),
+    z: speed.map(() => 0),
   };
 }
 

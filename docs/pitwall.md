@@ -126,7 +126,7 @@ DuckDB and PyYAML.
 | `GET /api/v1/sessions?track=&car=&kind=` | Sessions, newest first, and the values each filter can take |
 | `GET /api/v1/sessions/{id}` | One session |
 | `GET /api/v1/sessions/{id}/laps` | Its lap table, flags included (`pit`, `out_lap`, `invalid`, `restart`, `best`, `clean`) |
-| `GET /api/v1/sessions/{id}/laps/{lap}/trace?points=1500` | Speed, throttle, brake, gear and RPM against time, thinned keeping peaks |
+| `GET /api/v1/sessions/{id}/laps/{lap}/trace?points=1500` | Speed, throttle, brake, gear, RPM and the car's position (`x`, `z`, in metres) against time, thinned keeping peaks and both frames either side of a jump in position (the pit cut-scene) |
 | `GET /api/v1/sessions/{id}/same-track` | The other sessions at the same track, for lap compare |
 | `GET /api/v1/openapi.json` | The OpenAPI 3.1 schema of all of these |
 | `GET /healthz` | `ok`, `version`, `index` and `engineer` |

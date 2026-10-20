@@ -274,7 +274,9 @@ fixtures:
       - In and out laps are left out of the fuel average, and stints split at
         the stop.
       - An open stop marks every lap from the in lap.
-    tests: [test_pitstop, test_real_recording]
+      - The lap trace keeps both frames around the 120.8 m cut-scene jump at
+        2 Hz, and no others (#349).
+    tests: [test_pitstop, test_real_recording, test_trace_position]
 
   - file: real-nuc-sugo-two-stops-2026-10-18.jsonl.gz
     date: 2026-10-18
@@ -563,7 +565,7 @@ outings:
       Circuit Gilles Villeneuve 12-lap daily race in the Mazda RX-VISION GT3
       EVO, P2 of 20 in 20:02.559, best 1:37.380 on lap 9, one pit stop. Source
       of both real-nuc-gilles-villeneuve fixtures.
-    cited_by: [1, 15, 16, 17, 18, 19, 23, 28, 34, 36, 62, 65, 66, 87, 89, 90, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 107, 115, 117, 118, 119, 134]
+    cited_by: [1, 15, 16, 17, 18, 19, 23, 28, 34, 36, 62, 65, 66, 87, 89, 90, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 107, 115, 117, 118, 119, 134, 349]
 
   - id: "20261017-205541"
     date: 2026-10-17

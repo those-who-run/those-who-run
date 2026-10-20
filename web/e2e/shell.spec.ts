@@ -180,9 +180,11 @@ test("the header: wordmark home, the page's title on wider screens, at most 56 p
   await expectNoHorizontalScroll(page);
 });
 
+type ApiSession = Awaited<ReturnType<typeof apiSessions>>[number];
+
 /** A list long enough to scroll on any of the three screens, a session a minute.
  * The 61st is a real one, so its page opens. */
-async function longList(page: Page): Promise<string> {
+async function longList(page: Page): Promise<ApiSession> {
   const [real] = await apiSessions(page);
   const sessions = Array.from({ length: 80 }, (_, i) => ({
     ...real,
@@ -194,22 +196,25 @@ async function longList(page: Page): Promise<string> {
   await page.route(/\/api\/v1\/sessions(\?.*)?$/, (route) =>
     route.fulfill({ json: { sessions, options, total: sessions.length, matched: sessions.length } }),
   );
-  return real!.session_id;
+  return real!;
 }
 
 for (const how of ["the browser's Back", "the page's back link"]) {
   test(`returns to the list's scroll and filters with ${how} (AC5)`, async ({ page }) => {
-    const id = await longList(page);
+    const real = await longList(page);
     await page.goto("/?track=Suzuka");
-    // 25 cards a page (#297 R6): the 61st is on the third, which Back keeps.
+    // 25 cards a page (#297 R6): the 61st is on the third, which Back keeps. The second
+    // click can land before the first has rendered; each is still a page (#379).
     await page.getByRole("button", { name: "Show more" }).click();
     await page.getByRole("button", { name: "Show more" }).click();
-    const link = sessionLink(page, id);
+    const link = sessionLink(page, real.session_id);
     await link.scrollIntoViewIfNeeded();
     const scrolled = await page.evaluate(() => window.scrollY);
     expect(scrolled).toBeGreaterThan(200);
     await link.click();
-    await expect(page.getByRole("heading", { level: 2 })).toBeVisible();
+    // The session page names itself by its title; it has more than one h2 once its
+    // race story is in, so a bare level-2 heading is ambiguous (#379).
+    await expect(page).toHaveTitle(`${real.title} · Pit wall`);
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 
     if (how === "the browser's Back") {

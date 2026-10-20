@@ -57,9 +57,13 @@ BASE_FILES = {
 }
 
 
+# A developer's signing config must not reach these throwaway repositories.
+NO_SIGNING = ("-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false")
+
+
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *NO_SIGNING, *args],
         cwd=repo,
         check=True,
         capture_output=True,
@@ -180,6 +184,59 @@ def test_an_added_skip(repo, path, line):
 
 def test_a_skip_outside_the_tests_is_not_reported(repo):
     assert change(repo, {"src/app.py": f"# {SKIP}\n"}) == []
+
+
+def test_a_conditional_playwright_skip_in_a_body_is_not_reported(repo):
+    body = (
+        'test("drags", async ({ page }, testInfo) => {\n'
+        f'  {TS_SKIP}(testInfo.project.name !== "phone", "touch: the phone project");\n'
+        f"  {TS_SKIP}(!process.env.LIVE, 'needs the live source');\n"
+        "});\n"
+    )
+    assert change(repo, {"web/src/a.test.ts": TS_TESTS + body}) == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f'  {TS_SKIP}(true, "always skipped");',  # a condition that is always true
+        f'{TS_SKIP}(isPhone, "at the top level");',  # not inside a block
+        f'  {TS_SKIP}("a title", async () => {{}});',  # a title: the test is skipped
+        f"  {TS_SKIP}();",  # bare
+    ],
+)
+def test_an_unconditional_playwright_skip_is_reported(repo, line):
+    found = change(repo, {"web/src/a.test.ts": TS_TESTS + line + "\n"})
+    assert found == [f"web/src/a.test.ts: skip or expected failure added: {line.strip()}"]
+
+
+def test_a_removed_typescript_test_with_its_title_on_the_next_line(repo):
+    wrapped = TS_TESTS + '\ntest(\n  "a long title prettier wrapped",\n  () => {},\n);\n'
+    _write(repo, {"web/src/a.test.ts": wrapped})
+    _git(repo, "commit", "-qam", "wrapped")
+    _git(repo, "switch", "-q", "main")
+    _git(repo, "merge", "-q", "change")
+    _git(repo, "switch", "-q", "change")
+    found = change(repo, {"web/src/a.test.ts": TS_TESTS})
+    assert found == ["web/src/a.test.ts: test removed: a long title prettier wrapped"]
+
+
+def test_a_no_cover_pragma_added_to_source(repo):
+    line = "x = 2  # " + "pragma: no cover"
+    found = change(repo, {"src/app.py": line + "\n"})
+    assert found == [f"src/app.py: coverage exclusion added: {line}"]
+
+
+def test_a_coverage_omit_added(repo):
+    pyproject = PYPROJECT + '\n[tool.coverage.run]\nomit = ["src/hard.py"]\n'
+    found = change(repo, {"pyproject.toml": pyproject})
+    assert found == ["pyproject.toml: coverage omit added: src/hard.py"]
+
+
+def test_a_coverage_exclude_pattern_added(repo):
+    pyproject = PYPROJECT + 'exclude_also = ["if DEBUG:"]\n'
+    found = change(repo, {"pyproject.toml": pyproject})
+    assert found == ["pyproject.toml: coverage exclusion added: if DEBUG:"]
 
 
 def test_a_lower_coverage_floor(repo):

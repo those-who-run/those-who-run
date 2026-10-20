@@ -12,9 +12,17 @@ It reads git history only: the diff from the merge base of <base> and <head> to
 - a test file deleted, or renamed to something that isn't a test file;
 - a test function removed (Python `def test_...`, a TypeScript `test(`/`it(` title)
   that doesn't come back elsewhere in the change;
-- a skip, an expected failure or a focused test added (SKIP_PATTERNS);
-- `fail_under` lowered, `xfail_strict` turned off, a bundle budget raised, the
-  TWR_FAIL_ON_SKIP switch or Playwright's `forbidOnly` edited.
+- a skip, an expected failure or a focused test added (SKIP_PATTERNS), except
+  Playwright's conditional `test.skip(<condition>, "<reason>")` inside a block,
+  which skips by design (one project of several);
+- a `no cover` pragma (coverage.py's exclusion comment) added to a Python file;
+- `fail_under` lowered, `xfail_strict` turned off, a path added to coverage's
+  `omit` or a pattern to its `exclude_lines` / `exclude_also`, a bundle budget
+  raised, the TWR_FAIL_ON_SKIP switch or Playwright's `forbidOnly` edited.
+
+It is a "say why" speed bump, not a protection: CI runs the PR's own copy of
+this script and reads a description the PR's author writes, so a PR can change
+either. The maintainer's review is the gate; this makes the reason visible.
 
 Removed assertions are counted for the summary but never fail: refactors move them.
 The PR body is fetched with gh when the script runs, never taken from the event
@@ -47,9 +55,20 @@ SKIP_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
+# Playwright's conditional skip, indented inside a test or describe body: a first
+# argument that is not a string (a title) and a string reason after it, as in
+# `test.skip(testInfo.project.name !== "phone", "touch: the phone project")`.
+_CONDITIONAL_SKIP = re.compile(
+    r"""^\s+test\.(?:skip|fixme)\(\s*(?P<condition>[^"'`\s)][^,]*),\s*["'`]"""
+)
+_ALWAYS = {"true", "1", "!0", "!false"}
+_NO_COVER = re.compile(r"#\s*pragma:\s*no\s*cover", re.IGNORECASE)
+
 _WEB_TEST = re.compile(r"^web/.*\.(test|spec)\.tsx?$")
 _PY_TEST_DEF = re.compile(r"^\s*(?:async\s+)?def\s+(test_\w+)\s*\(")
 _TS_TEST_TITLE = re.compile(r"""^\s*(?:test|it)\(\s*(["'`])(.+?)\1""")
+# Prettier wraps a long call: `test(` alone, the title on the next line.
+_TS_TEST_OPEN = re.compile(r"^\s*(?:test|it)\(\s*$")
 _ASSERTION = re.compile(r"^\s*(assert\b|await expect\(|expect\()")
 _WEAKENED_LINE = re.compile(r"^\s*Tests weakened:(.*)$", re.MULTILINE)
 MIN_REASON = 10
@@ -69,6 +88,8 @@ def is_test_file(path: str) -> bool:
 
 
 def skips_in(line: str) -> bool:
+    if (m := _CONDITIONAL_SKIP.match(line)) and m["condition"].strip() not in _ALWAYS:
+        return False
     return any(p.search(line) for p in SKIP_PATTERNS)
 
 
@@ -137,10 +158,13 @@ def read_diff(base: str, head: str, cwd: str | None = None) -> Diff:
 
 def _test_names(lines: list[str]) -> list[str]:
     names = []
-    for line in lines:
+    for i, line in enumerate(lines):
         if m := _PY_TEST_DEF.match(line):
             names.append(m.group(1))
-        elif m := _TS_TEST_TITLE.match(line):
+            continue
+        if _TS_TEST_OPEN.match(line) and i + 1 < len(lines):
+            line = line.rstrip() + lines[i + 1].strip()
+        if m := _TS_TEST_TITLE.match(line):
             names.append(m.group(2))
     return names
 
@@ -159,14 +183,28 @@ def _numbers(text: str | None) -> dict[str, float]:
     return out
 
 
-def _coverage(text: str | None) -> tuple[float | None, object]:
+@dataclass(frozen=True)
+class Coverage:
+    """What pyproject.toml says about coverage and xfail."""
+
+    floor: float | None = None
+    strict: object = None
+    omit: frozenset[str] = frozenset()
+    exclude: frozenset[str] = frozenset()
+
+
+def _coverage(text: str | None) -> Coverage:
     if not text:
-        return None, None
-    data = tomllib.loads(text)
-    tool = data.get("tool", {})
-    floor = tool.get("coverage", {}).get("report", {}).get("fail_under")
-    strict = tool.get("pytest", {}).get("ini_options", {}).get("xfail_strict")
-    return floor, strict
+        return Coverage()
+    tool = tomllib.loads(text).get("tool", {})
+    coverage = tool.get("coverage", {})
+    run, report = coverage.get("run", {}), coverage.get("report", {})
+    return Coverage(
+        floor=report.get("fail_under"),
+        strict=tool.get("pytest", {}).get("ini_options", {}).get("xfail_strict"),
+        omit=frozenset(run.get("omit", []) + report.get("omit", [])),
+        exclude=frozenset(report.get("exclude_lines", []) + report.get("exclude_also", [])),
+    )
 
 
 def weakenings(base: str, head: str, cwd: str | None = None) -> tuple[list[Finding], int]:
@@ -214,14 +252,37 @@ def weakenings(base: str, head: str, cwd: str | None = None) -> tuple[list[Findi
             else:
                 found.append(Finding(path, f"skip or expected failure added: {line.strip()}"))
 
-    old_floor, old_strict = _coverage(_show(merge_base, PYPROJECT, cwd))
-    new_floor, new_strict = _coverage(_show(head, PYPROJECT, cwd))
-    if old_floor is not None and (new_floor is None or new_floor < old_floor):
+    # A `no cover` pragma added anywhere in Python, less the same lines moved.
+    removed_pragmas = Counter(
+        line.strip()
+        for path, lines in diff.removed.items()
+        if path.endswith(".py")
+        for line in lines
+        if _NO_COVER.search(line)
+    )
+    for path, lines in sorted(diff.added.items()):
+        if not path.endswith(".py"):
+            continue
+        for line in lines:
+            if not _NO_COVER.search(line):
+                continue
+            if removed_pragmas[line.strip()]:
+                removed_pragmas[line.strip()] -= 1
+            else:
+                found.append(Finding(path, f"coverage exclusion added: {line.strip()}"))
+
+    old = _coverage(_show(merge_base, PYPROJECT, cwd))
+    new = _coverage(_show(head, PYPROJECT, cwd))
+    if old.floor is not None and (new.floor is None or new.floor < old.floor):
         found.append(
-            Finding(PYPROJECT, f"coverage floor lowered: fail_under {old_floor} -> {new_floor}")
+            Finding(PYPROJECT, f"coverage floor lowered: fail_under {old.floor} -> {new.floor}")
         )
-    if old_strict is True and new_strict is not True:
-        found.append(Finding(PYPROJECT, f"xfail_strict turned off: {old_strict} -> {new_strict}"))
+    if old.strict is True and new.strict is not True:
+        found.append(Finding(PYPROJECT, f"xfail_strict turned off: {old.strict} -> {new.strict}"))
+    for entry in sorted(new.omit - old.omit):
+        found.append(Finding(PYPROJECT, f"coverage omit added: {entry}"))
+    for entry in sorted(new.exclude - old.exclude):
+        found.append(Finding(PYPROJECT, f"coverage exclusion added: {entry}"))
 
     old_budget = _numbers(_show(merge_base, BUDGET, cwd))
     new_budget = _numbers(_show(head, BUDGET, cwd))

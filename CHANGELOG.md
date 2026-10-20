@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.5](https://github.com/those-who-run/those-who-run/compare/v0.7.4...v0.7.5) (2026-10-20)
+
+
+### Bug Fixes
+
+* **release:** pass the Docker Hub secrets to the called release workflow ([#364](https://github.com/those-who-run/those-who-run/issues/364)) ([c45f7eb](https://github.com/those-who-run/those-who-run/commit/c45f7ebe6e1dbd684fe7144e5828d211307b4d34))
+
+
+### Dependencies
+
+* bump astral-sh/uv from 0.13.1 to 0.13.3 ([#387](https://github.com/those-who-run/those-who-run/issues/387)) ([97f0ce6](https://github.com/those-who-run/those-who-run/commit/97f0ce67e50c5d2f5a893bd79760d4f71b68ba0b))
+* bump the web group in /web with 2 updates ([#388](https://github.com/those-who-run/those-who-run/issues/388)) ([4c4f44b](https://github.com/those-who-run/those-who-run/commit/4c4f44b268691a4d0231b6b5347e4db1374e068b))
+
 ## [0.7.4](https://github.com/those-who-run/those-who-run/compare/v0.7.3...v0.7.4) (2026-10-19)
 
 

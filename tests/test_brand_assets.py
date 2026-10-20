@@ -80,6 +80,22 @@ def test_a_palette_change_makes_the_check_fail(tmp_path, monkeypatch, capsys):
     assert "make brand-assets" in capsys.readouterr().err
 
 
+def test_a_tagline_change_makes_the_check_fail(tmp_path, monkeypatch, capsys):
+    """The outline can't show new text, so the tagline's data-tagline is compared
+    with brand.TAGLINE: changing it without running make brand-assets fails --check."""
+    for svg in ASSETS.glob("*.svg"):
+        shutil.copy(svg, tmp_path / svg.name)
+    monkeypatch.setattr(brand, "TAGLINE", "a different tagline")
+    assert brand_assets.main(["--check"], out=tmp_path) == 1
+    assert "brand.TAGLINE" in capsys.readouterr().err
+
+
+def test_the_banners_say_which_tagline_they_outline():
+    for name in ("banner-dark.svg", "banner-light.svg"):
+        text = (ASSETS / name).read_text(encoding="utf-8")
+        assert f'<path id="tagline" data-tagline="{brand.TAGLINE}"' in text, name
+
+
 def test_a_missing_svg_makes_the_check_fail(tmp_path):
     for svg in ASSETS.glob("*.svg"):
         shutil.copy(svg, tmp_path / svg.name)

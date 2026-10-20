@@ -16,7 +16,9 @@ matters on GitHub: an SVG in Markdown is shown as an image and loads no fonts.
 
 ``--check`` needs neither fontTools nor ImageMagick: it takes the tagline's outline
 from the committed dark banner, builds every SVG again and fails when one differs
-from the committed file (the palette, the wordmark or the tagline changed). The PNG
+from the committed file (the palette, the wordmark or the tagline changed). The
+outline can't show a changed tagline, so the tagline's path carries its text as
+``data-tagline``, and ``--check`` fails when that is not ``brand.TAGLINE``. The PNG
 is not checked, since rasterising differs between ImageMagick builds.
 
     python scripts/brand_assets.py --tagline-font BARLOW_WOFF2 [--social SVG]
@@ -26,6 +28,7 @@ is not checked, since rasterising differs between ImageMagick builds.
 from __future__ import annotations
 
 import argparse
+import html
 import re
 import sys
 from pathlib import Path
@@ -109,7 +112,7 @@ def tagline(d: str, fill: str, cx: float, baseline: float, scale: float = 1.0) -
     """The tagline centred on ``cx``, ``scale`` times ``TAGLINE_SIZE``."""
     size = f" scale({num(scale)})" if scale != 1.0 else ""
     return (
-        f'  <path id="tagline" fill="{fill}"'
+        f'  <path id="tagline" data-tagline="{html.escape(brand.TAGLINE)}" fill="{fill}"'
         f' transform="translate({num(cx)} {num(baseline)}){size}" d="{d}"/>\n'
     )
 
@@ -179,12 +182,17 @@ def files(tag: str) -> dict[str, str]:
     }
 
 
-def committed_tagline(out: Path) -> str:
+def committed_tagline(out: Path) -> str | None:
+    """The committed dark banner's tagline outline, or None when it was outlined
+    from other text than ``brand.TAGLINE`` (its ``data-tagline``)."""
     path = out / "banner-dark.svg"
     committed = path.read_text(encoding="utf-8") if path.is_file() else ""
     found = re.search(r'<path id="tagline"[^>]* d="([^"]+)"/>', committed)
     if found is None:
         raise SystemExit(f"{path} has no tagline: run `make brand-assets`")
+    text = re.search(r'data-tagline="([^"]*)"', found.group(0))
+    if text is None or html.unescape(text.group(1)) != brand.TAGLINE:
+        return None
     return found.group(1)
 
 
@@ -195,9 +203,17 @@ def main(argv: list[str] | None = None, out: Path = OUT) -> int:
     p.add_argument("--check", action="store_true", help="fail if a committed SVG is stale")
     args = p.parse_args(argv)
     if args.check:
+        tag = committed_tagline(out)
+        if tag is None:
+            print(
+                f"the tagline in {out} is not brand.TAGLINE ({brand.TAGLINE!r}):"
+                " run `make brand-assets` and commit them",
+                file=sys.stderr,
+            )
+            return 1
         stale = [
             name
-            for name, text in files(committed_tagline(out)).items()
+            for name, text in files(tag).items()
             if not (out / name).is_file() or (out / name).read_text(encoding="utf-8") != text
         ]
         if stale:

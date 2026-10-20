@@ -109,24 +109,38 @@ and [ADR 0003](adr/0003-ui-stack.md).
 ```mermaid
 flowchart TD
   pr["a PR merged to main<br/>feat:, fix:, perf:, deps:"]
-  rpr["release-please keeps one PR open<br/>chore(release): x.y.z<br/>CHANGELOG.md, version strings"]
+  rpr["release-please keeps one PR open<br/>chore(release): x.y.z<br/>CHANGELOG.md, version strings<br/>CI dispatched on it, auto-merge on"]
   merge["the release PR merged"]
   tag["tag vx.y.z<br/>and the GitHub release"]
   subgraph rel["release.yml"]
     check["the tag has a release<br/>tag = v + __version__<br/>make check"]
-    build["build both images"]
-    smoke["smoke runs<br/>--version, smoke-pitwall.sh"]
-    push["push to Docker Hub<br/>muldoon/those-who-run:x.y.z (and latest)<br/>muldoon/those-who-run:x.y.z-pitwall"]
+    subgraph eng["the engineer's image"]
+      buildE["build"]
+      smokeE["smoke: --version,<br/>no web extra"]
+      pushE["push muldoon/those-who-run:x.y.z<br/>(and latest, final releases only)"]
+    end
+    subgraph pw["the pit wall's image"]
+      buildP["build"]
+      smokeP["smoke: --version,<br/>smoke-pitwall.sh"]
+      pushP["push muldoon/those-who-run:x.y.z-pitwall"]
+    end
   end
   deploy["the operator's deployment<br/>pulls both tags: up to the operator"]
 
-  pr --> rpr --> merge --> tag --> check --> build --> smoke --> push --> deploy
+  pr --> rpr
+  rpr -- "CI green: approve, auto-merge" --> merge
+  merge --> tag --> check
+  check --> buildE --> smokeE --> buildP --> smokeP --> pushE --> pushP --> deploy
 ```
 
 Merged PRs collect in one release PR, and merging it ships. release-please
-tags the merge commit and calls `release.yml`, which runs `make check` on the
-tagged commit, builds the engineer's image and the pit wall's, smoke-tests
-both, and pushes the two tags. Where and how they run is up to whoever runs
+dispatches CI on the release PR and turns on auto-merge; the maintainer
+approves it (the `main` ruleset asks a human to approve a bot-authored change)
+and it merges itself once CI is green. Closing or editing it holds a release
+back. release-please then tags the merge commit and calls `release.yml`, which
+runs `make check` on the tagged commit, builds and smoke-tests the engineer's
+image, then the pit wall's, and only once both pass pushes the two tags, one
+per image. Where and how they run is up to whoever runs
 them: [Deploying](operations.md#deploying) says what the two images need (one
 data volume, one engineer at a time, and waiting for `/healthz` to say `idle`
 before replacing the engineer). The detail is in

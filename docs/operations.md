@@ -98,10 +98,12 @@ merge, and the maintainer's approval of the release PR is the decision to ship.
    same list locally: `python3 scripts/release_digest.py v0.7.4..main`.
 3. **Ship it.** release-please starts CI on the release PR (a `workflow_dispatch`
    of `ci.yml` on its branch). The release PR is the bot's, so the `main` ruleset
-   asks for a maintainer's approval before it can merge. If the digest says nothing
-   in the watched places changed, auto-merge is on: approve it and it squash-merges
-   once CI is green. If the digest lists anything, the workflow turns auto-merge
-   off: read the list, then merge by hand. To hold a release back, close the
+   asks for a maintainer's approval before it can merge. Read the digest, approve,
+   and merge it by hand once CI is green. Never turn on auto-merge for it: the
+   merge would be the `GITHUB_TOKEN`'s, which starts no workflow, so nothing gets
+   tagged (#394). If that happens anyway, run the *Release PR* workflow on `main`
+   from the Actions tab (`gh workflow run release-please.yml --ref main`) and it
+   tags and releases the merged PR. To hold a release back, close the
    release PR or edit it. On the merge, release-please tags the merge commit
    `vx.y.z`, creates the GitHub release from the changelog, then calls
    `.github/workflows/release.yml`. That runs `make check`, fails unless the tag is

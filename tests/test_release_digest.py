@@ -165,13 +165,13 @@ def test_a_root_commit_in_the_range(tmp_path):
 def test_nothing_watched(repo):
     commit(repo, "fix: the app (#40)", {"src/app.py": "x = 2\n"})
     text = run(repo)
-    assert "Nothing in the watched places changed, so auto-merge is on" in text
+    assert "Nothing in the watched places changed. Approve and merge it" in text
     assert "#40" not in text
 
 
-def test_something_watched_says_auto_merge_is_off(repo):
+def test_something_watched_says_read_it_first(repo):
     commit(repo, "ci: tweak (#42)", {".github/workflows/ci.yml": "on: pull_request\n"})
-    assert "**Auto-merge is off for this release.**" in run(repo)
+    assert "**Read the list below before you merge.**" in run(repo)
 
 
 def test_main_skips_release_candidates_and_writes_the_output(repo, monkeypatch, tmp_path):

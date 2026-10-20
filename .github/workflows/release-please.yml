@@ -3,11 +3,10 @@ name: Release PR
 # Merged PRs collect in one release PR, `chore(release): x.y.z`, that release-please
 # keeps up to date on every push to main: the next version, CHANGELOG.md, and the
 # version strings in src/those_who_run/__init__.py and the docs. This workflow runs
-# CI on it and turns on auto-merge; the main ruleset needs a human approval for a
-# bot-authored change, so the maintainer's approval is the decision to ship, and the
-# PR merges itself once CI is green. Close or edit it to hold a release back. The
-# next run tags the merge commit vx.y.z, creates the GitHub release from the
-# changelog, and calls release.yml to check and publish the image.
+# CI on it; the maintainer merges it by hand, and that merge is the decision to
+# ship. Close or edit it to hold a release back. The run on the merge tags the
+# merge commit vx.y.z, creates the GitHub release from the changelog, and calls
+# release.yml to check and publish the image.
 #
 # Config: release-please-config.json and .release-please-manifest.json. Pre-1.0,
 # feat and fix both bump the patch (0.6.2 -> 0.6.3); moving to the next milestone
@@ -21,14 +20,18 @@ name: Release PR
 # commit before anything is published. The Docker Hub secrets live in the `release`
 # environment (main and v* tags only) and are passed to release.yml by name.
 #
-# Who merges: main's ruleset asks for a human approval on changes no human
-# pushed, so the bot's release PR waits for a maintainer's approval either way.
-# When the digest (#357) is empty, auto-merge is on and that approval ships the
-# release once CI passes. When it lists anything, auto-merge is turned off: the
-# maintainer reads it and merges by hand.
+# Who merges: the maintainer, by hand, after reading the digest (#357). Never
+# auto-merge: armed by this workflow, the merge is the GITHUB_TOKEN's push, which
+# starts no workflow, so this one never ran on it and 0.7.6 was merged but not
+# tagged (#394). A merge by a person starts this workflow as usual.
+#
+# workflow_dispatch is the way back if a merged release PR was not tagged (its
+# label still says `autorelease: pending`): run this workflow on main and
+# release-please tags it and releases as on a merge.
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 # Least privilege: nothing by default, each job asks for what it uses.
 permissions: {}
@@ -64,7 +67,7 @@ jobs:
   # and release files, weakened tests). It runs on every push, not only when the
   # release PR changes: a ci: or chore: commit ships in the release without
   # touching its changelog. It reads git history at main and runs nothing from a
-  # PR. Its needs_look output decides auto-merge in release-pr, which runs after.
+  # PR. It reads git history only; whether to merge is the maintainer's call.
   digest:
     needs: release-please
     if: needs.release-please.outputs.release_created != 'true'
@@ -74,7 +77,6 @@ jobs:
       pull-requests: write # the comment on the release PR
     outputs:
       pr: ${{ steps.pr.outputs.number }}
-      needs_look: ${{ steps.digest.outputs.needs_look }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,20 +120,17 @@ jobs:
             echo "Commented the digest on #$PR." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  # CI and auto-merge for the release PR, once the digest is known. The release
-  # PR is made with the GITHUB_TOKEN, so no CI starts on it and its required
-  # checks would never report. A dispatch is the one event that token may start:
-  # run CI on the release branch when release-please changed it. Then auto-merge:
-  # on when the digest is empty, off (and turned off, if an earlier run armed it)
-  # when it lists anything, so a human merges those releases. If the digest job
-  # fails, this job is skipped and auto-merge is never turned on.
+  # CI for the release PR. It is made with the GITHUB_TOKEN, so no CI starts on
+  # it and its required checks would never report. A dispatch is the one event
+  # that token may start: run CI on the release branch when release-please
+  # changed it. Auto-merge stays off (see "Who merges" above); an earlier run's,
+  # if any is still armed, is turned off.
   release-pr:
     needs: [release-please, digest]
     if: needs.digest.outputs.pr != ''
     runs-on: ubuntu-latest
     permissions:
-      contents: write # enabling auto-merge: a squash merge into main
-      pull-requests: write # turns the release PR's auto-merge on or off
+      pull-requests: write # turns off auto-merge left on by an earlier run
       actions: write # dispatches CI on the release branch
     steps:
       - name: CI on the release branch
@@ -142,27 +141,17 @@ jobs:
         run: |
           branch=$(jq -r '.headBranchName' <<<"$PR")
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
-      - name: Auto-merge only when the digest is empty
+      - name: Auto-merge off
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ needs.digest.outputs.pr }}
-          NEEDS_LOOK: ${{ needs.digest.outputs.needs_look }}
-          UPDATED: ${{ needs.release-please.outputs.prs_created }}
         run: |
-          if [ "$NEEDS_LOOK" = "false" ]; then
-            if [ "$UPDATED" = "true" ]; then
-              gh pr merge "$NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash
-            fi
-            echo "Digest empty: auto-merge on for #$NUMBER." >> "$GITHUB_STEP_SUMMARY"
-          else
-            armed=$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" \
-              --json autoMergeRequest --jq '.autoMergeRequest != null')
-            if [ "$armed" = "true" ]; then
-              gh pr merge "$NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto
-            fi
-            echo "The digest lists changes: auto-merge off for #$NUMBER, a maintainer merges it." \
-              >> "$GITHUB_STEP_SUMMARY"
+          armed=$(gh pr view "$NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "$armed" = "true" ]; then
+            gh pr merge "$NUMBER" --repo "$GITHUB_REPOSITORY" --disable-auto
           fi
+          echo "#$NUMBER waits for a maintainer to merge it." >> "$GITHUB_STEP_SUMMARY"
 
   release:
     needs: release-please

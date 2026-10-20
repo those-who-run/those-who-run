@@ -116,6 +116,27 @@ test("lists the sessions under their day, each saying how it went (AC1, AC5)", a
   await expectAccessible(page, testInfo, "sessions");
 });
 
+test("a card's car, dot and date wrap together: no dot left at a line's end", async ({ page }) => {
+  await page.goto("/");
+  const lines = page.getByRole("main").locator("[data-slot=car-and-when]");
+  await expect(lines.first()).toBeVisible();
+  // For each card: the bottom of the car's last line, the dot and the date are one line.
+  const bottoms = await lines.evaluateAll((els) =>
+    els.map((el) => {
+      const dot = el.querySelector("[aria-hidden=true]")!;
+      const car = document.createRange();
+      car.selectNodeContents(dot.previousSibling!);
+      const rects = Array.from(car.getClientRects());
+      return [rects[rects.length - 1]!, dot.getBoundingClientRect(), el.querySelector("time")!.getBoundingClientRect()].map(
+        (r) => Math.round(r.top + r.height / 2),
+      );
+    }),
+  );
+  for (const mids of bottoms) {
+    expect(Math.max(...mids) - Math.min(...mids), `car, dot and date middles ${mids.join(", ")}`).toBeLessThanOrEqual(4);
+  }
+});
+
 test("hides a session with no full lap until asked, and keeps ?all=1 (AC2)", async ({ page }, testInfo) => {
   const base = storeUrl("short");
   const sessions = await sessionsAt(page, base);

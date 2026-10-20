@@ -37,8 +37,10 @@ PS5 (GT7) --UDP 33740--> engineer --Piper WAV--> Discord voice channel --> PS5 D
 
 The engineer turns telemetry into short spoken calls (lap times, fuel, the
 final lap, places gained and lost) and keeps every lap in a store on disk. The
-pit wall, a second image, reads that store and shows it in a browser. The
-details are in [the engineer guide](docs/engineer.md#how-it-works).
+pit wall, a second image, reads that store and shows it in a browser.
+[The architecture page](docs/architecture.md) draws the engineer, the store
+and the pit wall, and a release; the parts are in
+[the engineer guide](docs/engineer.md#how-it-works).
 
 ## Quick start
 
@@ -78,6 +80,7 @@ All the docs are listed in the [docs index](docs/README.md).
 
 | Guide | For |
 |---|---|
+| [Architecture](docs/architecture.md) | the engineer, the store and the pit wall, and a release, in three diagrams |
 | [Setup](docs/setup.md) | requirements, configuration, running, every command |
 | [The engineer](docs/engineer.md) | what it says, rules, track and session detection, results, sessions |
 | [The pit wall](docs/pitwall.md) | the web app, the data API, the store, the pitwall image |

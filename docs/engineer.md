@@ -57,8 +57,8 @@ dropped rather than spoken late; a rule can set its own `max_age_seconds`.
 
 ## How it works
 
-The flow, from the PS5 to the headset, is in the
-[README](../README.md#how-it-works). Each part:
+The flow, from the PS5 to the headset, is drawn on
+[the architecture page](architecture.md#the-engineer). Each part:
 
 - Telemetry: [gt-telem](https://github.com/RaceCrewAI/gt-telem). The PS5 streams
   encrypted packets at 60 Hz to whoever sends it a heartbeat.

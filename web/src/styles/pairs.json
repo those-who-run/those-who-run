@@ -31,7 +31,25 @@
     { "fg": "--info", "bg": "--surface", "min": 4.5, "use": "anything" },
     { "fg": "--info", "bg": "--surface-raised", "min": 4.5, "use": "anything" },
     { "fg": "--on-accent", "bg": "--accent", "min": 4.5, "use": "button labels" },
-    { "fg": "--on-accent", "bg": "--accent-hover", "min": 4.5, "use": "button labels on hover and press" }
+    { "fg": "--on-accent", "bg": "--accent-hover", "min": 4.5, "use": "button labels on hover and press" },
+    { "fg": "--pedal-brake", "bg": "--bg", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-brake", "bg": "--surface", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-brake", "bg": "--surface-raised", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-throttle", "bg": "--bg", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-throttle", "bg": "--surface", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-throttle", "bg": "--surface-raised", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-coast", "bg": "--bg", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-coast", "bg": "--surface", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--pedal-coast", "bg": "--surface-raised", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-slow", "bg": "--bg", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-slow", "bg": "--surface", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-slow", "bg": "--surface-raised", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-mid", "bg": "--bg", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-mid", "bg": "--surface", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-mid", "bg": "--surface-raised", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-fast", "bg": "--bg", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-fast", "bg": "--surface", "min": 3, "use": "track map lines and their legend; never text" },
+    { "fg": "--speed-fast", "bg": "--surface-raised", "min": 3, "use": "track map lines and their legend; never text" }
   ],
   "notAllowed": [{ "fg": "--accent", "bg": "--surface-raised", "why": "2.9: a raised row with a red mark shows its state with --border-strong" }]
 }

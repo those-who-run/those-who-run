@@ -34,6 +34,12 @@ paint.
 | `--info` | `#60A5FA` | neutral notices (a deploy rolling out) |
 | `--lap-a` | `var(--accent)` | compare: lap A |
 | `--lap-b` | `var(--text)` | compare: lap B, dashed |
+| `--pedal-brake` | `#F97316` | track map: on the brake (the widest line) |
+| `--pedal-throttle` | `#22D3EE` | track map: on the throttle (a middle line) |
+| `--pedal-coast` | `var(--text-subtle)` | track map: coasting (the thinnest line) |
+| `--speed-slow` | `#3B82F6` | track map's speed scale: the lap's slowest |
+| `--speed-mid` | `#2DD4BF` | the speed scale's middle |
+| `--speed-fast` | `#FDE047` | the speed scale: the lap's fastest |
 
 There are no shadows. Elevation is a lighter surface plus a border. Sheets and
 dialogs get one shadow token, `--shadow-overlay` (`0 8px 32px` at 50% black),
@@ -46,7 +52,9 @@ Tailwind's own palette is cleared, so the utilities are the tokens:
 `border-border-strong`, `text-fg` (for `--text`), `text-muted`, `text-subtle`,
 `bg-accent`, `bg-accent-hover`, `text-on-accent`, `text-accent-text`,
 `text-timing-best`, `text-timing-improve`, `text-timing-slower`, `text-info`,
-`text-lap-a`, `text-lap-b` and `bg-scrim`.
+`text-lap-a`, `text-lap-b`, `bg-pedal-brake`, `bg-pedal-throttle`,
+`bg-pedal-coast` and `bg-scrim`; `bg-speed-scale` is the speed scale as a
+gradient, for its legend.
 
 ### Allowed pairs
 
@@ -67,6 +75,12 @@ pair goes in both.
 | `--timing-improve` | 10.8 | 10.0 | 8.9 | anything |
 | `--timing-slower` | 11.3 | 10.4 | 9.3 | anything |
 | `--info` | 7.4 | 6.8 | 6.1 | anything |
+| `--pedal-brake` | 6.7 | 6.2 | 5.5 | track map lines and legend swatches; never text |
+| `--pedal-throttle` | 10.4 | 9.6 | 8.6 | track map lines and legend swatches; never text |
+| `--pedal-coast` | 4.0 | 3.7 | 3.3 | track map lines and legend swatches; never text |
+| `--speed-slow` | 5.1 | 4.7 | 4.2 | the speed scale's lines and legend; never text |
+| `--speed-mid` | 10.1 | 9.3 | 8.3 | the speed scale's lines and legend; never text |
+| `--speed-fast` | 14.3 | 13.2 | 11.8 | the speed scale's lines and legend; never text |
 | `--on-accent` on `--accent` | | | | 5.3: button labels |
 | `--on-accent` on `--accent-hover` | | | | 4.8: button labels on hover and press |
 
@@ -305,8 +319,9 @@ change from upstream:
 
 Every chart is uPlot (ADR 0003 point 2) through one wrapper,
 `web/src/charts/UPlot.tsx` (#299 R7). Lap compare uses it first; the session
-page's charts (#300), the track map and delta (#117) and corners (#34) reuse
-it rather than writing their own. uPlot is about 20 KB gzipped: import the
+page's charts (#300), the delta (#117) and corners (#34) reuse it rather than
+writing their own. The track map (#350) is the one exception: a plan view with
+no x axis, it draws on its own canvas, with colours from the same tokens. uPlot is about 20 KB gzipped: import the
 wrapper only from a lazy route, never from the entry.
 
 ```tsx
@@ -353,6 +368,28 @@ wrapper only from a lazy route, never from the entry.
   shows the cursor's time and each lap's value at its own nearest sample. Traces
   are asked for at one point per device pixel of the chart's width, at most
   1,500, in steps of 100.
+- **Track map** (#350, `web/src/compare/track-map.tsx`, its geometry and colours
+  in `web/src/compare/map.ts`): on lap compare only. Lap A's line in plan (GT7's
+  `x` across, `z` down, one scale on both axes, fitted to its box with 12 px
+  round it) on a `<canvas>`, not uPlot, since it has no x axis. Lap B is a 1.5 px
+  dashed `--lap-b` line on top. Two colourings, picked by a "Map by" chip row and
+  remembered per viewer: **Pedals** (the default) draws the brake (over 5%; it
+  wins when both are pressed) 5 px wide in `--pedal-brake`, the throttle (over
+  5%) 3 px in `--pedal-throttle` and coasting 1.5 px in `--pedal-coast`, so width
+  tells them apart as well as colour; **Speed** draws 3 px on the lap's own range,
+  `--speed-slow` through `--speed-mid` to `--speed-fast`, with its range in km/h
+  in the legend. The cursor is a `--lap-a` dot ringed in `--text` for lap A and a
+  `--lap-b` ring for lap B, each at that lap's nearest sample. A tap or click
+  moves the cursor to lap A's nearest point, so the charts and the readout
+  follow; the map is one focusable slider, and the arrow keys, Page Up and Down,
+  Home and End step it. The line breaks at a jump in position (over 20 m and
+  further than the car's speed explains: the pit cut-scene), and closes when the
+  lap's end meets its start. On a phone it sits between the chips and the charts,
+  at most 40% of the screen's height, with `touch-action: manipulation`, so it
+  never traps the scroll. From 56 rem of the page's width (a container query) it
+  sits beside the charts, 24 rem wide, pinned under the header. Its accessible
+  name and caption are the summary: "Lap 4 at Suzuka Circuit: on the brake for
+  18% of the lap, full throttle for 61%".
 - **Race story** (#300, `web/src/session/race-story.tsx`, its figures in
   `web/src/session/story.ts`): on the session page between the stat tiles and
   the laps table, only with three complete laps or more (no chart and no empty

@@ -64,6 +64,18 @@ const charts = (page: Page): Locator => page.locator("[data-slot=charts]");
 const chart = (page: Page, channel: string): Locator =>
   page.locator(`figure[data-channel=${channel}] [data-slot=chart]`);
 const readout = (page: Page): Locator => page.locator("[data-slot=readout]");
+/** The track map's target (#350): the canvases, focusable as one slider. */
+const trackMap = (page: Page): Locator => page.locator("[data-slot=map]");
+
+/** Lap A's dot on the map, in CSS pixels from the map's top left; null with none. */
+async function mapDot(page: Page): Promise<{ x: number; y: number } | null> {
+  const dot = await trackMap(page).getAttribute("data-dot-a");
+  if (!dot) {
+    return null;
+  }
+  const [x, y] = dot.split(",").map(Number);
+  return { x: x!, y: y! };
+}
 
 /** Waits for every shown chart to have drawn. */
 async function chartsDrawn(page: Page, count = 5): Promise<void> {
@@ -147,6 +159,8 @@ test("opens on the best lap against the next fastest, with five charts (AC1, AC6
   await expect(summary).toContainText(`A faster by ${lapTime(next.time_ms! - best.time_ms!)}`);
   await chartsDrawn(page);
   await expect(page.getByRole("link", { name: "Back to the session" })).toHaveAttribute("href", `/sessions/${id}`);
+  // The track map (#350 AC5): drawn at every width.
+  await expect(trackMap(page)).toBeVisible();
 
   await expectNoHorizontalScroll(page);
   await screenshot(page, testInfo, "compare");
@@ -187,6 +201,10 @@ test("a horizontal touch drag scrubs; a vertical one scrolls the page (AC3)", as
   const id = await sessionId(page, RACE);
   await page.goto(`/sessions/${id}/compare`);
   await chartsDrawn(page);
+  // The track map sits above the charts on a phone (#350 R6): bring the throttle
+  // chart on screen first, then check the scrub leaves the page where it is.
+  await chart(page, "throttle").scrollIntoViewIfNeeded();
+  const scrollAtStart = await page.evaluate(() => window.scrollY);
   const box = (await chart(page, "throttle").locator(".u-over").boundingBox())!;
   const y = box.y + box.height / 2;
 
@@ -196,7 +214,7 @@ test("a horizontal touch drag scrubs; a vertical one scrolls the page (AC3)", as
   const lefts = await cursorLefts(page);
   expect(new Set(lefts).size, `cursor lines at ${lefts.join(", ")}`).toBe(1);
   expect(lefts[0]!).toBeGreaterThan(box.x + box.width * 0.6);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollAtStart);
 
   const scrollBefore = await page.evaluate(() => window.scrollY);
   const speed = (await chart(page, "speed").locator(".u-over").boundingBox())!;
@@ -376,6 +394,7 @@ test("a pinch zooms every chart (R5)", async ({ page }, testInfo) => {
   const id = await sessionId(page, RACE);
   await page.goto(`/sessions/${id}/compare`);
   await chartsDrawn(page);
+  await chart(page, "speed").scrollIntoViewIfNeeded(); // below the track map (#350)
   const box = (await chart(page, "speed").locator(".u-over").boundingBox())!;
   const y = box.y + box.height / 2;
   const mid = box.x + box.width / 2;
@@ -406,8 +425,9 @@ test("a double tap resets the zoom (R5)", async ({ page }, testInfo) => {
   await chartsDrawn(page);
   const reset = page.getByRole("button", { name: "Reset zoom" });
   await expect(reset).toBeVisible();
+  await chart(page, "speed").scrollIntoViewIfNeeded(); // below the track map (#350)
   const box = (await chart(page, "speed").locator(".u-over").boundingBox())!;
-  const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const at ={ x: box.x + box.width / 2, y: box.y + box.height / 2 };
   await page.touchscreen.tap(at.x, at.y);
   await page.touchscreen.tap(at.x, at.y);
   await expect(reset).toBeHidden();
@@ -465,4 +485,123 @@ test("the session page's pick bar opens compare on its laps, and Back keeps the 
   await expect(page).toHaveURL(`/sessions/${id}?pick=2%2C4`);
   await expect(pick(2)).toBeChecked();
   await expect(pick(4)).toBeChecked();
+});
+
+/** Scrubs the throttle chart to `fx` of its width: a finger on a touch screen, the
+ * mouse on a desktop. */
+async function scrubThrottle(page: Page, touch: boolean, fx: number): Promise<void> {
+  await chart(page, "throttle").scrollIntoViewIfNeeded();
+  const box = (await chart(page, "throttle").locator(".u-over").boundingBox())!;
+  const y = box.y + box.height / 2;
+  if (touch) {
+    await touchDrag(page, { x: box.x + 10, y }, { x: box.x + box.width * fx, y });
+  } else {
+    await page.mouse.move(box.x + box.width * fx, y);
+  }
+}
+
+test("scrubbing the throttle chart moves the map's dot; tapping the map moves the readout (#350 AC3)", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === "ipad", "touch on the phone, a mouse on the desktop");
+  const touch = testInfo.project.name === "phone";
+  const id = await sessionId(page, RACE);
+  await page.goto(`/sessions/${id}/compare`);
+  await chartsDrawn(page);
+  await expect(trackMap(page)).toBeVisible();
+  expect(await mapDot(page)).toBeNull();
+
+  // The charts lead: the dot follows the scrub, at the sample the readout shows.
+  await scrubThrottle(page, touch, 0.3);
+  await expect.poll(() => mapDot(page)).not.toBeNull();
+  const first = { dot: (await mapDot(page))!, state: await readoutState(page) };
+  await expect(trackMap(page)).toHaveAttribute("data-cursor-a", String(first.state.a));
+  await scrubThrottle(page, touch, 0.75);
+  await expect.poll(async () => (await readoutState(page)).a).not.toBe(first.state.a);
+  const second = await readoutState(page);
+  await expect(trackMap(page)).toHaveAttribute("data-cursor-a", String(second.a));
+  expect(await mapDot(page)).not.toEqual(first.dot);
+
+  // The map leads: a tap where the dot was moves the cursor back there.
+  await trackMap(page).scrollIntoViewIfNeeded();
+  const box = (await trackMap(page).boundingBox())!;
+  const at = { x: box.x + first.dot.x, y: box.y + first.dot.y };
+  if (touch) {
+    await page.touchscreen.tap(at.x, at.y);
+  } else {
+    await page.mouse.click(at.x, at.y);
+  }
+  await expect.poll(async () => (await readoutState(page)).a).toBe(first.state.a);
+  await expect(trackMap(page)).toHaveAttribute("data-cursor-a", String(first.state.a));
+  const a = await trace(page, id, 1, Number(await charts(page).getAttribute("data-points")));
+  const back = await readoutState(page);
+  expect(back.x).toBe(a.t[first.state.a!]);
+  await expectRowMatches(page, "a", a, back.x!, back.a!);
+  await expectAccessible(page, testInfo, "compare-map-cursor");
+});
+
+test("the map takes focus, and the arrow keys step the cursor (#350 R4)", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "a keyboard: the desktop project");
+  const id = await sessionId(page, RACE);
+  await page.goto(`/sessions/${id}/compare`);
+  await chartsDrawn(page);
+  await trackMap(page).focus();
+  await page.keyboard.press("Home");
+  await expect.poll(async () => (await readoutState(page)).a).toBe(0);
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => (await readoutState(page)).a).toBe(2);
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(async () => (await readoutState(page)).a).toBe(1);
+  await expect(trackMap(page)).toHaveAttribute("aria-valuetext", /s into lap 1$/);
+});
+
+test("the map sits above the charts on a phone and beside them, pinned, on a desktop (#350 R6)", async ({
+  page,
+}, testInfo) => {
+  const id = await sessionId(page, RACE);
+  await page.goto(`/sessions/${id}/compare`);
+  await chartsDrawn(page);
+  const viewport = page.viewportSize()!;
+  const map = (await trackMap(page).boundingBox())!;
+  const first = (await charts(page).boundingBox())!;
+  expect(map.height).toBeLessThanOrEqual(viewport.height * 0.4 + 1);
+  expect(map.width).toBeLessThanOrEqual(viewport.width);
+  if (testInfo.project.name === "desktop") {
+    expect(map.x).toBeGreaterThanOrEqual(first.x + first.width);
+    await page.evaluate(() => window.scrollBy(0, 800));
+    await expect
+      .poll(async () => {
+        const m = (await trackMap(page).boundingBox())!;
+        return m.y >= 0 && m.y + m.height <= viewport.height;
+      })
+      .toBe(true);
+  } else {
+    expect(map.y + map.height).toBeLessThanOrEqual(first.y);
+  }
+  await expectNoHorizontalScroll(page);
+});
+
+test("the map's colours: pedals by default, speed remembered after a reload (#350 R2)", async ({ page }, testInfo) => {
+  const id = await sessionId(page, RACE);
+  await page.goto(`/sessions/${id}/compare`);
+  await chartsDrawn(page);
+  const figure = page.locator("[data-slot=track-map]");
+  const modes = page.getByRole("group", { name: "Map colours" });
+  await expect(figure).toHaveAttribute("data-mode", "pedals");
+  await expect(page.getByRole("list", { name: "Line colours" })).toContainText(["Brake"]);
+  await expect(figure.locator("figcaption")).toHaveText(
+    /^Lap 1 at Circuit Gilles Villeneuve: on the brake for \d+% of the lap, full throttle for \d+%$/,
+  );
+  await modes.getByRole("button", { name: "Speed" }).click();
+  await expect(figure).toHaveAttribute("data-mode", "speed");
+  await expect(figure.locator("[data-slot=map-legend]")).toContainText("km/h");
+  await page.evaluate(() => sessionStorage.setItem("twr-e2e-kept", "1"));
+  await page.reload();
+  await chartsDrawn(page);
+  await expect(figure).toHaveAttribute("data-mode", "speed");
+  await expect(modes.getByRole("button", { name: "Speed" })).toHaveAttribute("aria-pressed", "true");
+  await expectNoHorizontalScroll(page);
+  await screenshot(page, testInfo, "compare-map-speed");
+  await expectAccessible(page, testInfo, "compare-map-speed");
 });

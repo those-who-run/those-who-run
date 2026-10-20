@@ -110,3 +110,9 @@
 @utility pb-page {
   padding-bottom: calc(var(--spacing) * 4 + env(safe-area-inset-bottom));
 }
+
+/* The track map's speed scale (#350), slow to fast, for its legend: the map draws
+   the same three stops on its canvas. */
+@utility bg-speed-scale {
+  background-image: linear-gradient(to right, var(--speed-slow), var(--speed-mid), var(--speed-fast));
+}

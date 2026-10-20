@@ -20,6 +20,12 @@ export interface ChartTheme {
   background: string;
   /** Axis type: `text-meta` (13 px) in the UI family. */
   font: string;
+  /** The track map (#350): on the brake, on the throttle, coasting. */
+  brake: string;
+  throttle: string;
+  coast: string;
+  /** The track map's speed scale: slow, middle and fast. */
+  speed: readonly [string, string, string];
 }
 
 /** Lap B's dash, so A and B never differ by colour alone (ADR 0004 point 3). */
@@ -42,6 +48,10 @@ export function readChartTheme(el: Element = document.documentElement): ChartThe
     best: token(style, "--timing-best"),
     background: token(style, "--bg"),
     font: `13px ${family}`,
+    brake: token(style, "--pedal-brake"),
+    throttle: token(style, "--pedal-throttle"),
+    coast: token(style, "--pedal-coast"),
+    speed: [token(style, "--speed-slow"), token(style, "--speed-mid"), token(style, "--speed-fast")],
   };
 }
 

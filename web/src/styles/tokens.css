@@ -41,6 +41,16 @@
   --lap-a: var(--accent);
   --lap-b: var(--text);
 
+  /* The track map (#350): what the driver was doing, and the speed scale. Never
+     timing's colours or the accent; brake, throttle and coasting differ in line
+     width too, so colour is never the only signal. */
+  --pedal-brake: #f97316;
+  --pedal-throttle: #22d3ee;
+  --pedal-coast: var(--text-subtle);
+  --speed-slow: #3b82f6;
+  --speed-mid: #2dd4bf;
+  --speed-fast: #fde047;
+
   /* Elevation is a lighter surface plus a border. Sheets and dialogs get one
      shadow (--shadow-overlay, in @theme below), over a 60% black scrim. */
   --scrim: rgb(0 0 0 / 0.6);
@@ -178,6 +188,9 @@
   --color-info: var(--info);
   --color-lap-a: var(--lap-a);
   --color-lap-b: var(--lap-b);
+  --color-pedal-brake: var(--pedal-brake);
+  --color-pedal-throttle: var(--pedal-throttle);
+  --color-pedal-coast: var(--pedal-coast);
   --color-scrim: var(--scrim);
 
   --color-background: var(--bg);

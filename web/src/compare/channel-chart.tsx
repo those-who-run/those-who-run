@@ -11,9 +11,7 @@ import { UPlot, type XRange } from "@/charts/UPlot";
 import type { Aligned } from "./align";
 import { X_AXIS, type Channel } from "./channels";
 import type { CursorStore } from "./cursor";
-
-/** The cursor group every compare chart is in. */
-const SYNC_KEY = "twr-compare";
+import { SYNC_KEY } from "./sync";
 /** The y axis's width, the same on every chart, so their x positions line up. */
 const Y_AXIS_PX = 52;
 

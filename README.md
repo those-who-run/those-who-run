@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <img src="docs/assets/banner-light.svg" alt="走り屋 Those Who Run" width="100%">
+</picture>
+
 # Those Who Run 走り屋
 
 **A self-hosted voice race engineer for Gran Turismo 7.**

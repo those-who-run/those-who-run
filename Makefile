@@ -19,6 +19,7 @@ help:
 	@echo "openapi  - write web/openapi.json, the pit wall API's schema, from its models"
 	@echo "brand-css - write web/src/styles/brand.css, the web app's brand colours, from brand.py"
 	@echo "wordmark - redraw the wordmark and icons as outlines: make wordmark NOTO=<NotoSansCJK-VF.ttc>"
+	@echo "brand-assets - write the docs' banners, wordmarks and social preview into docs/assets/ from brand.py"
 	@echo "check    - everything a PR must pass: lint, typecheck, tests with coverage floor, web-check (CI runs this)"
 	@echo "build    - podman build $(IMAGE_NAME):$(VERSION) for $(PLATFORM)"
 	@echo "build-pitwall - podman build the slim pit wall image, $(IMAGE_NAME):$(VERSION)-pitwall"
@@ -84,6 +85,22 @@ wordmark: $(WEB_DEPS)
 	magick -background none web/src/assets/icon-maskable.svg -strip web/public/icon-maskable-512.png
 	magick -background none web/src/assets/icon.svg -resize 180x180 -strip web/public/apple-touch-icon.png
 
+# The docs' brand assets (scripts/brand_assets.py): the banners and wordmarks in
+# docs/assets/ from brand.py, the wordmark's outlines and Barlow for the tagline,
+# with the same pinned fontTools; then the social preview PNG from an SVG that is
+# not kept. make check runs `brand_assets.py --check` on the SVGs (no fontTools or
+# ImageMagick needed); the PNG is not checked, as rasterising differs by machine.
+BARLOW_500 := web/node_modules/@fontsource/barlow/files/barlow-latin-500-normal.woff2
+SOCIAL_SVG := build/social-preview.svg
+
+.PHONY: brand-assets
+brand-assets: $(WEB_DEPS)
+	@command -v magick >/dev/null 2>&1 || { echo "ImageMagick (magick) is missing: it renders the social preview" >&2; exit 1; }
+	mkdir -p build
+	uvx --with $(FONTTOOLS) --with brotli==1.2.0 python scripts/brand_assets.py --tagline-font $(BARLOW_500) --social $(SOCIAL_SVG)
+	magick -background none $(SOCIAL_SVG) -strip -define png:exclude-chunks=date,time docs/assets/social-preview.png
+	rm -f $(SOCIAL_SVG)
+
 # The definition of green: CI runs exactly this. The coverage floor lives in
 # pyproject.toml ([tool.coverage.report] fail_under); a skipped test fails the run;
 # uv.lock must match pyproject.toml; web/openapi.json must match the API's models;
@@ -92,6 +109,7 @@ wordmark: $(WEB_DEPS)
 check: lint typecheck
 	uv lock --check
 	$(PY) scripts/openapi.py --check
+	$(PY) scripts/brand_assets.py --check
 	TWR_FAIL_ON_SKIP=1 $(PY) -m pytest -q -rs --cov --cov-report=term
 	$(MAKE) web-check
 

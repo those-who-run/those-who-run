@@ -22,6 +22,7 @@ const SECTIONS = [
   "Lap table",
   "Filters",
   "Primitives",
+  "Track map",
 ];
 
 const WILLOW = "Willow Springs International Raceway: Big Willow";
@@ -65,6 +66,24 @@ test("shows every component in every state, with no sideways scroll (AC1)", asyn
   }
   await expectNoHorizontalScroll(page);
   await screenshot(page, testInfo, "kit");
+});
+
+test("the track map in each of its states (#350 R9)", async ({ page }, testInfo) => {
+  await openKit(page);
+  const region = page.getByRole("region", { name: "Track map", exact: true });
+  await region.scrollIntoViewIfNeeded();
+  await expect(region.locator("[data-state-name]")).toHaveText([
+    /^pedals, both laps at the cursor/,
+    /^speed/,
+    /^pit lap, broken at the cut-scene/,
+    /^loading/,
+    /^no trace/,
+  ]);
+  // The cursor's dot is drawn on the samples that have one.
+  await expect(region.locator("[data-slot=map][data-dot-a]")).toHaveCount(2);
+  await expect(region.locator("[data-slot=track-map][data-mode=speed]")).toHaveCount(1);
+  await expectNoHorizontalScroll(page);
+  await screenshot(page, testInfo, "kit-track-map");
 });
 
 test("axe finds nothing serious or critical (AC2)", async ({ page }, testInfo) => {

@@ -1,10 +1,12 @@
 // Lap compare's per-viewer preferences in localStorage (#299 R6, R10; ADR 0004
-// point 7): the hidden channels, and whether the "turn sideways" hint has been
-// shown. Storage can be missing, full or blocked (a private window), so every
+// point 7): the hidden channels, the track map's colours, and whether the "turn
+// sideways" hint has been shown. Storage can be missing, full or blocked (a private window), so every
 // read and write is guarded, and the page works without it.
 import { CHANNEL_IDS, type ChannelId } from "./channels";
+import { MAP_MODES, type MapMode } from "./map";
 
 export const HIDDEN_CHANNELS_KEY = "twr.compare.hidden-channels";
+export const MAP_MODE_KEY = "twr.compare.map-mode";
 export const SIDEWAYS_HINT_KEY = "twr.compare.sideways-hint-shown";
 
 function storage(): Storage | null {
@@ -43,6 +45,16 @@ export function readHiddenChannels(): ChannelId[] {
 
 export function writeHiddenChannels(hidden: readonly ChannelId[]): void {
   write(HIDDEN_CHANNELS_KEY, JSON.stringify(hidden));
+}
+
+/** The track map's colours (#350 R2): pedals unless this viewer picked speed. */
+export function readMapMode(): MapMode {
+  const stored = read(MAP_MODE_KEY);
+  return MAP_MODES.find((m) => m === stored) ?? "pedals";
+}
+
+export function writeMapMode(mode: MapMode): void {
+  write(MAP_MODE_KEY, mode);
 }
 
 /** True the first time it is asked on this browser, then false. */

@@ -2,7 +2,8 @@
 // RPM, as stacked uPlot charts with one shared cursor. A finger dragged across any
 // chart scrubs, and the readout pinned above the charts shows both laps' values
 // there. Pinch or drag zooms every chart; double-tap resets. Lap B can come from
-// another session at the same track.
+// another session at the same track. A track map (#350) beside or above the charts
+// shows where on the track the cursor is, and a tap on it moves the cursor.
 //
 // The URL is the view (`?a`, `?b`, `?b_session`, `?zoom`); hidden channels are the
 // viewer's own, in localStorage. uPlot comes in with this route's chunk only.
@@ -27,10 +28,13 @@ import { ChannelChart } from "@/compare/channel-chart";
 import { CHANNELS, type ChannelId } from "@/compare/channels";
 import { createCursorStore } from "@/compare/cursor";
 import { LapLetter } from "@/compare/lap-swatch";
+import type { MapMode } from "@/compare/map";
 import { LapAPicker, LapBPicker } from "@/compare/picker";
 import { formatZoom, parseZoom, resolvePicks } from "@/compare/picks";
-import { readHiddenChannels, takeSidewaysHint, writeHiddenChannels } from "@/compare/prefs";
+import { readHiddenChannels, readMapMode, takeSidewaysHint, writeHiddenChannels, writeMapMode } from "@/compare/prefs";
 import { Readout } from "@/compare/readout";
+import { seekCharts } from "@/compare/sync";
+import { TrackMap } from "@/compare/track-map";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { LapTime } from "@/components/lap-time";
@@ -172,6 +176,7 @@ export function Component() {
 
   const [cursor] = useState(createCursorStore);
   const [hidden, setHidden] = useState<ChannelId[]>(readHiddenChannels);
+  const [mapMode, setMapMode] = useState<MapMode>(readMapMode);
   const [sideways, setSideways] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -356,88 +361,127 @@ export function Component() {
 
       <Summary a={aRow} b={bRow} />
 
-      <Readout cursor={cursor} a={aData} b={bData} channels={visible} className="sticky top-header z-10" />
+      {/* On a phone, one column: the readout pinned, the chips, the map, then the
+          charts (#350 R6); the left column is `contents` there, so `order` places
+          the map. From 56 rem of width the map sits beside the charts, pinned. */}
+      <div className="@container">
+        <div className="flex flex-col gap-3 @4xl:flex-row @4xl:items-start @4xl:gap-6">
+          <div className="contents @4xl:block @4xl:min-w-0 @4xl:flex-1 @4xl:space-y-3">
+            <Readout
+              cursor={cursor}
+              a={aData}
+              b={bData}
+              channels={visible}
+              className="sticky top-header z-10 order-1 @4xl:order-none"
+            />
 
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Channels">
-        {CHANNELS.map((c) => (
-          <Toggle
-            key={c.id}
-            variant="outline"
-            pressed={!hidden.includes(c.id)}
-            onPressedChange={(on) => toggleChannel(c.id, on)}
-          >
-            {c.label}
-          </Toggle>
-        ))}
-        {zoom && (
-          <Button variant="outline" onClick={() => setZoom(null)} className="ml-auto">
-            <RotateCcwIcon aria-hidden="true" />
-            Reset zoom
-          </Button>
-        )}
-      </div>
+            <div className="order-2 flex flex-wrap items-center gap-2 @4xl:order-none" role="group" aria-label="Channels">
+              {CHANNELS.map((c) => (
+                <Toggle
+                  key={c.id}
+                  variant="outline"
+                  pressed={!hidden.includes(c.id)}
+                  onPressedChange={(on) => toggleChannel(c.id, on)}
+                >
+                  {c.label}
+                </Toggle>
+              ))}
+              {zoom && (
+                <Button variant="outline" onClick={() => setZoom(null)} className="ml-auto">
+                  <RotateCcwIcon aria-hidden="true" />
+                  Reset zoom
+                </Button>
+              )}
+            </div>
 
-      {(missingA || missingB) && (
-        <div role="status" className="space-y-1 rounded-md border border-border-strong bg-surface p-3 text-sm">
-          {missingA && (
-            <p data-missing="a" className="flex flex-wrap items-center gap-x-2">
-              <LapLetter side="a" /> Lap {picks.a}: {MISSING_LAP}
-            </p>
-          )}
-          {missingB && (
-            <p data-missing="b" className="flex flex-wrap items-center gap-x-2">
-              <LapLetter side="b" /> Lap {picks.b}: {MISSING_LAP}
-            </p>
-          )}
-        </div>
-      )}
-
-      {failed && (
-        <ErrorState
-          title="Couldn't load a lap's trace."
-          detail={failed.error?.message}
-          onRetry={() => {
-            void traceA.refetch();
-            void traceB.refetch();
-          }}
-          retrying={traceA.isFetching || traceB.isFetching}
-        />
-      )}
-
-      <div ref={charts} data-slot="charts" data-points={points || undefined} className="w-full min-w-0 space-y-3">
-        {visible.length === 0 && (
-          <EmptyState title="Every channel is hidden" why="Show one with the buttons above." headingLevel={3} />
-        )}
-        {visible.map((c, i) => (
-          <figure key={c.id} data-channel={c.id} className="space-y-1">
-            <figcaption className="text-meta text-muted">
-              {c.label}
-              {c.unit && ` (${c.unit})`}
-            </figcaption>
-            {loading ? (
-              <ChartSkeleton height={chartHeight} />
-            ) : anything ? (
-              <ChannelChart
-                channel={c}
-                aligned={aligned}
-                height={chartHeight}
-                showX={i === visible.length - 1}
-                xRange={zoom}
-                onXRange={setZoom}
-                cursor={cursor}
-                label={chartLabel(c.label)}
-              />
-            ) : (
-              <div className="rounded-md border border-dashed" style={{ height: chartHeight }} />
+            {(missingA || missingB) && (
+              <div
+                role="status"
+                className="order-2 space-y-1 rounded-md border border-border-strong bg-surface p-3 text-sm @4xl:order-none"
+              >
+                {missingA && (
+                  <p data-missing="a" className="flex flex-wrap items-center gap-x-2">
+                    <LapLetter side="a" /> Lap {picks.a}: {MISSING_LAP}
+                  </p>
+                )}
+                {missingB && (
+                  <p data-missing="b" className="flex flex-wrap items-center gap-x-2">
+                    <LapLetter side="b" /> Lap {picks.b}: {MISSING_LAP}
+                  </p>
+                )}
+              </div>
             )}
-          </figure>
-        ))}
-      </div>
 
-      <p className="text-meta text-muted">
-        Drag sideways across a chart to read both laps. Pinch, or drag with a mouse, to zoom; double-tap or
-        double-click to reset.
-      </p>
+            {failed && (
+              <ErrorState
+                className="order-2 @4xl:order-none"
+                title="Couldn't load a lap's trace."
+                detail={failed.error?.message}
+                onRetry={() => {
+                  void traceA.refetch();
+                  void traceB.refetch();
+                }}
+                retrying={traceA.isFetching || traceB.isFetching}
+              />
+            )}
+
+            <div
+              ref={charts}
+              data-slot="charts"
+              data-points={points || undefined}
+              className="order-4 w-full min-w-0 space-y-3 @4xl:order-none"
+            >
+              {visible.length === 0 && (
+                <EmptyState title="Every channel is hidden" why="Show one with the buttons above." headingLevel={3} />
+              )}
+              {visible.map((c, i) => (
+                <figure key={c.id} data-channel={c.id} className="space-y-1">
+                  <figcaption className="text-meta text-muted">
+                    {c.label}
+                    {c.unit && ` (${c.unit})`}
+                  </figcaption>
+                  {loading ? (
+                    <ChartSkeleton height={chartHeight} />
+                  ) : anything ? (
+                    <ChannelChart
+                      channel={c}
+                      aligned={aligned}
+                      height={chartHeight}
+                      showX={i === visible.length - 1}
+                      xRange={zoom}
+                      onXRange={setZoom}
+                      cursor={cursor}
+                      label={chartLabel(c.label)}
+                    />
+                  ) : (
+                    <div className="rounded-md border border-dashed" style={{ height: chartHeight }} />
+                  )}
+                </figure>
+              ))}
+            </div>
+
+            <p className="order-4 text-meta text-muted @4xl:order-none">
+              Drag sideways across a chart to read both laps. Pinch, or drag with a mouse, to zoom; double-tap or
+              double-click to reset. Tap the map to read both laps at that point on the track.
+            </p>
+          </div>
+          <TrackMap
+            a={aData}
+            b={bData}
+            lapA={picks.a}
+            track={session.data?.track?.sure ? session.data.track.name : null}
+            cursor={cursor}
+            onSeek={(x) => seekCharts(cursor, x)}
+            mode={mapMode}
+            onMode={(m) => {
+              setMapMode(m);
+              writeMapMode(m);
+            }}
+            loading={loading}
+            className="order-3 @4xl:sticky @4xl:top-header @4xl:order-none @4xl:w-96 @4xl:shrink-0"
+          />
+        </div>
+      </div>
     </article>
   );
 }

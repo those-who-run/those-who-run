@@ -1,6 +1,7 @@
 // The one wrapper for every chart (#299 R7, ADR 0003 point 2; docs/design.md,
-// UPlot). Lap compare uses it now; the session page's charts (#300), the track map
-// and delta (#117) and corners (#34) reuse it.
+// UPlot). Lap compare uses it now; the session page's charts (#300), the delta
+// (#117) and corners (#34) reuse it. The track map (#350), a plan view with no x
+// axis, draws its own canvas (web/src/compare/track-map.tsx).
 //
 // - The plot is made in an effect, from `options(theme)`, with the theme read from
 //   the design tokens (./theme.ts). It is made again only when `options` changes,

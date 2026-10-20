@@ -34,6 +34,8 @@ const FilterSamples = lazy(() => import("@/kit/filter-samples").then((m) => ({ d
 const PrimitiveSamples = lazy(() =>
   import("@/kit/primitive-samples").then((m) => ({ default: m.PrimitiveSamples })),
 );
+// The track map (#350 R9), likewise.
+const MapSamples = lazy(() => import("@/kit/map-samples").then((m) => ({ default: m.MapSamples })));
 
 function Section({ id, title, note, children }: { id: string; title: string; note?: ReactNode; children: ReactNode }) {
   return (
@@ -402,6 +404,16 @@ export function Component() {
       <Section id="kit-primitives" title="Primitives" note="shadcn/ui, restyled only through the tokens.">
         <Suspense fallback={null}>
           <PrimitiveSamples />
+        </Suspense>
+      </Section>
+
+      <Section
+        id="kit-track-map"
+        title="Track map"
+        note="Lap compare's map: lap A by pedals or speed, lap B dashed, a dot and a ring at the cursor. Tap the map or use the arrow keys."
+      >
+        <Suspense fallback={null}>
+          <MapSamples />
         </Suspense>
       </Section>
     </article>

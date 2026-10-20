@@ -56,7 +56,7 @@ naming the command after the image (the default is `run`).
 From source:
 
 ```sh
-make venv            # needs uv: .venv from uv.lock, with the dev and engineer extras
+make venv            # needs uv: .venv from uv.lock, with the dev and engineer extras, and the git hooks
 make voice           # downloads the Piper voice into ./voices, sha256-checked
 GT7_PS5_IP=... DISCORD_BOT_TOKEN=... DISCORD_VOICE_CHANNEL_ID=... .venv/bin/those-who-run run
 ```

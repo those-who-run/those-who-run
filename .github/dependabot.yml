@@ -47,6 +47,18 @@ updates:
       default-days: 7
     commit-message:
       prefix: deps
+  # The pre-commit hooks pinned by SHA in .pre-commit-config.yaml (the tag in the
+  # `frozen:` comment, which Dependabot keeps). Never auto-merged: they run code on
+  # the maintainer's machine at every commit, so each bump is reviewed
+  # (dependabot-automerge.yml).
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: deps
   # The web app's npm packages (web/package-lock.json), pinned exactly. A release
   # must be two weeks old before it is offered. Minors and patches come grouped, as
   # the Actions do, and merge after CI under the same rules (a 0.x minor waits for

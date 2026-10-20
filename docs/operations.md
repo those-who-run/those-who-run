@@ -183,16 +183,18 @@ because it already exists.
 ## Dependabot
 
 Dependabot (`.github/dependabot.yml`) bumps the SHA-pinned actions, `uv.lock`,
-`web/package-lock.json` and the digest-pinned base images weekly. A release must be
-7 days old before it is offered (npm: 14), so a compromised release is usually
+`web/package-lock.json`, the SHA-pinned commit hooks (`.pre-commit-config.yaml`) and
+the digest-pinned base images weekly. A release must be 7 days old before it is
+offered (npm and the hooks: 14), so a compromised release is usually
 pulled before it reaches a PR. `.github/workflows/dependabot-automerge.yml`
 squash-merges the safe ones once CI has passed on the PR's head commit:
 
 - **Merged after CI:** patch updates; minor updates of packages at 1.0 or later;
   minor updates of GitHub Actions.
-- **Left for review:** majors, minors of 0.x packages, and anything in the Docker
-  ecosystem (the Python base image and the uv image). A group merges only when every
-  update in it is safe.
+- **Left for review:** majors, minors of 0.x packages, anything in the Docker
+  ecosystem (the Python base image and the uv image), and every bump of a commit
+  hook: the hooks run code on the maintainer's machine at each commit, so a human
+  reads each one. A group merges only when every update in it is safe.
 
 `main` is protected by a ruleset: a pull request, squash only, with the `test` and
 `image` checks passing. For Dependabot, `dependabot/fetch-metadata` classifies the PR (on

@@ -1,5 +1,9 @@
 .venv/
-.claude/
+# Claude Code's worktrees and local settings stay out; the shared settings and the
+# guard hook are tracked (#339).
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 __pycache__/
 *.pyc
 *.egg-info/

@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0 # the test guard diffs the PR against its base
+          fetch-depth: 0 # the test guard diffs the PR against its base; gitleaks scans its commits
       # What the PR changes in uv.lock and web/package-lock.json, from the dependency
       # graph (#355): fails on a known vulnerability of moderate severity or above,
       # or a licence outside this list: the licences GPL-3.0-only can take that the
@@ -93,6 +93,32 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
+      # The commit hooks (.pre-commit-config.yaml, #339) on every file: what a commit
+      # runs locally, so skipping them there gains nothing. Their environments are
+      # cached by the config they come from.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Commit hooks
+        run: .venv/bin/pre-commit run --all-files --show-diff-on-failure
+      # The commit hook scans only what is staged, so a commit made with --no-verify,
+      # outside Claude Code or on the web would pass it: scan every commit in the PR.
+      # HEAD is the PR's merge commit, so HEAD^1..HEAD is the PR's commits.
+      - name: No secrets in the PR's commits
+        if: github.event_name == 'pull_request'
+        run: .venv/bin/pre-commit run gitleaks-pr --hook-stage manual
+      # A squash merge takes the PR title as the commit subject, which no local hook
+      # sees: the same commit-msg hook checks it. The title comes in through env:,
+      # never expanded into the script.
+      - name: PR title is a conventional commit
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" > "$RUNNER_TEMP/pr-title"
+          .venv/bin/pre-commit run conventional-pre-commit --hook-stage commit-msg \
+            --commit-msg-filename "$RUNNER_TEMP/pr-title"
       # The same command as locally: lint, mypy, workflow-lint (zizmor and
       # actionlint), tests with the coverage floor, and web-check. Tests that replay
       # an archived outing fetch it from the `outings` release of

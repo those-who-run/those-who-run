@@ -64,6 +64,7 @@ does). Each table's first column is the name in backticks, which the test reads.
 | `ruff` | [PyPI](https://pypi.org/project/ruff/) | Lint and format. |
 | `mypy` | [PyPI](https://pypi.org/project/mypy/) | Type checks `src/`. |
 | `types-PyYAML` | [PyPI](https://pypi.org/project/types-PyYAML/) | Type stubs for `pyyaml`, for mypy. |
+| `pre-commit` | [PyPI](https://pypi.org/project/pre-commit/) | Runs the commit hooks in `.pre-commit-config.yaml`, locally and in CI. |
 | `zizmor` | [PyPI](https://pypi.org/project/zizmor/) | `make workflow-lint`: security audits of the workflows and `dependabot.yml`. |
 | `actionlint-py` | [PyPI](https://pypi.org/project/actionlint-py/) | `make workflow-lint`: the actionlint binary, for workflow syntax and expressions. |
 | `shellcheck-py` | [PyPI](https://pypi.org/project/shellcheck-py/) | The shellcheck binary actionlint runs over each `run:` step. |

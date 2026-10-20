@@ -10,6 +10,7 @@ app): issues, the definition of done, pull requests, merging and releases.
 
 ```sh
 make check           # what CI runs: ruff, mypy, workflow-lint, pytest with the coverage floor, web-check
+make hooks           # the git hooks (make venv runs it): once per clone, every worktree shares them
 make lint test       # ruff + pytest only, quicker while iterating
 make workflow-lint   # zizmor and actionlint over .github/workflows/ and dependabot.yml
 make web-check       # the web app only (needs Node and the Playwright browser)
@@ -69,7 +70,8 @@ Every target, as `make help` lists it:
 | Target | What it does |
 |---|---|
 | `help` | Lists the targets. |
-| `venv` | Creates `.venv` from `uv.lock` with the dev and engineer extras (needs uv). |
+| `venv` | Creates `.venv` from `uv.lock` with the dev and engineer extras (needs uv), and installs the git hooks. |
+| `hooks` | Installs the git hooks (`.pre-commit-config.yaml`), shared by every worktree ([Commit hooks](#commit-hooks)). Never skip them. |
 | `lock` | Re-resolves `uv.lock` after changing dependencies in `pyproject.toml`. |
 | `voice` | Downloads the Piper voice into `./voices`, sha256-checked. |
 | `lint` | `ruff check` and the format check. |
@@ -86,6 +88,7 @@ Every target, as `make help` lists it:
 | `build` | Builds the engineer's image for linux/amd64 with podman, local only. |
 | `build-pitwall` | Builds the slim pit wall image, `<version>-pitwall`. |
 | `replay` | Replays `FILE=recording.jsonl`. |
+| `web-deps` | Installs `web/node_modules` from `web/package-lock.json` (`npm ci`). |
 | `web-build` | Builds the React pit wall into `web/dist` (needs Node). |
 | `web-dev` | Vite's dev server on http://localhost:5173, `/api` proxied to a local pitwall. |
 | `web-check` | ESLint, tsc, Vitest, the client and `brand.css` freshness checks, the bundle budget, Playwright. |
@@ -94,6 +97,43 @@ Every target, as `make help` lists it:
 | `archive-push` | Uploads `GT7_ARCHIVE_DIR` to the `outings` release of those-who-run/outings ([ADR 0002](adr/0002-outing-archive.md)). |
 | `archive-pull` | Downloads the `outings` release into `GT7_ARCHIVE_DIR`. |
 | `clean` | Removes `.venv`, caches, coverage and build output. |
+
+## Commit hooks
+
+`make hooks` installs a `pre-commit` and a `commit-msg` hook
+([pre-commit](https://pre-commit.com/), `.pre-commit-config.yaml`). Before a commit
+is made they check the staged files in seconds: ruff format and ruff check, ESLint
+under `web/`, `web/openapi.json`, `brand.css` and the web client against their
+sources (`make openapi`, `make brand-css`, `npm run api`), `uv lock --check`, a
+gitleaks scan of the staged changes, whitespace, merge-conflict markers, YAML and
+large files, and actionlint and zizmor on the workflows. The commit message must be
+a conventional commit with one of release-please's types (`feat:`, `fix:`, `docs:`,
+and the rest). pytest, mypy, `tsc`, Vitest and Playwright stay in `make check`.
+
+- The hooks run the committing checkout's own tools: ruff and pre-commit from its
+  `.venv`, ESLint from its `web/node_modules`. A missing one fails the hook with the
+  make target that installs it (`make venv`, `make web-deps`).
+- Git keeps hooks in the common `.git/hooks`, so one `make hooks` covers every
+  worktree (`git worktree add`); each worktree still needs its own `make venv`
+  (which also installs the hooks), or its first commit fails and asks for it. A
+  branch from before the hooks commits without them.
+- The external hooks (pre-commit-hooks, gitleaks, actionlint, zizmor,
+  conventional-pre-commit) are pinned to a commit SHA, the tag in the `frozen:`
+  comment. `make hooks` builds their environments once, into `~/.cache/pre-commit`
+  (gitleaks and actionlint are Go programs: pre-commit uses the Go on `PATH`, or
+  downloads one).
+- Don't skip them. `--no-verify` and `SKIP=` gain nothing: CI's `test` job runs
+  `pre-commit run --all-files` before `make check`, and gitleaks on every commit in
+  the PR (the commit hook only sees what is staged). CI also checks the PR title
+  with the commit-msg hook, since a squash merge makes the title the commit subject.
+- In Claude Code, `.claude/hooks/guard.py` refuses `--no-verify`, `-n`, `SKIP=`,
+  `core.hooksPath` and writes to `.git/hooks` or `.git/config`, and asks when the
+  program is a variable or an alias (`$g commit`). It is a guard against mistakes,
+  not a sandbox: a script file or a program that runs git itself gets past it. CI
+  and the `main` ruleset are the backstop. It needs Claude Code v2.1.295 or later:
+  older versions ignore `onFailure: "block"`, so a guard that crashes or is missing
+  lets the command run.
+- `pre-commit run --all-files` runs them all by hand; `pre-commit run <id>` runs one.
 
 ## Docs checks
 

@@ -19,8 +19,9 @@ can't parse that names one of the guarded programs, and a command whose program 
 variable (`$g ...`) or an alias set in the same command, are sent to `ask`.
 
 It is a guard against mistakes, not a sandbox. It can't see into a script file, a
-program that runs git itself (`python3 -c 'subprocess.run(...)'`), or a command
-decoded at run time (`eval "$(echo ... | base64 -d)"`). CI, which runs the hooks on
+program that runs git itself (`python3 -c 'subprocess.run(...)'`), a file it opens
+by a path it builds, or a command decoded at run time (`eval "$(echo ... | base64
+-d)"`). CI, which runs the hooks on
 every file and gitleaks on a PR's commits, and the `main` ruleset are the backstop.
 
 Run it on a command to see the verdict:
@@ -400,7 +401,7 @@ GH_BLOCK_ALL = {
 GH_ASK = {
     ("issue", "create"), ("issue", "comment"), ("issue", "edit"), ("issue", "close"),
     ("issue", "delete"), ("pr", "create"), ("pr", "comment"), ("pr", "review"),
-    ("pr", "close"),
+    ("pr", "close"), ("pr", "merge"), ("pr", "ready"),
 }  # fmt: skip
 # gh api: a write (any method but GET or HEAD) to one of these blocks.
 GH_API_PROTECTED = re.compile(
@@ -657,6 +658,50 @@ def helm_rule(args: list[str], env: dict[str, str]) -> Verdict:
     if verb == "registry" and nxt in ("login", "logout"):
         return block("helm-registry", "it signs in to a registry")
     return ALLOWED
+
+
+# The secrets on this machine: the paths .claude/settings.json denies to the Read and
+# Edit tools, which don't cover a Bash command that reads them.
+_HOMES = "|".join(
+    [r"~", r"\$HOME", r"\$\{HOME\}", r"/home/[^/\s'\"]+", r"/root"]
+    + ([re.escape(HOME)] if HOME.startswith("/") and HOME != "/" else [])
+)
+SECRET_PATH = re.compile(
+    r"(?<![\w.-])\.env(\.[\w.-]+)?(?![\w.-])"
+    rf"|({_HOMES})/(\.aws|\.config/gcloud|\.gnupg|\.config/helm|\.docker|\.kube|\.ssh"
+    r"|\.config/gh)(?![\w.-])"
+    rf"|({_HOMES})/(\.claude/\.credentials\.json|\.claude\.json|\.netrc"
+    r"|\.config/containers/auth\.json)(?![\w.-])"
+    r"|(/run/user/[^/\s'\"]+|\$\{?XDG_RUNTIME_DIR\}?)/containers/auth\.json"
+    r"|[\w-][\w.-]*\.(pem|key)(?![\w.-])"
+    r"|(?<![\w.-])id_(rsa|ed25519)[\w.-]*"
+)
+# Programs whose arguments are mostly prose (a commit message, a PR body): only an
+# argument that is a bare path is checked. echo, printf, ls and test read nothing;
+# kubectl, oc and helm use a kubeconfig (`--kubeconfig ~/.kube/...`) without printing it.
+SECRET_PROSE = {"git", "gh"}
+SECRET_HARMLESS = {"echo", "printf", "ls", "test", "[", "true", ":", "kubectl", "oc", "helm"}
+# Redirections whose target is a file (not a here-document's delimiter or text).
+FILE_REDIRECTIONS = WRITE_REDIRECTIONS | {"<", "<&"}
+
+
+def secret_path(word: str, env: dict[str, str]) -> Verdict:
+    m = SECRET_PATH.search(expand(word, env))
+    if m is None:
+        return ALLOWED
+    return block(
+        "secret-read",
+        f"{m.group(0)} holds secrets, which agents don't read or change "
+        "(the deny rules in .claude/settings.json)",
+    )
+
+
+def secret_args(name: str, args: list[str], env: dict[str, str]) -> Verdict:
+    if name in SECRET_HARMLESS:
+        return ALLOWED
+    if name in SECRET_PROSE:
+        args = [a for a in args if not any(c.isspace() for c in a)]
+    return worst([secret_path(a, env) for a in args])
 
 
 # Program name -> rule. Programs are matched by their base name, so `/usr/bin/git`
@@ -1019,11 +1064,19 @@ def check_command(cmd: Command, shell_env: dict[str, str], text: str, depth: int
         k, v = words[i].split("=", 1)
         env[k] = v
         i += 1
-    writes = [git_internals(t, env) for op, t in cmd.redirects if op in WRITE_REDIRECTIONS]
+    files = [
+        v
+        for op, t in cmd.redirects
+        if op in FILE_REDIRECTIONS
+        for v in (
+            git_internals(t, env) if op in WRITE_REDIRECTIONS else ALLOWED,
+            secret_path(t, env),
+        )
+    ]
     if i == len(words):
         shell_env.update(env)
-        return worst(writes)
-    return worst([*writes, check_argv(words[i:], env, cmd, shell_env, text, depth)])
+        return worst(files)
+    return worst([*files, check_argv(words[i:], env, cmd, shell_env, text, depth)])
 
 
 def check_argv(
@@ -1063,7 +1116,7 @@ def check_argv(
     if name in WRAPPERS or (name == "uv" and args[:1] == ["run"]):
         return check_wrapper(args, env, cmd, shell_env, text, depth)
     rule = RULES.get(name)
-    return rule(args, env) if rule is not None else ALLOWED
+    return worst([secret_args(name, args, env), rule(args, env) if rule else ALLOWED])
 
 
 # Aliases set earlier in the command live in its environment under this prefix, which
@@ -1108,6 +1161,8 @@ def check_wrapper(
         if runs_something(a):
             verdicts.append(check_argv(args[j:], env, cmd, shell_env, text, depth))
             break
+    else:  # `sudo cat ~/.ssh/...`: a program the guard has no rule for
+        verdicts.append(secret_args("", args, env))
     return worst(verdicts)
 
 
@@ -1175,16 +1230,46 @@ BLOCKED = (
 )
 
 
+# What the log leaves out: a token in a header, an option or a variable, and the
+# token formats GitHub, AWS, Slack and the LLM providers use.
+REDACT = [
+    (re.compile(r"(?i)(authorization:\s*(bearer|token|basic)?\s*)[^\s'\"]+"), r"\1[redacted]"),
+    (
+        re.compile(
+            r"(?i)([\w-]*(token|passw(or)?d|secret|api[_-]?key|credential)[\w-]*"
+            r"(\s*[=:]\s*|\s+))(\"[^\"]*\"|'[^']*'|[^\s'\"]+)"
+        ),
+        r"\1[redacted]",
+    ),
+    # `docker login -p ...`, `helm registry login -p ...`
+    (re.compile(r"(\blogin\b[^;&|\n]*?\s-p\s*)(\"[^\"]*\"|'[^']*'|[^\s'\"]+)"), r"\1[redacted]"),
+    (
+        re.compile(
+            r"\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|AKIA[0-9A-Z]{16}"
+            r"|xox[abprs]-[\w-]{10,}|sk-[\w-]{20,}|glpat-[\w-]{20,})"
+        ),
+        "[redacted]",
+    ),
+]
+
+
+def redact(command: str) -> str:
+    for pattern, replacement in REDACT:
+        command = pattern.sub(replacement, command)
+    return command
+
+
 def log(decision: str, rule: str, command: str) -> None:
     """One line per block or ask in ~/.claude/twr-guard.log (TWR_GUARD_LOG moves it; empty
-    turns it off), to look at afterwards. A log that can't be written is skipped."""
+    turns it off), to look at afterwards, with tokens and passwords redacted. A log that
+    can't be written is skipped."""
     path = os.environ.get("TWR_GUARD_LOG", os.path.join("~", ".claude", "twr-guard.log"))
     if not path:
         return
     when = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     try:
         with open(os.path.expanduser(path), "a", encoding="utf-8") as f:
-            f.write(f"{when}\t{decision}\t{rule}\t{json.dumps(command[:200])}\n")
+            f.write(f"{when}\t{decision}\t{rule}\t{json.dumps(redact(command)[:200])}\n")
     except OSError:
         pass
 

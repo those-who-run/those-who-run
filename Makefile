@@ -68,7 +68,8 @@ test:
 # Every internal link and anchor in the repository's Markdown resolves
 # (scripts/docs_links.py, offline, no network or binary to fetch). The tables the
 # docs keep in step with the code (config, commands, make targets, metrics) are
-# checked by tests/test_docs.py, in pytest.
+# checked by tests/test_docs.py, in pytest. make check runs the link check once,
+# in pytest (test_the_repositorys_links_resolve); this is the quick local target.
 .PHONY: docs-check
 docs-check:
 	$(PY) scripts/docs_links.py
@@ -116,7 +117,7 @@ brand-assets: $(WEB_DEPS)
 # uv.lock must match pyproject.toml; web/openapi.json must match the API's models;
 # and the web app passes web-check (brand.css matching brand.py among it), which
 # fails when Node or the browser is missing.
-check: lint typecheck docs-check
+check: lint typecheck
 	uv lock --check
 	$(PY) scripts/openapi.py --check
 	$(PY) scripts/brand_assets.py --check

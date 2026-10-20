@@ -54,8 +54,10 @@ without the other fails:
 - `make docs-check` (`scripts/docs_links.py`) checks every internal link and
   anchor in the top-level Markdown files, `web/*.md`, `docs/**/*.md` and
   `.github/**/*.md` (not `CHANGELOG.md`): relative paths exist, and `#anchors`
-  match a heading by GitHub's rules. It never fetches external URLs, so it runs
-  offline.
+  match a heading by GitHub's rules (a percent-encoded path is decoded, and
+  one starting `/` is from the repository's root). It never fetches external
+  URLs, so it runs offline. `make check` runs it once, inside pytest;
+  `make docs-check` is the quick local run.
 - `tests/test_docs.py` fails when an environment variable a quoted string under
   `src/` names (`GT7_*`, `DISCORD_*`, `PITWALL_URL`, `LOG_LEVEL`) has no row in
   [the config table](setup.md#configuration), or a row names one nothing reads;
@@ -63,7 +65,9 @@ without the other fails:
   [the commands table](setup.md#commands), or a row names one that doesn't
   exist; when a `.PHONY` target is missing from `make help`, or a `make help`
   target from [the make table](#make-targets); and when a metric registered in
-  `metrics.py` is not named under [Metrics](operations.md#metrics).
+  `metrics.py` is not named under [Metrics](operations.md#metrics). It also
+  checks the config table's ports, numbers and engineer URLs against
+  `Settings`' defaults.
 
 Each failure names what is missing and the file to edit. The tables' first
 column holds the name in backticks, which is what the tests read.

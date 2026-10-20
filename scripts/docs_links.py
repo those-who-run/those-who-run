@@ -1,11 +1,14 @@
 """Check every internal link and anchor in the repository's Markdown (#338 R4).
 
-``make docs-check`` runs it, and ``make check`` runs that. It reads the top-level
+``make docs-check`` runs it, and ``make check`` runs it once through
+``tests/test_docs.py``. It reads the top-level
 Markdown files (but ``CHANGELOG.md``, which release-please writes), ``web/*.md``,
 ``docs/**/*.md`` and ``.github/**/*.md``, and for every link or image in them,
 Markdown or HTML (``href``, ``src``, ``srcset``), checks that:
 
-- a relative path names a file or directory that exists;
+- a relative path names a file or directory that exists (percent-encoded, as in
+  ``a%20b.md``, it is decoded first; one starting ``/`` is from the repository's
+  root, as GitHub reads it);
 - a ``#fragment`` names a heading (or an HTML ``id``/``name``) in the Markdown file
   it points to, by GitHub's rules: lower case, punctuation dropped, spaces to
   hyphens, ``-1``, ``-2`` … after repeats.
@@ -23,6 +26,7 @@ import re
 import sys
 from functools import cache
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent.parent
 SKIP = {"CHANGELOG.md"}
@@ -104,7 +108,13 @@ def check_file(path: Path, root: Path = ROOT) -> list[str]:
             if EXTERNAL.match(target) or target.startswith("//"):
                 continue
             file_part, _, fragment = target.partition("#")
-            dest = (path.parent / file_part).resolve() if file_part else path
+            local = unquote(file_part)
+            if not local:
+                dest = path
+            elif local.startswith("/"):
+                dest = (root / local.lstrip("/")).resolve()
+            else:
+                dest = (path.parent / local).resolve()
             if not dest.exists():
                 problems.append(f"{name}:{n}: {target}: no such file {file_part}")
                 continue

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from those_who_run.cli import build_parser
+from those_who_run.config import Settings
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src" / "those_who_run"
@@ -100,6 +101,48 @@ def commands() -> set[str]:
         # A command that needs a subcommand (`tracks`) is documented by its subcommands.
         found.update({f"{name} {sub}" for sub in subs} or {name})
     return found
+
+
+def defaults(path: Path, heading: str) -> dict[str, str]:
+    """The table's first column to its second, the backticks taken off."""
+    rows = re.findall(r"^\|\s*`([^`]+)`\s*\|\s*([^|]*?)\s*\|", section(path, heading), re.M)
+    return {name: value.strip("`") for name, value in rows}
+
+
+# The documented defaults checked against Settings: the ports and the numbers.
+DEFAULTS = {
+    "GT7_METRICS_PORT": "metrics_port",
+    "GT7_PITWALL_PORT": "pitwall_port",
+    "GT7_IDLE_DISCONNECT_SECS": "idle_disconnect_secs",
+    "GT7_TELEMETRY_TIMEOUT_SECS": "telemetry_timeout_secs",
+    "GT7_CACHE_MAX_MB": "cache_max_mb",
+    "GT7_RECORD_KEEP": "record_keep",
+    "GT7_CONTINUE_WINDOW_SECS": "continue_window_secs",
+    "GT7_ENGINEER_URL": "engineer_url",
+    "GT7_ENGINEER_CONTROL_URL": "engineer_control_url",
+}
+
+
+def test_the_config_tables_defaults_are_the_codes():
+    """The ports and numbers in docs/setup.md's config table are Settings' defaults."""
+    documented = defaults(SETUP, "Configuration")
+    settings = Settings.from_env({})
+    wrong = []
+    for name, field in DEFAULTS.items():
+        value = getattr(settings, field)
+        doc = documented.get(name, "")
+        same = float(doc) == value if isinstance(value, int | float) else doc == value
+        if not same:
+            wrong.append(
+                f"docs/setup.md gives `{name}` the default {doc!r}; Settings has {value!r}"
+            )
+    assert not wrong, "\n".join(wrong)
+
+
+def test_the_control_port_is_documented_as_off_by_default():
+    """GT7_CONTROL_PORT is unset by default; the table says 9851 is ADR 0001's port."""
+    assert Settings.from_env({}).control_port is None
+    assert defaults(SETUP, "Configuration")["GT7_CONTROL_PORT"] == "unset"
 
 
 def test_every_command_is_in_the_commands_table():
@@ -234,10 +277,32 @@ def test_links_that_resolve_pass(site):
             site,
             "[a](operations.md#releasing) [b](operations.md#releasing-1)"
             " [c](operations.md#make-check-and-pit_lane) [d](#here) ![e](img.png)\n"
-            '<img src="img.png"> [f](https://example.com/x#y) [g]: operations.md\n\n## Here\n',
+            '<img src="img.png"> [f](https://example.com/x#y)\n'
+            "[g]: operations.md#releasing\n\n## Here\n",
         )
         == []
     )
+
+
+def test_a_reference_definition_is_checked(site):
+    """A `[ref]: target` line on its own is a link too."""
+    assert broken(site, "[g]: operations.md#shipping\n") == [
+        "docs/page.md:1: operations.md#shipping: no heading #shipping in docs/operations.md"
+    ]
+
+
+def test_a_percent_encoded_path_is_decoded(site):
+    (site / "docs" / "a b.md").write_text("# A b\n")
+    assert broken(site, "[x](a%20b.md#a-b) ![y](a%20c.png)\n") == [
+        "docs/page.md:1: a%20c.png: no such file a%20c.png"
+    ]
+
+
+def test_a_root_relative_link_is_from_the_repository_root(site):
+    """GitHub reads `/docs/x.md` from the repository's root, not the filesystem's."""
+    assert broken(site, "[x](/docs/operations.md#releasing) [y](/docs/gone.md)\n") == [
+        "docs/page.md:1: /docs/gone.md: no such file /docs/gone.md"
+    ]
 
 
 def test_a_renamed_heading_fails_naming_the_file_and_the_link(site):

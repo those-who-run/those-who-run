@@ -87,18 +87,29 @@ merge, and the maintainer's approval of the release PR is the decision to ship.
    marker, and each file with one is listed under `extra-files` in
    `release-please-config.json`). `docs:`, `test:`, `refactor:`, `build:`, `ci:` and `chore:`
    commits ship in it but are not listed, and on their own they open no release PR.
-2. **Ship it.** release-please starts CI on the release PR (a `workflow_dispatch`
-   of `ci.yml` on its branch) and turns on auto-merge. The `main` ruleset needs a
-   human approval for a bot-authored change, so the maintainer approves the release
-   PR, and it squash-merges itself once CI is green. To hold a release back, close
-   the release PR or edit it. On the merge, release-please tags the merge commit
+2. **Read the digest.** On every push to `main`, a comment on the release PR
+   (one, edited in place, by `scripts/release_digest.py`) lists what changed since
+   the last release tag (release candidates don't count) where a release should
+   not ship unread: new direct dependencies, the lockfiles and toolchain versions,
+   files under `.github/`, `scripts/` and the agent policy (`CLAUDE.md`,
+   `.claude/`, `AGENTS.md`), CODEOWNERS, the Dockerfile, the Makefile and the
+   release config, `tests/conftest.py`, tests deleted, removed or skipped, and the
+   coverage floor and bundle budget, each with the PRs that made the change. The
+   same list locally: `python3 scripts/release_digest.py v0.7.4..main`.
+3. **Ship it.** release-please starts CI on the release PR (a `workflow_dispatch`
+   of `ci.yml` on its branch). The release PR is the bot's, so the `main` ruleset
+   asks for a maintainer's approval before it can merge. If the digest says nothing
+   in the watched places changed, auto-merge is on: approve it and it squash-merges
+   once CI is green. If the digest lists anything, the workflow turns auto-merge
+   off: read the list, then merge by hand. To hold a release back, close the
+   release PR or edit it. On the merge, release-please tags the merge commit
    `vx.y.z`, creates the GitHub release from the changelog, then calls
    `.github/workflows/release.yml`. That runs `make check`, fails unless the tag is
    `v` plus `__version__`, builds both images, runs `--version` in each, checks
    neither has the old pit wall's packages and smoke-tests the pit wall
    (`scripts/smoke-pitwall.sh`), and pushes `muldoon/those-who-run:x.y.z`, `latest`
    and `x.y.z-pitwall`.
-3. **Deploy it.** Rolling the new tags out is up to whoever runs it (see
+4. **Deploy it.** Rolling the new tags out is up to whoever runs it (see
    [Deploying](#deploying)).
 
 **Versions follow the milestones.** Before 1.0, `feat:` and `fix:` both bump the

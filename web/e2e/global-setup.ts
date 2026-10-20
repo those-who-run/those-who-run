@@ -13,7 +13,9 @@
 // spec expects it.
 //
 // One session in the main store is then copied in as still open (./store.ts), for
-// the live session page (#298 AC5).
+// the live session page (#298 AC5), unless E2E_NO_LIVE_SESSION is set: the docs'
+// screenshots show a store whose sessions have all finished, as the "Idle" engineer
+// chip says.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -132,11 +134,24 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv): void {
   }
 }
 
+/** Replays so far, for E2E_REPLAY_CLOCK. */
+let replays = 0;
+
+/** `replay`'s `--clock`, when E2E_REPLAY_CLOCK (epoch seconds) is set: each replay's
+ * sessions are dated from it, an hour apart in replay order, in place of the wall
+ * clock, so the store is the same on every run and every day (the docs'
+ * screenshots, #336). Every fixture is under an hour long; a longer one would
+ * overlap the next. Unset, the replay names its sessions by the clock. */
+function clockArgs(): string[] {
+  const start = process.env.E2E_REPLAY_CLOCK;
+  return start ? ["--clock", String(Number(start) + 3600 * replays++)] : [];
+}
+
 /** Replays `recordings` into the store at `data`, in order. */
 function replay(command: string, data: string, recordings: string[]): void {
   const env = { ...process.env, LOG_LEVEL: "WARNING", GT7_DATA_DIR: data };
   for (const recording of recordings) {
-    run(command, ["replay", recording, "--store", data], env);
+    run(command, ["replay", recording, "--store", data, ...clockArgs()], env);
   }
 }
 
@@ -198,7 +213,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   for (const fixture of STORE_FIXTURES) {
     const before = new Set(sessionIds());
     replay(command, data, [join(FIXTURES, fixture)]);
-    if (fixture === LIVE_SOURCE_FIXTURE) {
+    if (fixture === LIVE_SOURCE_FIXTURE && !process.env.E2E_NO_LIVE_SESSION) {
       // The replay names its session by the clock: the one directory it added.
       const [id] = sessionIds().filter((d) => !before.has(d));
       if (!id) {

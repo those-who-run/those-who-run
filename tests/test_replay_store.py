@@ -3,7 +3,10 @@
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
+
+import pytest
 
 from those_who_run.__main__ import build_parser, main
 
@@ -75,3 +78,53 @@ def test_replay_store_into_the_live_directory_is_refused_while_the_engineer_runs
         assert not (live / "sessions").exists()
     finally:
         engineer.close()
+
+
+def _sessions(store: Path) -> list[tuple[str, float, float]]:
+    db = sqlite3.connect(store / "index.sqlite")
+    rows = db.execute("SELECT id, started_at, ended_at FROM sessions ORDER BY id").fetchall()
+    db.close()
+    return rows
+
+
+def test_replay_store_with_a_clock_is_the_same_on_every_run(tmp_path, monkeypatch):
+    """#336: --clock dates the sessions from a fixed time plus the recording's own,
+    so two runs, on different days, store the same ids and times."""
+    monkeypatch.setenv("GT7_DATA_DIR", str(tmp_path / "live"))
+    clock = "2026-10-18T09:00:00Z"
+    args = ["--clock", clock]
+    assert main(["replay", str(FIXTURE), "--store", str(tmp_path / "a"), *args]) == 0
+    # A day later by the wall clock: nothing stored may follow it.
+    later = time.time() + 86_400
+    monkeypatch.setattr(time, "time", lambda: later)
+    assert main(["replay", str(FIXTURE), "--store", str(tmp_path / "b"), *args]) == 0
+    first, second = _sessions(tmp_path / "a"), _sessions(tmp_path / "b")
+    assert first == second
+    (session_id, started, ended), *_ = first
+    assert session_id.startswith("20261018-0900")
+    assert 1_792_314_000 <= started < ended < 1_792_314_000 + 3600
+    assert sorted(p.name for p in (tmp_path / "a" / "sessions").iterdir()) == [r[0] for r in first]
+
+
+def test_replay_clock_takes_iso_or_epoch_seconds():
+    p = build_parser()
+    assert p.parse_args(["replay", "x", "--clock", "1792314000"]).clock == 1_792_314_000
+    assert p.parse_args(["replay", "x", "--clock", "2026-10-18T09:00:00"]).clock == 1_792_314_000
+    assert p.parse_args(["replay", "x", "--clock", "2026-10-18T10:00:00+01:00"]).clock == (
+        1_792_314_000
+    )
+    assert p.parse_args(["replay", "x"]).clock is None
+
+
+@pytest.mark.parametrize("text", ["nan", "inf", "-inf", "-1", "1969-12-31T23:59:59Z"])
+def test_replay_clock_refuses_non_finite_and_negative_times(text, capsys):
+    """A typo must not write NaN, infinity or a time before 1970 into the store."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["replay", "x", f"--clock={text}"])
+    assert f"not a time from 1970 on: {text!r}" in capsys.readouterr().err
+
+
+def test_replay_clock_refuses_what_is_not_a_time(capsys):
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["replay", "x", "--clock", "teatime"])
+    assert "not a time: 'teatime'" in capsys.readouterr().err

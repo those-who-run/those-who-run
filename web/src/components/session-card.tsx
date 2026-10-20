@@ -135,23 +135,30 @@ export function SessionCard({
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
             <KindBadge label={s.kind_label} kind={s.kind} />
-            {s.car ? (
-              <span className="min-w-0 break-words">{s.car}</span>
-            ) : (
-              <Unknown
-                label="Unknown car"
-                reason={
-                  s.car_code != null
-                    ? `GT7 sent car code ${s.car_code}, which isn't in the engineer's car list.`
-                    : "GT7 sent no car code."
-                }
-                className="relative z-10 -my-2.5"
-              />
-            )}
-            <span aria-hidden="true">·</span>
-            <time className="whitespace-nowrap" dateTime={new Date(s.started_at * 1000).toISOString()}>
-              {sessionDate(s.started_at, now, tz)}
-            </time>
+            {/* The car, the dot and the date wrap as one, with no break either side of
+                the dot: the line breaks inside the car's name, never leaving a dot at
+                the end of a line. */}
+            <span data-slot="car-and-when" className="min-w-0 break-words">
+              {s.car ? (
+                s.car
+              ) : (
+                <Unknown
+                  label="Unknown car"
+                  reason={
+                    s.car_code != null
+                      ? `GT7 sent car code ${s.car_code}, which isn't in the engineer's car list.`
+                      : "GT7 sent no car code."
+                  }
+                  className="relative z-10 -my-2.5"
+                />
+              )}
+              <span aria-hidden="true" className="mx-2">
+                ·
+              </span>
+              <time className="whitespace-nowrap" dateTime={new Date(s.started_at * 1000).toISOString()}>
+                {sessionDate(s.started_at, now, tz)}
+              </time>
+            </span>
             {note && (
               <>
                 <span aria-hidden="true">·</span>

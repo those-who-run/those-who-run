@@ -18,6 +18,10 @@ those-who-run replay session.jsonl --store ./replayed
 GT7_DATA_DIR=./replayed those-who-run pitwall --static web/dist
 ```
 
+`--clock TIME` (ISO 8601 or epoch seconds) dates the stored sessions from
+TIME plus the recording's own time, in place of the wall clock, so a store
+replayed twice is the same; the docs' screenshots use it.
+
 A replay never writes to `GT7_DATA_DIR`: the sessions it finds go to a
 temporary store that is thrown away afterwards, or to `--store DIR`. So the pit
 wall and the results history only ever show real drives.

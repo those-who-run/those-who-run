@@ -27,6 +27,7 @@ help:
 	@echo "web-build - build the React pit wall into web/dist (needs Node, web/.node-version)"
 	@echo "web-dev  - Vite's dev server on http://localhost:5173, /api proxied to a local pitwall"
 	@echo "web-check - ESLint, tsc, Vitest, the client and brand.css freshness checks, the bundle budget, Playwright"
+	@echo "docs-screenshots - the docs' pit wall screenshots into docs/assets/screens/, with Playwright over the e2e store"
 	@echo "web-preview - web/dist over a read-only copy of a deployed store, on http://<laptop>:9852 (PREVIEW_CONTEXT=<kube context>)"
 	@echo "archive-push - upload GT7_ARCHIVE_DIR to the outings release of $(ARCHIVE_REPO) (ADR 0002)"
 	@echo "archive-pull - download the outings release of $(ARCHIVE_REPO) into GT7_ARCHIVE_DIR"
@@ -154,6 +155,14 @@ web-check: $(WEB_DEPS)
 	cd web && npx vite build
 	cd web && npm run budget
 	cd web && TWR=$(TWR) npx playwright test
+
+# The docs' screenshots (#336): web/playwright.docs.config.ts, the e2e suite's
+# global setup with the store dated from a fixed time, so two runs give the same
+# PNGs. Not part of web-check, which never writes docs/.
+.PHONY: docs-screenshots
+docs-screenshots: $(WEB_DEPS) web-build
+	@cd web && node scripts/browser-check.ts
+	cd web && TWR=$(TWR) npx playwright test --config playwright.docs.config.ts
 
 # The pit wall on the phone and iPad from a laptop: web/dist over a copy of a
 # deployed store, taken read-only from the pit wall pod in a Kubernetes cluster

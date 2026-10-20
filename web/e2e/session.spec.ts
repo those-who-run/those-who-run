@@ -96,6 +96,22 @@ test("the race: the result first, then its figures (AC1)", async ({ page }, test
   await expectAccessible(page, testInfo, "session-race");
 });
 
+test("the date, the dot and the car wrap together: no dot left at a line's end", async ({ page }) => {
+  const { id, session } = await sessionTitled(page, RACE);
+  await page.goto(`/sessions/${id}`);
+  const meta = page.locator("[data-slot=session-hero] [data-slot=when-and-car]");
+  await expect(meta).toContainText(session.car);
+  // The top of the date, the dot and the car's first letter: one line, at every size.
+  const tops = await meta.evaluate((el) => {
+    const dot = el.querySelector("[aria-hidden=true]")!;
+    const car = document.createRange();
+    car.setStart(dot.nextSibling!, 0);
+    car.setEnd(dot.nextSibling!, 1);
+    return [el.querySelector("time")!, dot, car].map((n) => Math.round(n.getBoundingClientRect().top));
+  });
+  expect(new Set(tops).size, `date, dot and car tops ${tops.join(", ")}`).toBe(1);
+});
+
 test("the pit stop: pit and out laps flagged, and left out of the average (AC2)", async ({ page }, testInfo) => {
   const { id, laps } = await sessionTitled(page, PIT_STOP);
   await page.goto(`/sessions/${id}`);

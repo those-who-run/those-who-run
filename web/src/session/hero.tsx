@@ -140,23 +140,30 @@ export function SessionHero({
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
           <KindBadge label={s.kind_label} kind={s.kind} />
-          <time className="whitespace-nowrap" dateTime={new Date(s.started_at * 1000).toISOString()}>
-            {sessionDate(s.started_at)}
-          </time>
-          <span aria-hidden="true">·</span>
-          {s.car ? (
-            <span className="min-w-0 break-words">{s.car}</span>
-          ) : (
-            <Unknown
-              label="Unknown car"
-              reason={
-                s.car_code != null
-                  ? `GT7 sent car code ${s.car_code}, which isn't in the engineer's car list.`
-                  : "GT7 sent no car code."
-              }
-              className="-my-2.5"
-            />
-          )}
+          {/* The date, the dot and the car wrap as one, with no break either side of
+              the dot: a car that doesn't fit takes the date with it to the next line,
+              and never leaves the dot at the end of this one. */}
+          <span data-slot="when-and-car" className="min-w-0 break-words">
+            <time className="whitespace-nowrap" dateTime={new Date(s.started_at * 1000).toISOString()}>
+              {sessionDate(s.started_at)}
+            </time>
+            <span aria-hidden="true" className="mx-2">
+              ·
+            </span>
+            {s.car ? (
+              s.car
+            ) : (
+              <Unknown
+                label="Unknown car"
+                reason={
+                  s.car_code != null
+                    ? `GT7 sent car code ${s.car_code}, which isn't in the engineer's car list.`
+                    : "GT7 sent no car code."
+                }
+                className="-my-2.5"
+              />
+            )}
+          </span>
         </div>
       </div>
       <div data-slot="headline" className="space-y-1">

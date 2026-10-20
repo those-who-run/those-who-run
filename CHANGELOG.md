@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.6](https://github.com/those-who-run/those-who-run/compare/v0.7.5...v0.7.6) (2026-10-20)
+
+
+### Features
+
+* **pitwall:** the lap trace carries the car's position ([#349](https://github.com/those-who-run/those-who-run/issues/349)) ([#390](https://github.com/those-who-run/those-who-run/issues/390)) ([13b1b59](https://github.com/those-who-run/those-who-run/commit/13b1b59d4896654f9d6ea76769e448a096109195))
+* **web:** track map on lap compare ([#350](https://github.com/those-who-run/those-who-run/issues/350)) ([#392](https://github.com/those-who-run/those-who-run/issues/392)) ([8b36205](https://github.com/those-who-run/those-who-run/commit/8b36205fc76150a4b5d1561d887531b3d159b53d))
+
+
+### Bug Fixes
+
+* **web:** each Show more click is a page, so the shell's scroll-restore test settles ([#379](https://github.com/those-who-run/those-who-run/issues/379)) ([#391](https://github.com/those-who-run/those-who-run/issues/391)) ([ccd0890](https://github.com/those-who-run/those-who-run/commit/ccd0890ff21c9674484e0015a55d8e39eae2eeef))
+
 ## [0.7.5](https://github.com/those-who-run/those-who-run/compare/v0.7.4...v0.7.5) (2026-10-20)
 
 

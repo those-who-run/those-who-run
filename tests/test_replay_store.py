@@ -116,6 +116,14 @@ def test_replay_clock_takes_iso_or_epoch_seconds():
     assert p.parse_args(["replay", "x"]).clock is None
 
 
+@pytest.mark.parametrize("text", ["nan", "inf", "-inf", "-1", "1969-12-31T23:59:59Z"])
+def test_replay_clock_refuses_non_finite_and_negative_times(text, capsys):
+    """A typo must not write NaN, infinity or a time before 1970 into the store."""
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["replay", "x", f"--clock={text}"])
+    assert f"not a time from 1970 on: {text!r}" in capsys.readouterr().err
+
+
 def test_replay_clock_refuses_what_is_not_a_time(capsys):
     with pytest.raises(SystemExit):
         build_parser().parse_args(["replay", "x", "--clock", "teatime"])

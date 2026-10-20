@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import math
 from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,16 +48,19 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 def clock_start(text: str) -> float:
     """``--clock``'s value as epoch seconds: a number, or an ISO 8601 time (UTC
-    unless it carries an offset)."""
+    unless it carries an offset). NaN, infinity and times before 1970 are refused,
+    so a typo never dates the store's sessions with them."""
     try:
-        return float(text)
+        seconds = float(text)
     except ValueError:
-        pass
-    try:
-        when = datetime.fromisoformat(text)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a time: {text!r}") from None
-    return (when if when.tzinfo else when.replace(tzinfo=UTC)).timestamp()
+        try:
+            when = datetime.fromisoformat(text)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"not a time: {text!r}") from None
+        seconds = (when if when.tzinfo else when.replace(tzinfo=UTC)).timestamp()
+    if not math.isfinite(seconds) or seconds < 0:
+        raise argparse.ArgumentTypeError(f"not a time from 1970 on: {text!r}")
+    return seconds
 
 
 class RecordingClock:

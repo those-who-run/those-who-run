@@ -11,6 +11,9 @@ import { VIEWPORTS } from "./e2e/viewports";
 /** The replayed sessions start here, an hour apart (./e2e/global-setup.ts). */
 process.env.E2E_REPLAY_CLOCK ??= String(Date.UTC(2026, 9, 18, 8, 0, 0) / 1000);
 
+/** No open session: the engineer chip says "Idle", so no card may say "Running". */
+process.env.E2E_NO_LIVE_SESSION = "1";
+
 const SIZES = ["phone", "desktop"];
 
 export default defineConfig({

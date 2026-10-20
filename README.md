@@ -25,8 +25,8 @@ through Discord, so it needs a Discord server and a bot.
 ## Screenshots
 
 <p>
-  <img src="docs/assets/screens/phone/session.png" width="260" alt="The pit wall on a phone: a 12-lap race at Circuit Gilles Villeneuve, P15 of 20, retired on lap 3, with the best lap, average, laps, fuel used, pit stops and driving time as tiles">
-  <img src="docs/assets/screens/desktop/sessions.png" width="540" alt="The pit wall on a desktop: today's five sessions, each with its track, kind, car, time, result and best lap, under filters for track, car, kind and date">
+  <img src="docs/assets/screens/phone/session.png" width="260" alt="The pit wall on a phone: a 12-lap race at Circuit Gilles Villeneuve, P15 of 20, retired on lap 3, with the best lap, average, laps, fuel used, pit stops and driving time as tiles, then the lap table">
+  <img src="docs/assets/screens/desktop/sessions.png" width="540" alt="The pit wall on a desktop: today's four sessions, each with its track, kind, car, time, result and best lap, under filters for track, car, kind and date">
 </p>
 
 The pit wall, the web app over every session you have driven, is described in

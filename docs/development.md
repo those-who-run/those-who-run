@@ -71,7 +71,9 @@ It runs `web/playwright.docs.config.ts` and `web/e2e/docs.screens.ts` over the
 e2e suite's global setup (the built app on the real pit wall, the replayed
 fixtures, the stub engineer), with the store dated from a fixed time
 (`replay --clock`, through `E2E_REPLAY_CLOCK`), the browser's clock, time zone
-and locale fixed, motion reduced and the engineer idle. Two runs give the same
+and locale fixed, motion reduced, the engineer idle and no session open
+(`E2E_NO_LIVE_SESSION`), so no card says "Running" under an "Idle" chip. The
+session page's shot is as tall as the page, so the laps show on a phone. Two runs give the same
 bytes on one machine. `make web-check` never runs it and never writes `docs/`.
 
 Run it in a PR that changes how one of those pages looks, and look at the

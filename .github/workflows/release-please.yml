@@ -167,8 +167,13 @@ jobs:
   release:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
+    # The most a called workflow's jobs can have: release.yml's publish job uses
+    # id-token and attestations to attest the images (#356); its check job asks
+    # for contents: read only.
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     # The workspace-relative form: actionlint (1.7.12) rejects the newer `$/` one.
     uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository]
     with:

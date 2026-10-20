@@ -207,14 +207,13 @@ def markdown(d: Digest) -> str:
         return "\n".join(
             [
                 *lines,
-                "Nothing in the watched places changed, so auto-merge is on: the PR "
-                "merges once CI passes and a maintainer approves it.",
+                "Nothing in the watched places changed. Approve and merge it once CI "
+                "passes; merging by hand is what ships it (#394).",
                 "",
             ]
         )
     lines += [
-        "**Auto-merge is off for this release.** Read the list below, then merge "
-        "by hand; approving alone does not ship it.",
+        "**Read the list below before you merge.** Merging by hand is what ships it (#394).",
         "",
     ]
     sections = (

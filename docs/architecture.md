@@ -109,7 +109,7 @@ and [ADR 0003](adr/0003-ui-stack.md).
 ```mermaid
 flowchart TD
   pr["a PR merged to main<br/>feat:, fix:, perf:, deps:"]
-  rpr["release-please keeps one PR open<br/>chore(release): x.y.z<br/>CHANGELOG.md, version strings<br/>CI dispatched on it, auto-merge on"]
+  rpr["release-please keeps one PR open<br/>chore(release): x.y.z<br/>CHANGELOG.md, version strings<br/>CI dispatched on it"]
   merge["the release PR merged"]
   tag["tag vx.y.z<br/>and the GitHub release"]
   subgraph rel["release.yml"]
@@ -128,16 +128,16 @@ flowchart TD
   deploy["the operator's deployment<br/>pulls both tags: up to the operator"]
 
   pr --> rpr
-  rpr -- "CI green: approve, auto-merge" --> merge
+  rpr -- "CI green: approve, merge by hand" --> merge
   merge --> tag --> check
   check --> buildE --> smokeE --> buildP --> smokeP --> pushE --> pushP --> deploy
 ```
 
 Merged PRs collect in one release PR, and merging it ships. release-please
-dispatches CI on the release PR and turns on auto-merge; the maintainer
-approves it (the `main` ruleset asks a human to approve a bot-authored change)
-and it merges itself once CI is green. Closing or editing it holds a release
-back. release-please then tags the merge commit and calls `release.yml`, which
+dispatches CI on the release PR; the maintainer approves it (the `main`
+ruleset asks a human to approve a bot-authored change) and merges it by hand
+once CI is green, since a merge by the bot's token would start no workflow.
+Closing or editing it holds a release back. release-please then tags the merge commit and calls `release.yml`, which
 runs `make check` on the tagged commit, builds and smoke-tests the engineer's
 image, then the pit wall's, and only once both pass pushes the two tags, one
 per image. Where and how they run is up to whoever runs

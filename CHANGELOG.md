@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0](https://github.com/those-who-run/those-who-run/compare/v0.7.6...v1.0.0) (2026-10-21)
+
+
+### Bug Fixes
+
+* **release:** the maintainer merges the release PR by hand; a dispatch releases a missed one ([#394](https://github.com/those-who-run/those-who-run/issues/394)) ([#395](https://github.com/those-who-run/those-who-run/issues/395)) ([343ad28](https://github.com/those-who-run/those-who-run/commit/343ad28c4ccf7941671b4d9b06c5c85a73e4d3e4))
+
+
+### Documentation
+
+* v1 is in maintenance from 1.0.0 ([#397](https://github.com/those-who-run/those-who-run/issues/397)) ([b908ee5](https://github.com/those-who-run/those-who-run/commit/b908ee5143b8ec87f3e04b8c6fe46a241ae3ef1f))
+
 ## [0.7.6](https://github.com/those-who-run/those-who-run/compare/v0.7.5...v0.7.6) (2026-10-20)
 
 

@@ -10,7 +10,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/those-who-run/those-who-run/badge)](https://scorecard.dev/viewer/?uri=github.com/those-who-run/those-who-run)
 
 <!-- x-release-please-start-version -->
-Current release: v0.7.6
+Current release: v1.0.0
 <!-- x-release-please-end -->
 
 **Maintenance only.** 1.0.0 is the last feature release of this repository.
@@ -78,7 +78,7 @@ podman run --rm \
   -e DISCORD_VOICE_CHANNEL_ID=... \
   -p 33740:33740/udp -p 9850:9850 \
   -v ./data:/data \
-  muldoon/those-who-run:0.7.6  # x-release-please-version
+  muldoon/those-who-run:1.0.0  # x-release-please-version
 ```
 
 To check the voice path first, run the same command with `say "Radio check"`

@@ -1,5 +1,13 @@
 # Roadmap
 
+**Maintenance only, from 1.0.0 (2026-10-21).** 1.0.0 is the minimum viable
+product: everything up to and including 0.7.6 below. The releases after it in
+the table (0.8 on) will not be built in this repository. This one gets bug
+fixes only, and the next version is being planned from a clean slate, as
+separate services in new repositories. Its issues will link back to the ones
+here they replace, and each of those is closed with a link forward. The rest
+of this page is the plan as it stood at 1.0.0.
+
 Where Those Who Run is going and in what order. GitHub milestones and issues
 are the source of truth for the details. Each milestone is a release, each
 release below links to its milestone, and every open issue carries a `stream:`

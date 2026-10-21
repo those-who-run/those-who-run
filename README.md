@@ -13,6 +13,11 @@
 Current release: v0.7.6
 <!-- x-release-please-end -->
 
+**Maintenance only.** 1.0.0 is the last feature release of this repository.
+It does everything the minimum viable product set out to do, and from here it
+gets bug fixes only. The next version is being planned as a new design, built
+in new repositories beside this one; the roadmap says more.
+
 Picture a two-bay tuning shop on the industrial edge of Tsukuba in 1995. A
 Hachi-Roku on the lift, a Sylvia outside with the bonnet off, a wall of
 dog-eared timing sheets, a stopwatch on a lanyard and a radio that only ever

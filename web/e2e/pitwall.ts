@@ -56,12 +56,17 @@ export async function expectNoHorizontalScroll(page: Page): Promise<void> {
   expect(scroll, `the page is ${scroll}px wide in a ${client}px viewport`).toBeLessThanOrEqual(client);
 }
 
-/** A full-page screenshot, `<viewport>/<name>.png` under SCREENSHOTS. */
+/** A full-page screenshot, `<viewport>/<name>.png` under SCREENSHOTS. The page is
+ * left scrolled where it was: from Playwright 1.64 a full-page screenshot of an
+ * emulated phone or tablet leaves it scrolled somewhere else, and an open popover,
+ * which is fixed to the screen beside its trigger, can't be scrolled back into view. */
 export async function screenshot(page: Page, testInfo: TestInfo, name: string): Promise<string> {
   const dir = join(SCREENSHOTS, testInfo.project.name);
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `${name}.png`);
+  const at = await page.evaluate(() => ({ left: window.scrollX, top: window.scrollY }));
   await page.screenshot({ path, fullPage: true });
+  await page.evaluate(({ left, top }) => window.scrollTo({ left, top, behavior: "instant" }), at);
   await testInfo.attach(name, { path, contentType: "image/png" });
   return path;
 }

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.1](https://github.com/those-who-run/those-who-run/compare/v1.0.0...v1.0.1) (2026-11-06)
+
+
+### Dependencies
+
+* bump astral-sh/uv from 0.13.3 to 0.13.6 ([#402](https://github.com/those-who-run/those-who-run/issues/402)) ([d69c787](https://github.com/those-who-run/those-who-run/commit/d69c78747f132c63301b2214c809cb409a1f7543))
+* bump duckdb from 1.5.6 to 2.0.0 ([#404](https://github.com/those-who-run/those-who-run/issues/404)) ([d374066](https://github.com/those-who-run/those-who-run/commit/d374066bfebe033c43f553c9df883b649f49a0ae))
+* bump the actions group with 3 updates ([#406](https://github.com/those-who-run/those-who-run/issues/406)) ([a57acfb](https://github.com/those-who-run/those-who-run/commit/a57acfbe297ee9e142193a6c2883e4f9296d89c3))
+* bump the python-patch group with 2 updates ([#403](https://github.com/those-who-run/those-who-run/issues/403)) ([376f0c0](https://github.com/those-who-run/those-who-run/commit/376f0c0ba2bef4147ba5072bbbec2882a0e58cb0))
+* bump the web group in /web with 15 updates ([#405](https://github.com/those-who-run/those-who-run/issues/405)) ([4e44dbb](https://github.com/those-who-run/those-who-run/commit/4e44dbbba0721167b49e3e91a4bebffc3a0b6c64))
+* bump zizmor from 1.30.1 to 1.31.1 in the python-minor group ([#400](https://github.com/those-who-run/those-who-run/issues/400)) ([68f7b62](https://github.com/those-who-run/those-who-run/commit/68f7b6202bf7a9e582f6fd07819fad3798ef3a3e))
+
 ## [1.0.0](https://github.com/those-who-run/those-who-run/compare/v0.7.6...v1.0.0) (2026-10-21)
 
 

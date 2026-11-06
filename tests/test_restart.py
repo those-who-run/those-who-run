@@ -146,8 +146,9 @@ def test_real_restart_mid_race_is_one_session(tmp_path):
     lap_7_rows = index(tmp_path, "SELECT frames, complete, file FROM laps WHERE lap = 7")
     ((frames, complete, file),) = lap_7_rows
     path = tmp_path / "sessions" / session_id / file
-    stored = duckdb.sql(f"SELECT count(*) FROM read_parquet('{path}')").fetchone()
-    assert stored is not None and stored[0] == frames > frames_7 and complete == 0
+    # fetchall(), not fetchone(): duckdb 2.0 took fetchone() off relations.
+    ((stored,),) = duckdb.sql(f"SELECT count(*) FROM read_parquet('{path}')").fetchall()
+    assert stored == frames > frames_7 and complete == 0
 
     card = build_card(card_summary)
     assert card is not None

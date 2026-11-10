@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.2](https://github.com/those-who-run/those-who-run/compare/v1.0.1...v1.0.2) (2026-11-10)
+
+
+### Dependencies
+
+* bump astral-sh/setup-uv from 10.3.2 to 10.3.3 in the actions group ([#409](https://github.com/those-who-run/those-who-run/issues/409)) ([05ca87f](https://github.com/those-who-run/those-who-run/commit/05ca87f3478603d70bfae32dea1f1542bf94c804))
+* bump astral-sh/uv from 0.13.6 to 0.13.7 ([#408](https://github.com/those-who-run/those-who-run/issues/408)) ([01f1105](https://github.com/those-who-run/those-who-run/commit/01f1105e70bb5a76381753906e1d71c1c7ecee0f))
+* bump pytest from 9.1.1 to 9.2.0 in the python-minor group ([#412](https://github.com/those-who-run/those-who-run/issues/412)) ([5f80a33](https://github.com/those-who-run/those-who-run/commit/5f80a330761f4f07a08b7460214778c119b3d913))
+* bump pytest-asyncio from 1.4.1 to 1.4.1.post1 ([#413](https://github.com/those-who-run/those-who-run/issues/413)) ([5cffe6e](https://github.com/those-who-run/those-who-run/commit/5cffe6e75d6a7a1e780784a2b7249e6a97d55e5e))
+* bump the web group in /web with 4 updates ([#410](https://github.com/those-who-run/those-who-run/issues/410)) ([68f773f](https://github.com/those-who-run/those-who-run/commit/68f773f364e666be2a8a152ebcc51320c8fa9413))
+* bump types-pyyaml from 6.0.12.20260906 to 6.0.12.20261030 ([#414](https://github.com/those-who-run/those-who-run/issues/414)) ([a6b5c62](https://github.com/those-who-run/those-who-run/commit/a6b5c62de6f539d72517d835577373a0d99eb720))
+
 ## [1.0.1](https://github.com/those-who-run/those-who-run/compare/v1.0.0...v1.0.1) (2026-11-06)
 
 

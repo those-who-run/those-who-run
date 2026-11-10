@@ -89,7 +89,7 @@ Its configuration:
 The pitwall image (below) carries the built app:
 
 ```sh
-VERSION=1.0.1  # x-release-please-version
+VERSION=1.0.2  # x-release-please-version
 podman run --rm -p 9852:9852 -v ./data:/data muldoon/those-who-run:${VERSION}-pitwall
 ```
 

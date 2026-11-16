@@ -6,7 +6,7 @@
 #   --target pitwall  the pit wall: the data API and the built web app, nothing else
 # BuildKit builds only the stages the target needs, so the engineer's build never
 # runs Node or reads web/.
-FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 # The web app (web/), built to static files. Node lives only in this stage.
 FROM node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4 AS web

@@ -20,7 +20,7 @@ RUN npm run build
 # web app from /app/web. The core install only (aiohttp, DuckDB, PyYAML): no
 # engineer extra (Discord, Piper, gt-telem, prometheus-client), no audio
 # libraries, no voice and no Node.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS pitwall
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS pitwall
 
 WORKDIR /app
 
@@ -66,7 +66,7 @@ ENTRYPOINT ["those-who-run"]
 CMD ["pitwall"]
 
 # The engineer, the default target: it stays the last stage.
-FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS engineer
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS engineer
 
 ARG VOICE=en_GB-alba-medium
 ARG VOICE_URL=https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alba/medium

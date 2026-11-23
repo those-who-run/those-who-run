@@ -108,7 +108,7 @@ repos:
   # (release-please-config.json). CI checks a PR's title, the squash commit's
   # subject, with the same hook.
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: 3db014c16a9d31997ab8c07a4d61fcce936c8f0d  # frozen: v4.4.0
+    rev: 33b50eb042bee26eac0ee96ad84aa9c1b4dccdd8  # frozen: v4.5.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

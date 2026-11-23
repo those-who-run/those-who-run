@@ -9,7 +9,7 @@
 FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
 # The web app (web/), built to static files. Node lives only in this stage.
-FROM node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4 AS web
+FROM node:26-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json web/.npmrc ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
